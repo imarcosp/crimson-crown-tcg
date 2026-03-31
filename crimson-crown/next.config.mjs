@@ -19,6 +19,11 @@ const nextConfig = {
         pathname: '**',
       },
     ],
+    localPatterns: [
+      {
+        pathname: '/**',
+      },
+    ],
   },
   typescript: {
     ignoreBuildErrors: true,
