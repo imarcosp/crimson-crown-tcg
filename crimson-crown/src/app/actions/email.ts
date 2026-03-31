@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { siteConfig } from '@/config/site'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const ADMIN_EMAIL = 'mjperchezabala@gmail.com'
+const ADMIN_EMAIL = siteConfig.socialLinks.email || 'crimsoncrownimports@gmail.com'
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || siteConfig.url
 
 // Cliente Supabase para leer la cotización
