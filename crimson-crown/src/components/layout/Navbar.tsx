@@ -1,0 +1,389 @@
+"use client"
+import Link from 'next/link'
+import Image from 'next/image'
+import { useStore } from '@/store/useStore'
+import { useCartStore } from '@/store/cartStore'
+import { ClipboardList, User, ShoppingCart, Menu as MenuIcon, Package, LogOut, Banknote, MessageSquarePlus, Send, X, Loader2, ChevronDown, Search, BookOpen, Sparkles, Zap, Plane, Box, Layers } from 'lucide-react'
+import { useUIStore } from '@/store/uiStore'
+import { cn } from '@/lib/utils'
+import SearchInput from './SearchInput'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { useConfig } from '@/context/ConfigContext'
+import { OWNER_EMAIL } from '@/lib/constants'
+import NotificationsMenu from './NotificationsMenu'
+import { siteConfig } from '@/config/site'
+
+export default function Navbar() {
+  const currency = useStore((s) => s.currency)
+  const { exchangeRate } = useConfig()
+  
+  // Estados de Menús
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false)
+  const [isMobileUserMenuOpen, setIsMobileUserMenuOpen] = useState(false)
+  
+  // Estados de los submenús del Sidebar
+  const [isMtgOpen, setIsMtgOpen] = useState(false)
+  const [isSealedOpen, setIsSealedOpen] = useState(false)
+  const [isAccessoriesOpen, setIsAccessoriesOpen] = useState(false)
+
+  const toggleCart = useUIStore((s) => s.toggleCart)
+  const toggleHangModal = useUIStore((s) => s.toggleHangModal)
+  const [user, setUser] = useState<any | null>(null)
+  const router = useRouter()
+  const supabase = createClient()
+  const [credits, setCredits] = useState<number>(0)
+  const [userProfile, setUserProfile] = useState<any>(null)
+  const lastUserId = useRef<string | null>(null)
+  const pathname = usePathname()
+  const OWNER = (process.env.NEXT_PUBLIC_OWNER_EMAIL as string) || OWNER_EMAIL
+
+  // ESTADOS FEEDBACK
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedbackText, setFeedbackText] = useState('')
+  const [sendingFeedback, setSendingFeedback] = useState(false)
+
+  const cartItems = useCartStore((s) => s.items)
+  const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0)
+
+  const fetchUserData = useCallback(async (userId: string) => {
+    if (lastUserId.current === userId && userProfile) return
+    lastUserId.current = userId
+    const { data } = await supabase.from('profiles').select('credits, first_name, last_name').eq('id', userId).single()
+    if (data) {
+      setUserProfile(data)
+      if (data.credits != null) setCredits(Number(data.credits))
+    }
+  }, [supabase, userProfile])
+
+  useEffect(() => {
+    let mounted = true
+    const initSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }))
+      if (mounted && session?.user) {
+        setUser(session.user)
+        fetchUserData(session.user.id)
+      }
+    }
+    initSession()
+    const intervalId = setInterval(() => { if (user?.id) fetchUserData(user.id) }, 30000)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return
+      if (session?.user) {
+        setUser(session.user)
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || !userProfile) fetchUserData(session.user.id)
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null); setUserProfile(null); setCredits(0); lastUserId.current = null; router.replace('/')
+      }
+    })
+    return () => { mounted = false; subscription.unsubscribe(); clearInterval(intervalId) }
+  }, [supabase, fetchUserData, router, user?.id, userProfile]) 
+
+  useEffect(() => {
+    if (!user?.id) return
+    const channel = supabase.channel('realtime-credits').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, (payload: any) => {
+          if (payload?.new) { setCredits(Number(payload.new.credits || 0)); setUserProfile((prev: any) => ({ ...prev, ...payload.new })) }
+    }).subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user?.id, supabase])
+
+  useEffect(() => { 
+      setIsMenuOpen(false)
+      setIsMegaMenuOpen(false)
+      setIsMobileUserMenuOpen(false)
+  }, [pathname])
+
+  const handleLogout = async () => { await supabase.auth.signOut(); router.refresh(); router.replace('/') }
+
+  const openFeedback = () => { 
+      setIsMenuOpen(false)
+      setIsMegaMenuOpen(false)
+      setIsMobileUserMenuOpen(false)
+      setShowFeedback(true) 
+  }
+
+  const submitFeedback = async () => {
+      if (!feedbackText.trim()) return
+      setSendingFeedback(true)
+      try {
+          // NOTA: Asegúrate de que la columna 'message' exista en la tabla 'feedback' de tu BD Supabase.
+          const { error } = await supabase.from('feedback').insert({ user_id: user?.id, message: feedbackText.trim() })
+          if (error) throw error
+          alert('¡Gracias por tu sugerencia! La revisaremos pronto.')
+          setFeedbackText(''); setShowFeedback(false)
+      } catch (e: any) { alert('Error al enviar: ' + e.message) } 
+      finally { setSendingFeedback(false) }
+  }
+
+  const closeMenus = () => { 
+      setIsMegaMenuOpen(false)
+      setIsMenuOpen(false)
+      setIsMobileUserMenuOpen(false)
+  }
+
+  const SidebarContent = () => (
+      <div className="flex flex-col h-full text-slate-800 bg-white shadow-2xl border-r border-slate-200">
+          <div className="p-4 border-b flex items-center justify-between bg-slate-50">
+              <span className="font-bold text-lg flex items-center gap-2 text-slate-800"><MenuIcon size={20}/> Navegación</span>
+              <button onClick={closeMenus} className="p-2 hover:bg-slate-200 rounded-full cursor-pointer transition-colors"><X size={20}/></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              <button onClick={() => setIsMtgOpen(!isMtgOpen)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 group cursor-pointer transition-colors">
+                  <div className="flex items-center gap-3"><Sparkles className="text-purple-600" size={18}/> MTG Singles</div>
+                  <ChevronDown size={16} className={`transition-transform duration-300 ${isMtgOpen ? 'rotate-180' : ''}`}/>
+              </button>
+              {isMtgOpen && (
+                  <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
+                      <Link href="/catalog?tcg=Magic&sort=newest" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#E91E63] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#E91E63] transition-colors cursor-pointer">
+                          Ver todas las singles
+                      </Link>
+                      <Link href="/tools/moxfield" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#E91E63] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#E91E63] transition-colors cursor-pointer">
+                          Búsqueda desde Moxfield
+                      </Link>
+                      <button onClick={() => setIsSealedOpen(!isSealedOpen)} className="w-full flex items-center justify-between py-2 text-sm text-slate-500 hover:text-[#E91E63] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#E91E63] transition-colors cursor-pointer text-left">
+                          <span className="flex items-center gap-2"><Layers size={14}/> Producto Sellado</span>
+                          <ChevronDown size={14} className={`transition-transform duration-300 ${isSealedOpen ? 'rotate-180' : ''}`}/>
+                      </button>
+                      {isSealedOpen && (
+                          <div className="pl-4 space-y-1 animate-in slide-in-from-top-2 duration-300">
+                              {/* Aquí irán los productos sellados en el futuro */}
+                          </div>
+                      )}
+                  </div>
+              )}
+              <Link href="/catalog?tcg=Riftbound&sort=newest" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
+                  <Zap className="text-yellow-500" size={18}/> Riftbound Singles
+              </Link>
+              <Link href="/catalog?tcg=Secret Lair&sort=newest" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
+                  <Box className="text-pink-500" size={18}/> Secret Lair
+              </Link>
+              <div className="border-t my-2 mx-4 border-slate-100"></div>
+              <button 
+                  onClick={() => { closeMenus(); toggleHangModal() }} 
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left cursor-pointer group"
+              >
+                  <Plane className="text-[#E91E63] group-hover:scale-110 transition-transform" size={18}/> 
+                  Hacer pedido al exterior
+              </button>
+              <div className="border-t my-2 mx-4 border-slate-100"></div>
+              <button onClick={() => setIsAccessoriesOpen(!isAccessoriesOpen)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 group cursor-pointer transition-colors">
+                  <div className="flex items-center gap-3"><Package className="text-blue-500" size={18}/> Accesorios</div>
+                  <ChevronDown size={16} className={`transition-transform duration-300 ${isAccessoriesOpen ? 'rotate-180' : ''}`}/>
+              </button>
+              {isAccessoriesOpen && (
+                  <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
+                      {[
+                          { name: 'Folios', tcg: 'Folios' },
+                          { name: 'Top Loaders', tcg: 'Top Loaders' },
+                          { name: 'Perfect Fit', tcg: 'Perfect Fit' },
+                          { name: 'Deck Boxes', tcg: 'Deck Boxes' },
+                          { name: 'Dados', tcg: 'Dados' },
+                          { name: 'Carpetas', tcg: 'Carpetas' },
+                          { name: 'Playmats', tcg: 'Playmats' }
+                      ].map(acc => (
+                          <Link key={acc.name} href={`/catalog?tcg=${encodeURIComponent(acc.tcg)}`} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#E91E63] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#E91E63] transition-colors cursor-pointer">
+                              {acc.name}
+                          </Link>
+                      ))}
+                  </div>
+              )}
+              <div className="border-t my-2 mx-4 border-slate-100"></div>
+              <Link href="/info/how-to" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-medium text-sm text-slate-600 transition-colors cursor-pointer">
+                  <BookOpen size={18}/> Cómo usar {siteConfig.shortName}
+              </Link>
+              <div className="border-t my-2 mx-4 border-slate-100"></div>
+              <Link href="/sell" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-bold text-sm transition-colors cursor-pointer">
+                  <Banknote size={18}/> Véndenos tus cartas
+              </Link>
+          </div>
+      </div>
+  )
+
+  return (
+    <>
+    <nav className="bg-[#0F172A] text-white sticky top-0 z-50 shadow-md">
+      <div className="mx-auto max-w-7xl px-4 py-3">
+        <div className="flex flex-col md:flex-row">
+          
+          {/* ======================= MÓVIL ======================= */}
+          <div className="flex justify-between items-center w-full md:hidden relative">
+            <div className="flex items-center gap-2">
+                <button onClick={() => setIsMenuOpen(true)} className="p-2 rounded hover:bg-slate-700 cursor-pointer transition-colors"><MenuIcon className="h-6 w-6" /></button>
+                <Link href="/" className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity">
+                    <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/20"><Image src="/logo.webp" alt={siteConfig.shortName} fill className="object-cover" /></div>
+                    <span className="font-extrabold text-sm hidden xs:block">{siteConfig.shortName.toUpperCase()}</span>
+                </Link>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              
+              {/* BLOQUE COTIZACIÓN MÓVIL (CORREGIDO: CENTRADO) */}
+              <div className="flex flex-col items-center justify-center mr-1">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase leading-none mb-0.5 tracking-tight">Cotización Dólar</span>
+                  <div className="flex items-center gap-1 bg-slate-800/80 rounded-md p-0.5 border border-slate-700">
+                      <div className="text-[10px] font-bold text-emerald-400 px-1.5">${exchangeRate}</div>
+                      <div className="flex gap-0.5">
+                        <button onClick={() => useStore.getState().setCurrency('USD')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[9px] font-bold', currency === 'USD' ? 'bg-[#E91E63] text-white rounded' : 'text-slate-400 hover:text-white')}>USD</button>
+                        <button onClick={() => useStore.getState().setCurrency('ARS')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[9px] font-bold', currency === 'ARS' ? 'bg-[#E91E63] text-white rounded' : 'text-slate-400 hover:text-white')}>ARS</button>
+                      </div>
+                  </div>
+              </div>
+
+              {/* PERFIL MÓVIL */}
+              <div className="relative">
+                  <button onClick={() => setIsMobileUserMenuOpen(!isMobileUserMenuOpen)} className="p-1.5 rounded hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"><User size={20} /></button>
+                  {isMobileUserMenuOpen && (
+                    <>
+                        <div className="fixed inset-0 z-[65] bg-transparent" onClick={() => setIsMobileUserMenuOpen(false)}></div>
+                        <div className="absolute right-0 top-full mt-2 w-56 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-100 p-2 z-[70] animate-in zoom-in-95 origin-top-right">
+                            {!user ? (
+                                <div className="space-y-2 p-1">
+                                    <p className="text-xs text-center text-slate-400 mb-2">Accede para ver tus compras</p>
+                                    <Link href="/login" onClick={closeMenus} className="block w-full text-center bg-[#E91E63] text-white py-2 rounded-lg text-sm font-bold hover:bg-[#D81B60] transition-colors">Iniciar Sesión</Link>
+                                    <Link href="/login?view=signup" onClick={closeMenus} className="block w-full text-center border border-slate-300 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors">Registrarse</Link>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="p-3 border-b border-slate-100 mb-2 bg-slate-50 rounded-t-lg">
+                                        <p className="font-bold truncate text-sm">Hola, {userProfile?.first_name || 'Viajero'}</p>
+                    <p className="text-xs text-[#E91E63] font-mono font-bold mt-1">{currency === 'ARS' ? `Créditos: $${(credits * exchangeRate).toLocaleString()}` : `Créditos: US$ ${credits.toFixed(2)}`}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        {user?.email === OWNER && <Link href="/admin" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 bg-slate-900 text-yellow-500 hover:bg-slate-800 rounded-lg text-sm font-bold mb-2 transition-colors"><span className="text-lg">🛡️</span> Panel de Admin</Link>}
+                                        <Link href="/sell" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors"><Banknote size={16} className="text-slate-400"/> Vender Cartas</Link>
+                                        <Link href="/profile" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors"><User size={16} className="text-slate-400"/> Mi Cuenta</Link>
+                                        <Link href="/profile?tab=stock" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors"><Package size={16} className="text-slate-400"/> Mis Pedidos</Link>
+                                        <button onClick={openFeedback} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-sky-50 text-sky-600 rounded-lg text-sm transition-colors text-left"><MessageSquarePlus size={16} /> Dejar Sugerencia</button>
+                                    </div>
+                                    <div className="border-t border-slate-100 mt-2 pt-2">
+                                        <button onClick={() => {handleLogout(); closeMenus()}} className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 rounded-lg flex items-center gap-3 text-sm transition-colors"><LogOut size={16}/> Cerrar Sesión</button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </>
+                  )}
+              </div>
+
+              {user && <NotificationsMenu userId={user.id} />}
+              <button onClick={toggleCart} className="relative p-1.5 rounded hover:bg-slate-700 cursor-pointer transition-colors"><ShoppingCart className="h-5 w-5" />{cartCount > 0 && <span className="absolute -top-1 -right-1 bg-[#E91E63] text-white text-[10px] font-bold h-4 w-4 flex items-center justify-center rounded-full">{cartCount > 99 ? '99+' : cartCount}</span>}</button>
+            </div>
+
+            {/* DRAWER LATERAL (HAMBURGUESA) */}
+            {isMenuOpen && (
+              <>
+                  <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={closeMenus}></div>
+                  <div className="fixed inset-y-0 left-0 z-[61] w-4/5 max-w-xs bg-white shadow-2xl animate-in slide-in-from-left duration-300 ease-in-out flex flex-col">
+                      <div className="flex-1 overflow-hidden h-full">
+                          <SidebarContent />
+                      </div>
+                  </div>
+              </>
+            )}
+          </div>
+
+          {/* ======================= DESKTOP ======================= */}
+          <div className="hidden md:flex items-center justify-between gap-4 w-full">
+            <Link href="/" className="flex items-center gap-3 shrink-0 hover:opacity-90 transition-opacity cursor-pointer">
+                <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white/20"><Image src="/logo.webp" alt={siteConfig.shortName} fill className="object-cover" /></div>
+                <span className="font-extrabold text-lg tracking-tight">{siteConfig.shortName.toUpperCase()}</span>
+            </Link>
+
+            <div className="flex-1 flex items-center gap-2 mx-6">
+                <button onClick={() => setIsMegaMenuOpen(true)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0 border border-transparent hover:border-slate-600" title="Menú Principal">
+                    <MenuIcon size={24}/>
+                </button>
+                <div className="flex-1"><SearchInput /></div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              {/* BLOQUE COTIZACIÓN DESKTOP (CENTRALIZADO) */}
+              <div className="flex flex-col items-center justify-center">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase leading-none mb-0.5 tracking-tight">Cotización Dólar</span>
+                  <div className="flex items-center gap-1 bg-slate-800 rounded-md p-0.5 border border-slate-700">
+                      <div className="text-[11px] font-bold text-emerald-400 px-1.5 cursor-default">${exchangeRate}</div>
+                      <div className="flex gap-0.5">
+                        <button onClick={() => useStore.getState().setCurrency('USD')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[10px] font-bold', currency === 'USD' ? 'bg-[#E91E63] text-white rounded' : 'text-slate-400 hover:text-white')}>USD</button>
+                        <button onClick={() => useStore.getState().setCurrency('ARS')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[10px] font-bold', currency === 'ARS' ? 'bg-[#E91E63] text-white rounded' : 'text-slate-400 hover:text-white')}>ARS</button>
+                      </div>
+                  </div>
+              </div>
+
+              {user && <NotificationsMenu userId={user.id} />}
+
+              <button onClick={toggleCart} className="relative p-2 rounded hover:bg-slate-700 cursor-pointer transition-colors"><ShoppingCart className="h-6 w-6" />{cartCount > 0 && <span className="absolute -top-1 -right-1 bg-[#E91E63] text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full shadow-sm">{cartCount > 99 ? '99+' : cartCount}</span>}</button>
+              
+              <Link href="/hang" className="bg-[#E91E63] hover:bg-[#D81B60] text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); toggleHangModal() }}>
+                <ClipboardList className="h-6 w-6" /> Colgar Pedido
+              </Link>
+              
+              <div className="relative group z-50">
+                <button className="flex items-center gap-2 hover:text-[#E91E63] py-2 cursor-pointer transition-colors">
+                  <User size={24} />
+                  <span className="text-sm font-medium">{user ? (userProfile?.first_name || 'Mi Cuenta') : 'Ingresar'}</span>
+                </button>
+                <div className="absolute right-0 top-full mt-0 w-64 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all p-2 z-50">
+                  {!user ? (
+                    <div className="p-2 space-y-2">
+                      <p className="text-xs text-center text-slate-400 mb-2">Accede para ver tus compras</p>
+                      <Link href="/login" className="block w-full text-center bg-[#E91E63] text-white py-2 rounded-lg font-bold hover:bg-[#D81B60] transition-colors cursor-pointer">Iniciar Sesión</Link>
+                      <Link href="/login?view=signup" className="block w-full text-center border border-slate-300 py-2 rounded-lg font-bold hover:bg-slate-50 transition-colors cursor-pointer">Registrarse</Link>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="p-3 border-b border-slate-100 mb-2 bg-slate-50 rounded-t-lg">
+                        <p className="font-bold truncate text-sm">Hola, {userProfile?.first_name || 'Viajero'}</p>
+                        <p className="text-xs text-[#E91E63] font-mono font-bold mt-1">{currency === 'ARS' ? `Créditos: $${(credits * exchangeRate).toLocaleString()}` : `Créditos: US$ ${credits.toFixed(2)}`}</p>
+                      </div>
+                      <div className="space-y-1">
+                        {user?.email === OWNER && <Link href="/admin" className="flex items-center gap-3 px-3 py-2 bg-slate-900 text-yellow-500 hover:bg-slate-800 rounded-lg text-sm font-bold mb-2 transition-colors cursor-pointer"><span className="text-lg">🛡️</span> Panel de Admin</Link>}
+                        <Link href="/sell" className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors cursor-pointer"><Banknote size={16} className="text-slate-400"/> Vender Cartas</Link>
+                        <Link href="/profile" className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors cursor-pointer"><User size={16} className="text-slate-400"/> Mi Cuenta</Link>
+                        <Link href="/profile?tab=stock" className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors cursor-pointer"><Package size={16} className="text-slate-400"/> Mis Pedidos</Link>
+                        <button onClick={openFeedback} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-sky-50 text-sky-600 rounded-lg text-sm transition-colors text-left cursor-pointer"><MessageSquarePlus size={16} /> Dejar Sugerencia</button>
+                      </div>
+                      <div className="border-t border-slate-100 mt-2 pt-2">
+                        <button onClick={handleLogout} className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 rounded-lg flex items-center gap-3 text-sm transition-colors cursor-pointer"><LogOut size={16}/> Cerrar Sesión</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full mt-2 md:hidden"><SearchInput /></div>
+        </div>
+      </div>
+
+      {/* DRAWER DESKTOP (MEGA MENU) */}
+      {isMegaMenuOpen && (
+          <>
+              <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-in fade-in duration-300 hidden md:block" onClick={closeMenus}></div>
+              <div className="fixed inset-y-0 left-0 z-[61] w-80 bg-white shadow-2xl animate-in slide-in-from-left duration-300 ease-in-out hidden md:block border-r border-slate-200">
+                  <SidebarContent />
+              </div>
+          </>
+      )}
+
+      {/* FEEDBACK MODAL */}
+      {showFeedback && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 duration-200">
+                  <button onClick={() => setShowFeedback(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"><X size={20}/></button>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2"><MessageSquarePlus className="text-sky-500"/> Sugerencia</h3>
+                  <p className="text-sm text-slate-500 mb-4">Ayúdanos a mejorar. Cuéntanos qué te gustaría ver en la web.</p>
+                  <textarea className="w-full h-32 border border-slate-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none text-slate-900" placeholder="Escribe tu sugerencia aquí..." value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} />
+                  <div className="flex justify-end gap-3 mt-4">
+                      <button onClick={() => setShowFeedback(false)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-lg cursor-pointer">Cancelar</button>
+                      <button onClick={submitFeedback} disabled={sendingFeedback || !feedbackText.trim()} className="px-6 py-2 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 disabled:opacity-50 flex items-center gap-2 cursor-pointer">{sendingFeedback ? <Loader2 className="animate-spin" size={18}/> : <Send size={18}/>} Enviar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+    </nav>
+    </>
+  )
+}
