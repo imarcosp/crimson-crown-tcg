@@ -153,41 +153,49 @@ export default function Navbar() {
                       )}
                   </div>
               )}
-              <Link href="/catalog?tcg=Riftbound&sort=newest" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
-                  <Zap className="text-yellow-500" size={18}/> Riftbound Singles
-              </Link>
-              <Link href="/catalog?tcg=Secret Lair&sort=newest" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
-                  <Box className="text-pink-500" size={18}/> Secret Lair
-              </Link>
+              {siteConfig.features?.showRiftbound && (
+                <Link href="/catalog?tcg=Riftbound&sort=newest" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
+                    <Zap className="text-yellow-500" size={18}/> Riftbound Singles
+                </Link>
+              )}
+              {siteConfig.features?.showSecretLair && (
+                <Link href="/catalog?tcg=Secret Lair&sort=newest" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
+                    <Box className="text-pink-500" size={18}/> Secret Lair
+                </Link>
+              )}
               <div className="border-t my-2 mx-4 border-slate-100"></div>
               <button 
                   onClick={() => { closeMenus(); toggleHangModal() }} 
                   className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left cursor-pointer group"
               >
-                  <Plane className="text-[#E91E63] group-hover:scale-110 transition-transform" size={18}/> 
-                  Hacer pedido al exterior
+                  <Plane className="text-[#9D1B1B] group-hover:scale-110 transition-transform" size={18}/> 
+                  Pedido a Japón
               </button>
               <div className="border-t my-2 mx-4 border-slate-100"></div>
-              <button onClick={() => setIsAccessoriesOpen(!isAccessoriesOpen)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 group cursor-pointer transition-colors">
-                  <div className="flex items-center gap-3"><Package className="text-blue-500" size={18}/> Accesorios</div>
-                  <ChevronDown size={16} className={`transition-transform duration-300 ${isAccessoriesOpen ? 'rotate-180' : ''}`}/>
-              </button>
-              {isAccessoriesOpen && (
-                  <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
-                      {[
-                          { name: 'Folios', tcg: 'Folios' },
-                          { name: 'Top Loaders', tcg: 'Top Loaders' },
-                          { name: 'Perfect Fit', tcg: 'Perfect Fit' },
-                          { name: 'Deck Boxes', tcg: 'Deck Boxes' },
-                          { name: 'Dados', tcg: 'Dados' },
-                          { name: 'Carpetas', tcg: 'Carpetas' },
-                          { name: 'Playmats', tcg: 'Playmats' }
-                      ].map(acc => (
-                          <Link key={acc.name} href={`/catalog?tcg=${encodeURIComponent(acc.tcg)}`} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#E91E63] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#E91E63] transition-colors cursor-pointer">
-                              {acc.name}
-                          </Link>
-                      ))}
-                  </div>
+              {siteConfig.features?.showAccessories && (
+                <>
+                  <button onClick={() => setIsAccessoriesOpen(!isAccessoriesOpen)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 group cursor-pointer transition-colors">
+                      <div className="flex items-center gap-3"><Package className="text-blue-500" size={18}/> Accesorios</div>
+                      <ChevronDown size={16} className={`transition-transform duration-300 ${isAccessoriesOpen ? 'rotate-180' : ''}`}/>
+                  </button>
+                  {isAccessoriesOpen && (
+                      <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
+                          {[
+                              { name: 'Folios', tcg: 'Folios' },
+                              { name: 'Top Loaders', tcg: 'Top Loaders' },
+                              { name: 'Perfect Fit', tcg: 'Perfect Fit' },
+                              { name: 'Deck Boxes', tcg: 'Deck Boxes' },
+                              { name: 'Dados', tcg: 'Dados' },
+                              { name: 'Carpetas', tcg: 'Carpetas' },
+                              { name: 'Playmats', tcg: 'Playmats' }
+                          ].map(acc => (
+                              <Link key={acc.name} href={`/catalog?tcg=${encodeURIComponent(acc.tcg)}`} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
+                                  {acc.name}
+                              </Link>
+                          ))}
+                      </div>
+                  )}
+                </>
               )}
               <div className="border-t my-2 mx-4 border-slate-100"></div>
               <Link href="/info/how-to" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-medium text-sm text-slate-600 transition-colors cursor-pointer">
@@ -203,7 +211,7 @@ export default function Navbar() {
 
   return (
     <>
-    <nav className="bg-[#0F172A] text-white sticky top-0 z-50 shadow-md">
+    <nav className="bg-[#1C1B22] text-white sticky top-0 z-50 shadow-md">
       <div className="mx-auto max-w-7xl px-4 py-3">
         <div className="flex flex-col md:flex-row">
           
@@ -212,7 +220,7 @@ export default function Navbar() {
             <div className="flex items-center gap-2">
                 <button onClick={() => setIsMenuOpen(true)} className="p-2 rounded hover:bg-slate-700 cursor-pointer transition-colors"><MenuIcon className="h-6 w-6" /></button>
                 <Link href="/" className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity">
-                    <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/20"><Image src="/logo.webp" alt={siteConfig.shortName} fill className="object-cover" /></div>
+                    <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/20"><Image src={siteConfig.logo} alt={siteConfig.shortName} fill className="object-cover" /></div>
                     <span className="font-extrabold text-sm hidden xs:block">{siteConfig.shortName.toUpperCase()}</span>
                 </Link>
             </div>
@@ -225,8 +233,8 @@ export default function Navbar() {
                   <div className="flex items-center gap-1 bg-slate-800/80 rounded-md p-0.5 border border-slate-700">
                       <div className="text-[10px] font-bold text-emerald-400 px-1.5">${exchangeRate}</div>
                       <div className="flex gap-0.5">
-                        <button onClick={() => useStore.getState().setCurrency('USD')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[9px] font-bold', currency === 'USD' ? 'bg-[#E91E63] text-white rounded' : 'text-slate-400 hover:text-white')}>USD</button>
-                        <button onClick={() => useStore.getState().setCurrency('ARS')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[9px] font-bold', currency === 'ARS' ? 'bg-[#E91E63] text-white rounded' : 'text-slate-400 hover:text-white')}>ARS</button>
+                        <button onClick={() => useStore.getState().setCurrency('USD')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[9px] font-bold', currency === 'USD' ? 'bg-[#9D1B1B] text-white rounded' : 'text-slate-400 hover:text-white')}>USD</button>
+                        <button onClick={() => useStore.getState().setCurrency('ARS')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[9px] font-bold', currency === 'ARS' ? 'bg-[#9D1B1B] text-white rounded' : 'text-slate-400 hover:text-white')}>ARS</button>
                       </div>
                   </div>
               </div>
@@ -268,7 +276,7 @@ export default function Navbar() {
               </div>
 
               {user && <NotificationsMenu userId={user.id} />}
-              <button onClick={toggleCart} className="relative p-1.5 rounded hover:bg-slate-700 cursor-pointer transition-colors"><ShoppingCart className="h-5 w-5" />{cartCount > 0 && <span className="absolute -top-1 -right-1 bg-[#E91E63] text-white text-[10px] font-bold h-4 w-4 flex items-center justify-center rounded-full">{cartCount > 99 ? '99+' : cartCount}</span>}</button>
+              <button onClick={toggleCart} className="relative p-1.5 rounded hover:bg-slate-700 cursor-pointer transition-colors"><ShoppingCart className="h-5 w-5" />{cartCount > 0 && <span className="absolute -top-1 -right-1 bg-[#9D1B1B] text-white text-[10px] font-bold h-4 w-4 flex items-center justify-center rounded-full">{cartCount > 99 ? '99+' : cartCount}</span>}</button>
             </div>
 
             {/* DRAWER LATERAL (HAMBURGUESA) */}
@@ -287,7 +295,7 @@ export default function Navbar() {
           {/* ======================= DESKTOP ======================= */}
           <div className="hidden md:flex items-center justify-between gap-4 w-full">
             <Link href="/" className="flex items-center gap-3 shrink-0 hover:opacity-90 transition-opacity cursor-pointer">
-                <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white/20"><Image src="/logo.webp" alt={siteConfig.shortName} fill className="object-cover" /></div>
+                <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white/20"><Image src={siteConfig.logo} alt={siteConfig.shortName} fill className="object-cover" /></div>
                 <span className="font-extrabold text-lg tracking-tight">{siteConfig.shortName.toUpperCase()}</span>
             </Link>
 
@@ -305,22 +313,22 @@ export default function Navbar() {
                   <div className="flex items-center gap-1 bg-slate-800 rounded-md p-0.5 border border-slate-700">
                       <div className="text-[11px] font-bold text-emerald-400 px-1.5 cursor-default">${exchangeRate}</div>
                       <div className="flex gap-0.5">
-                        <button onClick={() => useStore.getState().setCurrency('USD')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[10px] font-bold', currency === 'USD' ? 'bg-[#E91E63] text-white rounded' : 'text-slate-400 hover:text-white')}>USD</button>
-                        <button onClick={() => useStore.getState().setCurrency('ARS')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[10px] font-bold', currency === 'ARS' ? 'bg-[#E91E63] text-white rounded' : 'text-slate-400 hover:text-white')}>ARS</button>
+                        <button onClick={() => useStore.getState().setCurrency('USD')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[10px] font-bold', currency === 'USD' ? 'bg-[#9D1B1B] text-white rounded' : 'text-slate-400 hover:text-white')}>USD</button>
+                        <button onClick={() => useStore.getState().setCurrency('ARS')} className={cn('cursor-pointer transition-colors py-0.5 px-1.5 text-[10px] font-bold', currency === 'ARS' ? 'bg-[#9D1B1B] text-white rounded' : 'text-slate-400 hover:text-white')}>ARS</button>
                       </div>
                   </div>
               </div>
 
               {user && <NotificationsMenu userId={user.id} />}
 
-              <button onClick={toggleCart} className="relative p-2 rounded hover:bg-slate-700 cursor-pointer transition-colors"><ShoppingCart className="h-6 w-6" />{cartCount > 0 && <span className="absolute -top-1 -right-1 bg-[#E91E63] text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full shadow-sm">{cartCount > 99 ? '99+' : cartCount}</span>}</button>
+              <button onClick={toggleCart} className="relative p-2 rounded hover:bg-slate-700 cursor-pointer transition-colors"><ShoppingCart className="h-6 w-6" />{cartCount > 0 && <span className="absolute -top-1 -right-1 bg-[#9D1B1B] text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full shadow-sm">{cartCount > 99 ? '99+' : cartCount}</span>}</button>
               
-              <Link href="/hang" className="bg-[#E91E63] hover:bg-[#D81B60] text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); toggleHangModal() }}>
-                <ClipboardList className="h-6 w-6" /> Colgar Pedido
+              <Link href="/hang" className="bg-[#9D1B1B] hover:bg-[#7E1515] text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); toggleHangModal() }}>
+                <ClipboardList className="h-6 w-6" /> Pedido a Japón
               </Link>
               
               <div className="relative group z-50">
-                <button className="flex items-center gap-2 hover:text-[#E91E63] py-2 cursor-pointer transition-colors">
+                <button className="flex items-center gap-2 hover:text-[#9D1B1B] py-2 cursor-pointer transition-colors">
                   <User size={24} />
                   <span className="text-sm font-medium">{user ? (userProfile?.first_name || 'Mi Cuenta') : 'Ingresar'}</span>
                 </button>

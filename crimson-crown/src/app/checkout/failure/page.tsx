@@ -27,7 +27,7 @@ export default function CheckoutFailurePage() {
         <div className="flex flex-col gap-3">
           <Link 
             href="/catalog" 
-            className="w-full bg-[#E91E63] text-white py-3 px-4 rounded-xl font-bold hover:bg-pink-600 transition-colors flex items-center justify-center gap-2"
+            className="w-full bg-[#9D1B1B] text-white py-3 px-4 rounded-xl font-bold hover:bg-[#7E1515] transition-colors flex items-center justify-center gap-2"
           >
             <ShoppingCart size={18} /> Volver a armar el carrito
           </Link>

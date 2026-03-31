@@ -415,7 +415,7 @@ export default function UserOrderDetailPage() {
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div className="text-center mb-6">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold bg-slate-100 text-slate-700">
-               Estado Actual: <span className="uppercase text-[#E91E63]">{order.status}</span>
+               Estado Actual: <span className="uppercase text-[#9D1B1B]">{order.status}</span>
             </span>
         </div>
         
@@ -535,13 +535,7 @@ export default function UserOrderDetailPage() {
                                     <button onClick={() => copyToClipboard(siteConfig.payment.bankAliasArs)} className="p-1.5 hover:bg-amber-50 rounded text-amber-400 hover:text-amber-600 cursor-pointer transition-colors" title="Copiar"><Copy size={16}/></button>
                                 </div>
                             </div>
-                            <div className="bg-white p-3 rounded-lg border border-amber-200 shadow-sm">
-                                <span className="block text-xs font-bold text-amber-700 uppercase mb-1">Cripto (BNB Smart Chain BEP20)</span>
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="font-mono text-slate-700 text-xs truncate">0x76d1f11aad0c31bf5563f646e6e4a4ba1564ebcf</span>
-                                    <button onClick={() => copyToClipboard('0x76d1f11aad0c31bf5563f646e6e4a4ba1564ebcf')} className="p-1.5 hover:bg-amber-50 rounded text-amber-400 hover:text-amber-600 cursor-pointer transition-colors shrink-0" title="Copiar"><Copy size={16}/></button>
-                                </div>
-                            </div>
+                            {/* Eliminado bloque de pago cripto */}
                         </div>
                     </div>
                 )}
@@ -596,7 +590,7 @@ export default function UserOrderDetailPage() {
                    <Package size={18} /> Detalle de Productos
                </div>
                {isInitiated && (
-                   <button onClick={() => toggleHangModal()} className="px-3 py-1.5 bg-[#0F172A] text-white text-sm font-bold rounded-lg hover:bg-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm">
+                   <button onClick={() => toggleHangModal()} className="px-3 py-1.5 bg-[#1C1B22] text-white text-sm font-bold rounded-lg hover:bg-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm">
                        <Plus size={16}/> Agregar items
                    </button>
                )}

@@ -45,7 +45,7 @@ export default function CartDrawer() {
 
   // NUEVO: Estado de Vista (Carrito vs Pago)
   const [view, setView] = useState<'cart' | 'payment'>('cart')
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer_ars' | 'transfer_usd' | 'crypto' | 'credits_full' | 'mercadopago' | ''>('')
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer_ars' | 'transfer_usd' | 'credits_full' | ''>('')
 
   const isFullCreditPayment = useCredits && Math.max(0, getTotal() - Math.min(getTotal(), userCredits)) === 0;
 
@@ -132,9 +132,7 @@ export default function CartDrawer() {
           'cash': 'Efectivo',
           'transfer_ars': 'Transf. Pesos',
           'transfer_usd': 'Transf. USD',
-          'crypto': 'Cripto',
           'credits_full': '100% Créditos',
-          'mercadopago': 'Mercado Pago'
       }
       const paymentInfo = paymentLabels[paymentMethod]
       
@@ -150,32 +148,7 @@ export default function CartDrawer() {
       removeCoupon()
       toggleCart()
 
-      // INTERCEPCIÓN MERCADO PAGO
-      if (paymentMethod === 'mercadopago') {
-          // Calculamos el total con el 10% de recargo en ARS (usando el total capturado antes del clear)
-          const totalUsd = Math.max(0, cartTotalBeforeClear - (useCredits ? Math.min(cartTotalBeforeClear, userCredits) : 0))
-          const finalAmountARS = Math.round((totalUsd * 1.10) * rate)
-
-          // Llamamos a nuestro endpoint de preferencias
-          const mpRes = await fetch('/api/checkout/mercadopago', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  orderId: res.orderId,
-                  finalAmountARS: finalAmountARS,
-                  items: itemsSnapshot
-              })
-          })
-
-          const mpData = await mpRes.json()
-          if (!mpRes.ok || !mpData.init_point) {
-              throw new Error(mpData.error || 'Error conectando con Mercado Pago')
-          }
-
-          // Redirigir directamente a Mercado Pago
-          window.location.href = mpData.init_point
-          return
-      }
+      // Eliminado flujo de Mercado Pago
 
       router.push(`/checkout/success/${res.orderId}`)
     } catch (e: any) {
@@ -354,26 +327,14 @@ export default function CartDrawer() {
                                     </div>
                                 </label>
 
-                                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                    <div className="bg-slate-50 p-3 text-xs font-bold text-slate-500 uppercase flex items-center gap-2 border-b border-slate-200"><Smartphone size={14}/> Plataformas Digitales</div>
-                                    <div className="divide-y divide-slate-100">
-                                        <label className={`flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 transition-colors ${paymentMethod === 'mercadopago' ? 'bg-[#009EE3]/5 border-l-4 border-l-[#009EE3]' : 'border-l-4 border-l-transparent'}`}>
-                                            <input type="radio" name="payment" checked={paymentMethod === 'mercadopago'} onChange={() => setPaymentMethod('mercadopago')} className="w-4 h-4 accent-[#009EE3] cursor-pointer"/>
-                                            <div className="flex-1">
-                                                <div className="font-bold text-slate-800 text-sm flex items-center gap-2">Mercado Pago <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">+10% Recargo</span></div>
-                                                <div className="text-xs text-slate-500 mt-0.5">Tarjetas de Crédito, Débito o Dinero en Cuenta</div>
-                                            </div>
-                                        </label>
-                                    </div>
-                                </div>
+                                {/* Eliminadas plataformas digitales (Mercado Pago) */}
 
                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
                                     <div className="bg-slate-50 p-3 text-xs font-bold text-slate-500 uppercase flex items-center gap-2 border-b border-slate-200"><CreditCard size={14}/> Transferencia</div>
                                     <div className="divide-y divide-slate-100">
                                         {[
                                             { id: 'transfer_ars', label: 'Pesos (ARS)', alias: siteConfig.payment.bankAliasArs },
-                                            { id: 'transfer_usd', label: 'Dólares (Banco)', alias: siteConfig.payment.bankAliasUsd },
-                                            { id: 'crypto', label: 'Cripto (USDT)', alias: 'BSC (BEP20)...' }
+                                            { id: 'transfer_usd', label: 'Dólares (Banco)', alias: siteConfig.payment.bankAliasUsd }
                                         ].map((pm) => (
                                             <label key={pm.id} className={`flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 transition-colors ${paymentMethod === pm.id ? 'bg-sky-50' : ''}`}>
                                                 <input type="radio" name="payment" checked={paymentMethod === pm.id} onChange={() => setPaymentMethod(pm.id as any)} className="w-4 h-4 accent-sky-600 cursor-pointer"/>
@@ -423,14 +384,14 @@ export default function CartDrawer() {
                     <div className="flex justify-between items-end border-t border-slate-100 pt-3 mt-2">
                         <span className="font-bold text-slate-900 text-lg">Total</span>
                         <div className="text-right">
-                            <span className="font-extrabold text-2xl text-[#E91E63]">
+                            <span className="font-extrabold text-2xl text-[#9D1B1B]">
                                 US$ {(Math.max(0, getTotal() - (useCredits ? Math.min(getTotal(), userCredits) : 0))).toFixed(2)}
                             </span>
                         </div>
                     </div>
                 </div>
 
-                <button onClick={goToPayment} disabled={!items.length} className="w-full bg-[#0F172A] text-white py-4 rounded-xl font-bold text-base hover:bg-black disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-slate-900/10 active:scale-[0.98] cursor-pointer">
+                <button onClick={goToPayment} disabled={!items.length} className="w-full bg-[#1C1B22] text-white py-4 rounded-xl font-bold text-base hover:bg-black disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-slate-900/10 active:scale-[0.98] cursor-pointer">
                     CONTINUAR
                 </button>
               </>
@@ -445,8 +406,7 @@ export default function CartDrawer() {
                           
                           {(() => {
                               const baseUsd = Math.max(0, getTotal() - (useCredits ? Math.min(getTotal(), userCredits) : 0))
-                              const isMp = paymentMethod === 'mercadopago'
-                              const finalUsd = isMp ? baseUsd * 1.10 : baseUsd
+                              const finalUsd = baseUsd
                               const finalArs = finalUsd * rate
                               
                               return (
@@ -456,12 +416,7 @@ export default function CartDrawer() {
                                           <span className="font-bold text-slate-800">US$ {baseUsd.toFixed(2)}</span>
                                       </div>
                                       
-                                      {isMp && (
-                                          <div className="flex justify-between text-sm text-[#E91E63]">
-                                              <span className="font-bold">Recargo Mercado Pago (10%)</span>
-                                              <span className="font-bold">+ US$ {(baseUsd * 0.10).toFixed(2)}</span>
-                                          </div>
-                                      )}
+                                      {/* Recargo Mercado Pago eliminado */}
                                       
                                       <div className="flex justify-between items-end pt-3 border-t border-slate-200 mt-2">
                                           <span className="font-bold text-slate-900 text-base">Total a Pagar</span>
@@ -478,7 +433,7 @@ export default function CartDrawer() {
                       </div>
                   )}
 
-                  <button onClick={handleCheckout} disabled={checkingOut || !paymentMethod} className="w-full bg-[#E91E63] text-white py-4 rounded-xl font-bold text-base hover:bg-pink-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-pink-900/10 active:scale-[0.98] cursor-pointer">
+                  <button onClick={handleCheckout} disabled={checkingOut || !paymentMethod} className="w-full bg-[#9D1B1B] text-white py-4 rounded-xl font-bold text-base hover:bg-[#7E1515] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-pink-900/10 active:scale-[0.98] cursor-pointer">
                       {checkingOut ? 'PROCESANDO...' : 'CONFIRMAR COMPRA'}
                   </button>
               </div>

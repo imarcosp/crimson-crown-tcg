@@ -101,7 +101,7 @@ export default function SearchInput() {
           type="search"
           name="search"
           placeholder="Busca la carta que necesites o pegá tu link de moxfield"
-          className="bg-white h-10 px-5 pr-10 rounded-full text-sm focus:outline-none w-full border border-slate-200 focus:border-[#E91E63] transition-colors shadow-sm placeholder:text-slate-400"
+          className="bg-white h-10 px-5 pr-10 rounded-full text-sm focus:outline-none w-full border border-slate-200 focus:border-[#9D1B1B] transition-colors shadow-sm placeholder:text-slate-400"
           value={term}
           onChange={(e) => setTerm(e.target.value)}
           onFocus={() => { if(term.length >= 3 && results.length > 0) setShowSuggestions(true) }}
@@ -109,7 +109,7 @@ export default function SearchInput() {
         />
         <button
           type="submit"
-          className="absolute right-0 top-0 mt-2 mr-3 text-slate-400 hover:text-[#E91E63] transition-colors"
+          className="absolute right-0 top-0 mt-2 mr-3 text-slate-400 hover:text-[#9D1B1B] transition-colors"
           aria-label="Buscar"
         >
           {loading ? <Loader2 className="h-5 w-5 animate-spin"/> : <Search className="h-5 w-5" />}
@@ -135,7 +135,7 @@ export default function SearchInput() {
                               {r.image_url ? <Image src={r.image_url} alt="" width={32} height={44} className="object-cover w-full h-full" unoptimized /> : null}
                           </div>
                           <div className="flex-1 min-w-0">
-                              <div className="font-bold text-sm text-slate-800 truncate group-hover:text-[#E91E63] transition-colors flex items-center gap-1">
+                              <div className="font-bold text-sm text-slate-800 truncate group-hover:text-[#9D1B1B] transition-colors flex items-center gap-1">
                                 {r.name}
                                 {/* ETIQUETA VISUAL FOIL */}
                                 {isFoil && <span className="text-[10px] text-purple-600 bg-purple-50 px-1.5 rounded border border-purple-100 font-bold flex items-center gap-0.5"><Sparkles size={8}/> {finishLabel}</span>}
@@ -154,7 +154,7 @@ export default function SearchInput() {
                   )})} 
               </div>
               <div className="bg-slate-50 p-2 text-center border-t border-slate-100">
-                  <button onClick={handleSubmit} className="text-xs font-bold text-[#E91E63] hover:underline">
+                  <button onClick={handleSubmit} className="text-xs font-bold text-[#9D1B1B] hover:underline">
                       Ver todos los resultados
                   </button>
               </div>

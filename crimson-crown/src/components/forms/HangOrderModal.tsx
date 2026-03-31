@@ -385,8 +385,8 @@ export default function HangOrderModal() {
                 <div className="p-4 border-b border-slate-100 z-20">
                     <div className="relative">
                         <Search className="absolute left-3 top-2.5 text-slate-400" size={18}/>
-                        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar carta..." className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#E91E63] outline-none" autoFocus/>
-                        {(searching || addingItem) && <Loader2 className="absolute right-3 top-2.5 animate-spin text-[#E91E63]" size={18}/>}
+                        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar carta..." className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#9D1B1B] outline-none" autoFocus/>
+                        {(searching || addingItem) && <Loader2 className="absolute right-3 top-2.5 animate-spin text-[#9D1B1B]" size={18}/>}
                         {results.length > 0 && (
                             <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 max-h-60 overflow-y-auto z-30">
                                 {results.map((r) => (
@@ -441,7 +441,7 @@ export default function HangOrderModal() {
                                     <label className="text-[9px] text-slate-400 font-bold uppercase">Cant.</label>
                                     <div className="flex items-center gap-1">
                                         <span className="text-xs text-slate-500">x</span>
-                                        <input type="number" min="1" value={item.quantity} onChange={(e) => updateQuantity(item.id, Number(e.target.value))} className="w-12 text-center border border-slate-300 rounded py-1 text-sm font-bold focus:ring-1 focus:ring-[#E91E63] outline-none"/>
+                                        <input type="number" min="1" value={item.quantity} onChange={(e) => updateQuantity(item.id, Number(e.target.value))} className="w-12 text-center border border-slate-300 rounded py-1 text-sm font-bold focus:ring-1 focus:ring-[#9D1B1B] outline-none"/>
                                     </div>
                                     <button onClick={() => removeItem(item.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg mt-auto cursor-pointer"><Trash size={16}/></button>
                                 </div>
@@ -468,7 +468,7 @@ export default function HangOrderModal() {
                     <div className="flex justify-between items-end mb-4">
                         <span className="text-sm font-bold text-slate-500 uppercase">Total Estimado</span>
                         <div className="text-right">
-                            <span className="block text-2xl font-extrabold text-[#E91E63] flex items-center gap-2"><Calculator size={20} className="text-slate-300"/> US$ {totals.toFixed(2)}</span>
+                            <span className="block text-2xl font-extrabold text-[#9D1B1B] flex items-center gap-2"><Calculator size={20} className="text-slate-300"/> US$ {totals.toFixed(2)}</span>
                             <span className="text-[10px] text-slate-400 font-bold">Incluye Tax (10%) + Envío ($0.5/u)</span>
                         </div>
                     </div>
@@ -517,7 +517,7 @@ export default function HangOrderModal() {
                     <button onClick={() => setStep('form')} className="px-6 py-3 text-slate-500 font-bold hover:bg-slate-200 rounded-xl transition-colors">
                         Volver
                     </button>
-                    <button onClick={createOrder} className="px-8 py-3 bg-[#E91E63] hover:bg-[#d81557] text-white font-bold rounded-xl shadow-lg transition-colors flex items-center gap-2">
+                    <button onClick={createOrder} className="px-8 py-3 bg-[#9D1B1B] hover:bg-[#7E1515] text-white font-bold rounded-xl shadow-lg transition-colors flex items-center gap-2">
                         {isProcessing ? <Loader2 className="animate-spin"/> : 'Importar de Todas Formas'}
                     </button>
                 </div>

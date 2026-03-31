@@ -4,6 +4,8 @@ import ProductCard from '@/components/catalog/ProductCard'
 import FilterSidebar from '@/components/catalog/FilterSidebar'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, SearchX, Lightbulb, Sparkles } from 'lucide-react'
+import { redirect } from 'next/navigation'
+import { siteConfig } from '@/config/site'
 
 export const revalidate = 0
 
@@ -58,6 +60,7 @@ export default async function CatalogPage({
     set?: string
     q?: string
     tcg?: string
+    blocked?: string
     condition?: string
     rarity?: string
     finish?: string
@@ -88,6 +91,19 @@ export default async function CatalogPage({
           currentQ = '' // Convertimos la búsqueda en un filtro de categoría
           isSmartSearch = true
       }
+  }
+
+  // Guard de acceso: oculta categorías deshabilitadas
+  // Para revertir, basta con poner los flags en true en siteConfig.features
+  const requestedTcg = smartFilterTcg || params.tcg || ''
+  const isBlocked =
+    (requestedTcg === 'Riftbound' && !siteConfig.features.showRiftbound) ||
+    (requestedTcg === 'Secret Lair' && !siteConfig.features.showSecretLair) ||
+    (requestedTcg === 'Accesorios' && !siteConfig.features.showAccessories)
+  if (isBlocked) {
+    const { tcg, ...rest } = params as any
+    const qs = new URLSearchParams({ ...rest, blocked: requestedTcg }).toString()
+    redirect(`/catalog?${qs}`)
   }
 
   let products: any[] = []
@@ -209,15 +225,21 @@ export default async function CatalogPage({
         <div className="flex-1">
           <div className="flex items-center justify-between mb-6">
             <div className="flex flex-col">
-                <h1 className="text-2xl font-bold text-[#0F172A] flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-[#1C1B22] flex items-center gap-2">
                     Catálogo 
                     {smartFilterTcg && <span className="text-slate-500 font-normal">/ {smartFilterTcg}</span>}
-                    {isSmartSearch && <Sparkles size={18} className="text-[#E91E63]" />}
+                    {isSmartSearch && <Sparkles size={18} className="text-[#9D1B1B]" />}
                 </h1>
-                {params.set && <span className="text-xs font-bold text-[#E91E63] bg-pink-50 px-2 py-1 rounded w-fit mt-1">Set: {params.set}</span>}
+                {params.set && <span className="text-xs font-bold text-[#9D1B1B] bg-red-50 px-2 py-1 rounded w-fit mt-1">Set: {params.set}</span>}
             </div>
             <span className="text-sm text-slate-500 font-bold">{count} resultados</span>
           </div>
+          
+          {(params as any).blocked && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-sm">
+              La categoría {(params as any).blocked} no está disponible actualmente. Te mostramos el catálogo general.
+            </div>
+          )}
           
           {suggestion && (
             <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3 text-amber-800 animate-in fade-in">

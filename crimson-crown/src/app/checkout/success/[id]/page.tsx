@@ -33,14 +33,14 @@ export default async function SuccessPage({ params }: { params: Promise<{ id: st
             <CheckCircle size={40} />
         </div>
         
-        <h1 className="text-3xl font-extrabold text-[#0F172A] mb-2">¡Pedido Realizado!</h1>
+        <h1 className="text-3xl font-extrabold text-[#1C1B22] mb-2">¡Pedido Realizado!</h1>
         <p className="text-slate-500 font-mono text-sm mb-6">Orden #{id.slice(0,8)}</p>
 
         <PaymentVerifier orderId={id} isMercadoPago={isMercadoPago} />
         
         <div className="bg-slate-50 p-6 rounded-xl border border-slate-100 mb-6 text-left">
             <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
-                <Clock size={18} className="text-[#E91E63]"/> Información Importante:
+                <Clock size={18} className="text-[#9D1B1B]"/> Información Importante:
             </h3>
             
             {isCash && (
@@ -66,7 +66,7 @@ export default async function SuccessPage({ params }: { params: Promise<{ id: st
             <p className="text-xs text-slate-400 mb-2">
                 Para ver los datos de pago (CBU/Alias) y subir tu comprobante, andá a tus pedidos:
             </p>
-            <Link href="/profile?tab=stock" className="w-full inline-block rounded-xl bg-[#E91E63] hover:bg-[#d81557] text-white px-6 py-4 text-base font-bold shadow-lg transition-all">
+            <Link href="/profile?tab=stock" className="w-full inline-block rounded-xl bg-[#9D1B1B] hover:bg-[#7E1515] text-white px-6 py-4 text-base font-bold shadow-lg transition-all">
                 Ver Mis Pedidos
             </Link>
             <Link href="/" className="text-slate-500 hover:text-slate-800 text-sm font-medium py-2">

@@ -3,6 +3,7 @@ import Hero from '@/components/layout/Hero'
 import ProductCard from '@/components/catalog/ProductCard'
 import Link from 'next/link'
 import { ArrowRight, Sparkles, Package, Crown, Zap } from 'lucide-react'
+import { siteConfig } from '@/config/site'
 
 export const revalidate = 0
 
@@ -110,13 +111,13 @@ export default async function Home() {
         )}
 
         {/* 2. RIFTBOUND: ÚLTIMOS INGRESOS */}
-        {riftLatest && riftLatest.length > 0 && (
+        {siteConfig.features?.showRiftbound && riftLatest && riftLatest.length > 0 && (
             <section className="space-y-6">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                    <h2 className="text-2xl font-bold text-[#0F172A] flex items-center gap-2">
+                    <h2 className="text-2xl font-bold text-[#1C1B22] flex items-center gap-2">
                         <Zap className="text-yellow-500"/> Últimos Ingresos Riftbound
                     </h2>
-                    <Link href="/catalog?tcg=Riftbound&sort=newest" className="text-sm font-bold text-slate-500 hover:text-[#E91E63] flex items-center gap-1 transition-colors group">
+                    <Link href="/catalog?tcg=Riftbound&sort=newest" className="text-sm font-bold text-slate-500 hover:text-[#9D1B1B] flex items-center gap-1 transition-colors group">
                         Ver novedades Riftbound <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
                     </Link>
                 </div>
@@ -130,10 +131,10 @@ export default async function Home() {
         {magicFeatured && magicFeatured.length > 0 && (
             <section className="space-y-6">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                    <h2 className="text-2xl font-bold text-[#0F172A] flex items-center gap-2">
+                    <h2 className="text-2xl font-bold text-[#1C1B22] flex items-center gap-2">
                         <Crown className="text-amber-500"/> Destacados Magic
                     </h2>
-                    <Link href="/catalog?tcg=Magic&sort=price_desc" className="text-sm font-bold text-slate-500 hover:text-[#E91E63] flex items-center gap-1 transition-colors group">
+                    <Link href="/catalog?tcg=Magic&sort=price_desc" className="text-sm font-bold text-slate-500 hover:text-[#9D1B1B] flex items-center gap-1 transition-colors group">
                         Ver cartas caras <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
                     </Link>
                 </div>
@@ -144,13 +145,13 @@ export default async function Home() {
         )}
 
         {/* 4. RIFTBOUND: DESTACADOS */}
-        {riftFeatured && riftFeatured.length > 0 && (
+        {siteConfig.features?.showRiftbound && riftFeatured && riftFeatured.length > 0 && (
             <section className="space-y-6">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                    <h2 className="text-2xl font-bold text-[#0F172A] flex items-center gap-2">
+                    <h2 className="text-2xl font-bold text-[#1C1B22] flex items-center gap-2">
                         <Crown className="text-amber-500"/> Destacados Riftbound
                     </h2>
-                    <Link href="/catalog?tcg=Riftbound&sort=price_desc" className="text-sm font-bold text-slate-500 hover:text-[#E91E63] flex items-center gap-1 transition-colors group">
+                    <Link href="/catalog?tcg=Riftbound&sort=price_desc" className="text-sm font-bold text-slate-500 hover:text-[#9D1B1B] flex items-center gap-1 transition-colors group">
                         Ver cartas caras <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
                     </Link>
                 </div>
@@ -161,10 +162,10 @@ export default async function Home() {
         )}
 
         {/* 5. OTROS PRODUCTOS */}
-        {accessories && accessories.length > 0 && (
+        {siteConfig.features?.showAccessories && accessories && accessories.length > 0 && (
             <section className="space-y-6">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                    <h2 className="text-2xl font-bold text-[#0F172A] flex items-center gap-2">
+                    <h2 className="text-2xl font-bold text-[#1C1B22] flex items-center gap-2">
                         <Package className="text-blue-500"/> Otros Productos
                     </h2>
                 </div>
@@ -175,7 +176,7 @@ export default async function Home() {
         )}
 
         <div className="flex justify-center mt-12 pt-8">
-          <Link href="/catalog" className="px-8 py-4 bg-[#0F172A] text-white font-bold rounded-xl hover:bg-slate-900 transition-all shadow-xl hover:scale-105 flex items-center gap-2">
+          <Link href="/catalog" className="px-8 py-4 bg-[#1C1B22] text-white font-bold rounded-xl hover:bg-slate-900 transition-all shadow-xl hover:scale-105 flex items-center gap-2">
             Explorar todo el inventario <ArrowRight size={20}/>
           </Link>
         </div>

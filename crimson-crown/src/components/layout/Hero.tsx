@@ -56,13 +56,13 @@ export default function Hero() {
   // Fallback si no hay banners
   if (!loading && banners.length === 0) {
     return (
-      <section className="min-h-[400px] rounded-xl bg-gradient-to-r from-[#E91E63] to-[#C2185B] p-8 text-white relative overflow-hidden flex items-center">
+      <section className="min-h-[400px] rounded-xl bg-gradient-to-r from-[#9D1B1B] to-[#7E1515] p-8 text-white relative overflow-hidden flex items-center">
         <div className="max-w-3xl relative z-10">
           <h1 className="text-4xl sm:text-5xl font-extrabold mb-4">Pedí esa carta que te falta.</h1>
           <p className="text-white/90 text-lg mb-8 max-w-xl">Stock local y pedidos internacionales. Cotizamos rápido y colgamos tu pedido.</p>
           <div className="flex flex-wrap gap-3">
-            <button onClick={() => handleAction('#stock')} className="px-6 py-3 rounded-lg bg-[#0F172A] text-white font-bold shadow-lg hover:bg-slate-900 cursor-pointer">Ver Stock</button>
-            <button onClick={() => handleAction('#quote')} className="px-6 py-3 rounded-lg bg-white text-[#E91E63] font-bold shadow-lg hover:bg-slate-50 cursor-pointer">Cotizar Pedido</button>
+            <button onClick={() => handleAction('#stock')} className="px-6 py-3 rounded-lg bg-[#1C1B22] text-white font-bold shadow-lg hover:bg-slate-900 cursor-pointer">Ver Stock</button>
+            <button onClick={() => handleAction('#quote')} className="px-6 py-3 rounded-lg bg-white text-[#9D1B1B] font-bold shadow-lg hover:bg-slate-50 cursor-pointer">Cotizar Pedido</button>
           </div>
         </div>
       </section>
@@ -110,7 +110,7 @@ export default function Hero() {
                 {banner.button_text && (
                 <button
                     onClick={() => handleAction(banner.link_url)}
-                    className="w-full sm:w-fit px-8 py-4 rounded-xl bg-[#E91E63] hover:bg-pink-600 text-white font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer"
+                    className="w-full sm:w-fit px-8 py-4 rounded-xl bg-[#9D1B1B] hover:bg-[#7E1515] text-white font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer"
                 >
                     {banner.button_text}
                 </button>
@@ -142,7 +142,7 @@ export default function Hero() {
               <button
                 key={idx}
                 onClick={() => setCurrentIndex(idx)}
-                className={`h-1.5 md:h-2 rounded-full transition-all ${idx === currentIndex ? 'bg-[#E91E63] w-6 md:w-8' : 'bg-white/50 hover:bg-white w-2 md:w-2'}`}
+                className={`h-1.5 md:h-2 rounded-full transition-all ${idx === currentIndex ? 'bg-[#9D1B1B] w-6 md:w-8' : 'bg-white/50 hover:bg-white w-2 md:w-2'}`}
               />
             ))}
           </div>

@@ -38,13 +38,13 @@ export default function Footer() {
     load()
   }, [])
   return (
-    <footer className="bg-[#0F172A] text-slate-300 py-12 border-t border-slate-800 mt-auto">
+    <footer className="bg-[#1C1B22] text-slate-300 py-12 border-t border-slate-800 mt-auto">
       <div className="mx-auto max-w-7xl px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
         <div>
           <h3 className="text-white font-extrabold text-xl mb-4 tracking-tight">{siteConfig.name.toUpperCase()}</h3>
           <p className="text-sm leading-relaxed mb-4 text-slate-400">{info.store_description}</p>
           <div className="flex gap-4">
-            <a href={info.contact_instagram} target="_blank" rel="noopener noreferrer" className="hover:text-[#E91E63] transition-colors"><Instagram size={24} /></a>
+            <a href={info.contact_instagram} target="_blank" rel="noopener noreferrer" className="hover:text-[#9D1B1B] transition-colors"><Instagram size={24} /></a>
             <a href={`https://wa.me/${info.contact_whatsapp}`} target="_blank" rel="noopener noreferrer" className="hover:text-green-500 transition-colors"><MessageCircle size={24} /></a>
             <a href={`mailto:${info.contact_email}`} className="hover:text-blue-400 transition-colors"><Mail size={24} /></a>
           </div>
@@ -63,7 +63,7 @@ export default function Footer() {
           <h4 className="text-white font-bold mb-4 uppercase text-sm tracking-wider">Contacto</h4>
           <ul className="space-y-3 text-sm">
             <li className="flex items-start gap-3">
-              <MapPin size={18} className="text-[#E91E63] shrink-0 mt-0.5" />
+              <MapPin size={18} className="text-[#C7A316] shrink-0 mt-0.5" />
               <span>{info.contact_address}<br/><span className="text-xs text-slate-500">{info.contact_address_note}</span></span>
             </li>
             <li className="flex items-start gap-3">

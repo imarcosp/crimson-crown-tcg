@@ -12,13 +12,13 @@ export default function HowToPage() {
     <div className="bg-slate-50 min-h-screen pb-20">
       
       {/* HERO SECTION */}
-      <div className="bg-[#0F172A] text-white py-16 px-4 text-center relative overflow-hidden">
+      <div className="bg-[#1C1B22] text-white py-16 px-4 text-center relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
             <Sparkles className="absolute top-10 left-10 text-white w-20 h-20" />
             <Sparkles className="absolute bottom-10 right-10 text-white w-32 h-32" />
         </div>
         <h1 className="text-4xl md:text-5xl font-extrabold mb-4 tracking-tight">
-          ¿Cómo funciona <span className="text-[#E91E63]">{siteConfig.shortName}</span>?
+          ¿Cómo funciona <span className="text-[#9D1B1B]">{siteConfig.shortName}</span>?
         </h1>
         <p className="text-slate-300 max-w-2xl mx-auto text-lg">
           Tu hub definitivo para TCGs. Compra stock, importa listas completas o véndenos tus cartas.
@@ -28,7 +28,7 @@ export default function HowToPage() {
       <div className="container mx-auto px-4 -mt-8 grid gap-8 max-w-5xl">
         
         {/* 1. COMPRAR STOCK */}
-        <section className="bg-white rounded-2xl p-8 shadow-xl border border-slate-100 relative overflow-hidden group hover:border-[#E91E63]/30 transition-all">
+        <section className="bg-white rounded-2xl p-8 shadow-xl border border-slate-100 relative overflow-hidden group hover:border-[#9D1B1B]/30 transition-all">
             <div className="absolute top-0 right-0 bg-slate-100 px-4 py-2 rounded-bl-2xl font-bold text-slate-500 text-xs uppercase">Lo clásico</div>
             <div className="flex flex-col md:flex-row gap-8 items-center">
                 <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shrink-0">
@@ -51,10 +51,10 @@ export default function HowToPage() {
         </section>
 
         {/* 2. IMPORTACIÓN MANUAL (COLGAR PEDIDO) */}
-        <section className="bg-white rounded-2xl p-8 shadow-xl border border-[#E91E63]/20 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 bg-[#E91E63] text-white px-4 py-2 rounded-bl-2xl font-bold text-xs uppercase">Especialidad</div>
+        <section className="bg-white rounded-2xl p-8 shadow-xl border border-[#9D1B1B]/20 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 bg-[#9D1B1B] text-white px-4 py-2 rounded-bl-2xl font-bold text-xs uppercase">Especialidad</div>
             <div className="flex flex-col md:flex-row gap-8 items-center">
-                <div className="w-16 h-16 bg-pink-50 text-[#E91E63] rounded-2xl flex items-center justify-center shrink-0">
+                <div className="w-16 h-16 bg-red-50 text-[#9D1B1B] rounded-2xl flex items-center justify-center shrink-0">
                     <Plane size={32} />
                 </div>
                 <div className="flex-1">
@@ -83,9 +83,9 @@ export default function HowToPage() {
 
                     <button 
                         onClick={toggleHangModal} 
-                        className="inline-flex items-center gap-2 text-[#E91E63] font-bold hover:gap-3 transition-all cursor-pointer"
+                        className="inline-flex items-center gap-2 text-[#9D1B1B] font-bold hover:gap-3 transition-all cursor-pointer"
                     >
-                        Colgar pedido al exterior <ArrowRight size={16}/>
+                        Pedido a Japón <ArrowRight size={16}/>
                     </button>
                 </div>
             </div>

@@ -74,7 +74,7 @@ export default function LoginPage() {
   if (checkingSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <Loader2 className="w-8 h-8 animate-spin text-[#E91E63]" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#9D1B1B]" />
       </div>
     )
   }
@@ -116,7 +116,7 @@ export default function LoginPage() {
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-sm font-medium text-slate-700">Contraseña</label>
                 {view === 'sign-in' && (
-                  <button type="button" onClick={() => { setView('forgot-password'); setErrorMsg(null); setSuccessMsg(null) }} className="text-xs text-[#E91E63] hover:underline cursor-pointer">
+                  <button type="button" onClick={() => { setView('forgot-password'); setErrorMsg(null); setSuccessMsg(null) }} className="text-xs text-[#9D1B1B] hover:underline cursor-pointer">
                     ¿Olvidaste tu contraseña?
                   </button>
                 )}
@@ -125,7 +125,7 @@ export default function LoginPage() {
             </div>
           )}
           
-          <button type="submit" disabled={loading} className="w-full bg-[#E91E63] hover:bg-[#D81B60] text-white py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-900/10 cursor-pointer disabled:cursor-not-allowed">
+          <button type="submit" disabled={loading} className="w-full bg-[#9D1B1B] hover:bg-[#7E1515] text-white py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-900/10 cursor-pointer disabled:cursor-not-allowed">
             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : (
               view === 'sign-in' ? 'Ingresar' :
               view === 'sign-up' ? 'Registrarse' : 'Enviar Link de Recuperación'
@@ -139,14 +139,14 @@ export default function LoginPage() {
               <ArrowLeft size={14}/> Volver al Login
             </button>
           ) : (
-            <button onClick={() => { setView(view === 'sign-in' ? 'sign-up' : 'sign-in'); setErrorMsg(null); setSuccessMsg(null) }} className="text-slate-500 hover:text-[#E91E63] underline cursor-pointer">
+            <button onClick={() => { setView(view === 'sign-in' ? 'sign-up' : 'sign-in'); setErrorMsg(null); setSuccessMsg(null) }} className="text-slate-500 hover:text-[#9D1B1B] underline cursor-pointer">
               {view === 'sign-in' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión'}
             </button>
           )}
         </div>
       </div>
       <style jsx>{`
-        .input-auth { @apply w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#E91E63] outline-none text-slate-900 transition-all; }
+        .input-auth { @apply w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#9D1B1B] outline-none text-slate-900 transition-all; }
       `}</style>
     </div>
   )

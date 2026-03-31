@@ -155,7 +155,7 @@ export default function ProductCard(p: Props) {
 
         <div className="p-4 flex flex-col mt-auto w-full">
             <Link href={`/product/${p.id}`} className="block mb-1 cursor-pointer">
-                <h4 className="font-bold text-slate-900 line-clamp-2 text-sm leading-tight hover:text-[#E91E63] transition-colors" title={p.name}>{p.name}</h4>
+                <h4 className="font-bold text-slate-900 line-clamp-2 text-sm leading-tight hover:text-[#9D1B1B] transition-colors" title={p.name}>{p.name}</h4>
             </Link>
             <div className="text-xs text-slate-500 mb-3 flex items-center gap-1 max-[400px]:flex-wrap max-[400px]:gap-x-1 max-[400px]:gap-y-0.5">
                 <span className="truncate max-w-[120px] max-[400px]:max-w-[100px]">{p.setName}</span>
@@ -184,7 +184,7 @@ export default function ProductCard(p: Props) {
                 <div className="flex items-end justify-between gap-2 max-[400px]:gap-1.5 flex-wrap">
                     <div className="flex flex-col min-w-0">
                         <span className="text-xs text-slate-400 font-medium leading-none mb-1 max-[400px]:text-[10px]">Precio</span>
-                        <div className="font-extrabold text-[#E91E63] leading-none tracking-tight flex items-baseline gap-0.5 flex-wrap">
+                        <div className="font-extrabold text-[#9D1B1B] leading-none tracking-tight flex items-baseline gap-0.5 flex-wrap">
                             <span className="text-sm max-[400px]:text-xs">{symbol}</span>
                             <span className="text-lg max-[400px]:text-sm">{price.toFixed(2)}</span>
                         </div>
@@ -192,7 +192,7 @@ export default function ProductCard(p: Props) {
                     {cartItems.find((i) => i.id === p.id) ? (
                         <div className="shrink-0"><QuantitySelector productId={p.id} maxStock={p.stock} /></div>
                     ) : (
-                        <button className="bg-[#0F172A] hover:bg-slate-800 text-white px-2.5 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer shrink-0 max-[400px]:px-2 max-[400px]:py-1.5 max-[400px]:text-[10px] ml-auto" onClick={handleAddToCart}>
+                        <button className="bg-[#1C1B22] hover:bg-slate-800 text-white px-2.5 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer shrink-0 max-[400px]:px-2 max-[400px]:py-1.5 max-[400px]:text-[10px] ml-auto" onClick={handleAddToCart}>
                             <ShoppingCart className="h-4 w-4 shrink-0 max-[400px]:h-3.5 max-[400px]:w-3.5" /> 
                             <span className="max-[400px]:hidden">Agregar</span>
                         </button>
@@ -201,7 +201,7 @@ export default function ProductCard(p: Props) {
             ) : (
                 <div className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-slate-500 flex items-center gap-1 leading-tight max-[400px]:text-[10px]">📦 Sin stock, disponible para importación (15 dias).</span>
-                    <button className="w-full px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border border-[#E91E63] text-[#E91E63] hover:bg-[#E91E63] hover:text-white transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); const quoteName = wantsFoil ? `${p.name} (Foil)` : p.name; addQuote({ id: p.id, name: quoteName, setName: p.setName, image: currentImage, quantity: 1 }); toggleHangModal() }}>
+                    <button className="w-full px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border border-[#9D1B1B] text-[#9D1B1B] hover:bg-[#9D1B1B] hover:text-white transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); const quoteName = wantsFoil ? `${p.name} (Foil)` : p.name; addQuote({ id: p.id, name: quoteName, setName: p.setName, image: currentImage, quantity: 1 }); toggleHangModal() }}>
                         Cotizar
                     </button>
                 </div>
