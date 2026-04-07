@@ -481,13 +481,13 @@ export default function UserOrderDetailPage() {
                                 </div>
                                 <div className="flex justify-between text-base font-black">
                                     <span className="text-slate-800">Restante a pagar (USD):</span>
-                                    <span className={remainingUsd > 0 ? "text-[#E91E63]" : "text-emerald-600"}>
+                                    <span className={remainingUsd > 0 ? "text-[#9D1B1B]" : "text-emerald-600"}>
                                         US$ {remainingUsd.toFixed(2)}
                                     </span>
                                 </div>
                                 {remainingUsd > 0 && (
-                                    <div className="mt-4 bg-white p-4 rounded-xl border border-[#E91E63]/30 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative overflow-hidden">
-                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#E91E63]"></div>
+                                    <div className="mt-4 bg-white p-4 rounded-xl border border-[#9D1B1B]/30 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative overflow-hidden">
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#9D1B1B]"></div>
                                         <div className="pl-2">
                                             <span className="block text-xs font-bold text-slate-500 uppercase mb-0.5">Debes transferir exactamente:</span>
                                             <span className="text-2xl font-black text-slate-800 tracking-tight">
@@ -568,7 +568,7 @@ export default function UserOrderDetailPage() {
                     <div>
                         <p className="text-sm text-slate-600 mb-4">Una vez realizado el pago del restante, sube el comprobante aquí para confirmar tu pedido.</p>
                         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                            <label className="cursor-pointer bg-white border border-slate-300 hover:border-[#E91E63] text-slate-700 px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 hover:bg-slate-50">
+                            <label className="cursor-pointer bg-white border border-slate-300 hover:border-[#9D1B1B] text-slate-700 px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition-all flex items-center gap-2 hover:bg-slate-50">
                                 <Upload size={16}/> {uploading ? 'Subiendo...' : 'Subir Comprobante'}
                                 <input type="file" accept="image/*" onChange={handleUploadImportProof} disabled={uploading} className="hidden" />
                             </label>
@@ -724,7 +724,7 @@ export default function UserOrderDetailPage() {
                                   <div className="flex flex-col items-end sm:items-start gap-1">
                                       <div className="flex items-center gap-2">
                                           <span className="text-xs font-bold text-slate-400">USD:</span>
-                                          <span className={`font-mono font-extrabold text-xl ${isInitiated ? 'text-amber-600' : 'text-[#E91E63]'}`}>
+                                          <span className={`font-mono font-extrabold text-xl ${isInitiated ? 'text-amber-600' : 'text-[#9D1B1B]'}`}>
                                               US$ {(isInitiated ? calculateEstimatedTotal() : totalOrderUsd).toFixed(2)}
                                           </span>
                                       </div>

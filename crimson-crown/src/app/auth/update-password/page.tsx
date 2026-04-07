@@ -66,7 +66,7 @@ function UpdatePasswordContent() {
   if (verifying) {
     return (
       <div className="flex flex-col items-center justify-center p-8">
-        <Loader2 className="w-10 h-10 animate-spin text-[#E91E63] mb-4" />
+        <Loader2 className="w-10 h-10 animate-spin text-[#9D1B1B] mb-4" />
         <p className="text-slate-500 font-medium">Verificando enlace de seguridad...</p>
       </div>
     )
@@ -75,7 +75,7 @@ function UpdatePasswordContent() {
   return (
     <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-slate-200">
       <h1 className="text-2xl font-bold text-center mb-6 text-slate-800 flex items-center justify-center gap-2">
-        <Lock className="text-[#E91E63]" /> Nueva Contraseña
+        <Lock className="text-[#9D1B1B]" /> Nueva Contraseña
       </h1>
       
       {msg && (
@@ -94,13 +94,13 @@ function UpdatePasswordContent() {
               type="password" 
               required 
               minLength={6}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#E91E63] outline-none text-slate-900 transition-all shadow-sm"
+              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#9D1B1B] outline-none text-slate-900 transition-all shadow-sm"
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
               placeholder="Mínimo 6 caracteres" 
             />
           </div>
-          <button type="submit" disabled={loading} className="w-full bg-[#E91E63] hover:bg-[#D81B60] text-white py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-900/10 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed">
+          <button type="submit" disabled={loading} className="w-full bg-[#9D1B1B] hover:bg-[#7E1515] text-white py-3 rounded-lg font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-900/10 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed">
             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Actualizar Contraseña'}
           </button>
         </form>

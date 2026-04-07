@@ -39,14 +39,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <form onSubmit={handlePinSubmit}>
             <input
               type="password"
-              className="w-full text-center text-2xl tracking-widest p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#E91E63] outline-none mb-4"
+              className="w-full text-center text-2xl tracking-widest p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#9D1B1B] outline-none mb-4"
               maxLength={4}
               placeholder="••••"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
               autoFocus
             />
-            <button className="w-full bg-[#E91E63] text-white py-3 rounded-lg font-bold hover:bg-[#D81B60]">
+            <button className="w-full bg-[#9D1B1B] text-white py-3 rounded-lg font-bold hover:bg-[#7E1515]">
               Desbloquear Panel
             </button>
           </form>

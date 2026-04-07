@@ -423,7 +423,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h3 className="font-bold text-slate-800 flex items-center gap-2"><Package size={18} className="text-sky-600"/> Contenido</h3>
-              <button onClick={() => openModal()} className="px-4 py-2 bg-[#E91E63] text-white text-sm font-bold rounded-lg hover:bg-pink-600 flex items-center gap-2 shadow-sm cursor-pointer"><Plus size={16}/> Agregar Item</button>
+              <button onClick={() => openModal()} className="px-4 py-2 bg-[#9D1B1B] text-white text-sm font-bold rounded-lg hover:bg-[#7E1515] flex items-center gap-2 shadow-sm cursor-pointer"><Plus size={16}/> Agregar Item</button>
           </div>
           <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">

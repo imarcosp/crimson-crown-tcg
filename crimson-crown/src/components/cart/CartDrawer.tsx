@@ -228,7 +228,7 @@ export default function CartDrawer() {
                             </div>
                             </div>
                             <div className="flex flex-col items-end gap-1">
-                                <div className="text-sm font-bold text-[#E91E63]">US$ {Number(it.price || 0).toFixed(2)}</div>
+                                <div className="text-sm font-bold text-[#9D1B1B]">US$ {Number(it.price || 0).toFixed(2)}</div>
                                 <button onClick={() => saveForLater(it.id)} className="text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-1 font-bold cursor-pointer"><Save size={12}/> Guardar</button>
                             </div>
                         </div>
@@ -433,7 +433,7 @@ export default function CartDrawer() {
                       </div>
                   )}
 
-                  <button onClick={handleCheckout} disabled={checkingOut || !paymentMethod} className="w-full bg-[#9D1B1B] text-white py-4 rounded-xl font-bold text-base hover:bg-[#7E1515] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-pink-900/10 active:scale-[0.98] cursor-pointer">
+                  <button onClick={handleCheckout} disabled={checkingOut || !paymentMethod} className="w-full bg-[#9D1B1B] text-white py-4 rounded-xl font-bold text-base hover:bg-[#7E1515] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-red-900/10 active:scale-[0.98] cursor-pointer">
                       {checkingOut ? 'PROCESANDO...' : 'CONFIRMAR COMPRA'}
                   </button>
               </div>

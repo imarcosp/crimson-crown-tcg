@@ -57,7 +57,7 @@ export const OrderTemplate = ({ orderId, items, total, totalArs, type }: any) =>
               <Row style={{ marginTop: '12px' }}>
                 <Column style={{ textAlign: 'right' }}>
                   <Text style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>Total en Pesos:</Text>
-                  <Text style={{ margin: '4px 0 0 0', fontSize: '24px', fontWeight: 'bold', color: '#E91E63' }}>
+                  <Text style={{ margin: '4px 0 0 0', fontSize: '24px', fontWeight: 'bold', color: '#9D1B1B' }}>
                     {arsFormatted}
                   </Text>
                 </Column>

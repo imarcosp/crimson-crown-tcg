@@ -10,7 +10,7 @@ const config: Config = {
         'xs': '400px',
       },
       colors: {
-        primary: '#E91E63',
+        primary: '#9D1B1B',
         secondary: '#0F172A',
         background: '#F8FAFC',
       },

@@ -113,7 +113,7 @@ export default function ProductCard(p: Props) {
 
         <div className="p-3 flex items-center justify-between z-10 flex-wrap max-[400px]:gap-1">
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-100 uppercase tracking-wider text-zinc-500 truncate max-[400px]:max-w-[50%] max-[400px]:text-[9px] max-[400px]:px-1.5">{p.tcg}</span>
-            <button onClick={handleWishlistClick} className="ml-1 max-[400px]:ml-0 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 hover:text-[#E91E63] hover:bg-pink-50 transition-colors flex items-center gap-1 text-[10px] font-bold border border-slate-200 shadow-sm cursor-pointer max-[400px]:text-[9px] max-[400px]:px-1.5 max-[400px]:shrink-0" title="Avisarme cuando haya stock">
+            <button onClick={handleWishlistClick} className="ml-1 max-[400px]:ml-0 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 hover:text-[#9D1B1B] hover:bg-red-50 transition-colors flex items-center gap-1 text-[10px] font-bold border border-slate-200 shadow-sm cursor-pointer max-[400px]:text-[9px] max-[400px]:px-1.5 max-[400px]:shrink-0" title="Avisarme cuando haya stock">
                 <Bell size={10} className="stroke-[2.5]" /><span className="max-[400px]:hidden">Wishlist</span><span className="hidden max-[400px]:inline">Avisar</span>
             </button>
         </div>

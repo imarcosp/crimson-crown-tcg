@@ -131,11 +131,11 @@ export default function AdminBannersPage() {
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Título Principal</label>
-                <input value={title} onChange={e => setTitle(e.target.value)} className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-[#E91E63] outline-none" placeholder="Ej: Nueva Colección..." />
+                <input value={title} onChange={e => setTitle(e.target.value)} className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-[#9D1B1B] outline-none" placeholder="Ej: Nueva Colección..." />
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Descripción / Subtítulo</label>
-                <textarea rows={3} value={desc} onChange={e => setDesc(e.target.value)} className="w-full border p-2.5 rounded-lg resize-none focus:ring-2 focus:ring-[#E91E63] outline-none" placeholder="Texto descriptivo..." />
+                <textarea rows={3} value={desc} onChange={e => setDesc(e.target.value)} className="w-full border p-2.5 rounded-lg resize-none focus:ring-2 focus:ring-[#9D1B1B] outline-none" placeholder="Texto descriptivo..." />
               </div>
               
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -167,7 +167,7 @@ export default function AdminBannersPage() {
             {/* Columna Derecha: Imagen */}
             <div className="space-y-4">
               <label className="block text-sm font-bold text-slate-700">Imagen de Fondo</label>
-              <div className="relative aspect-video bg-slate-100 rounded-xl overflow-hidden border-2 border-dashed border-slate-300 flex items-center justify-center group hover:border-[#E91E63] transition-colors">
+              <div className="relative aspect-video bg-slate-100 rounded-xl overflow-hidden border-2 border-dashed border-slate-300 flex items-center justify-center group hover:border-[#9D1B1B] transition-colors">
                 {(file || currentImageUrl) ? (
                   <img src={file ? URL.createObjectURL(file) : currentImageUrl} className="w-full h-full object-cover" alt="Preview" />
                 ) : (
@@ -190,7 +190,7 @@ export default function AdminBannersPage() {
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <p className="text-xs font-bold text-slate-400 uppercase mb-2 text-center">Previsualización del Botón</p>
                 <div className="flex justify-center">
-                    <button className="px-8 py-3 bg-[#E91E63] text-white font-bold rounded-full shadow-lg text-sm pointer-events-none">
+                    <button className="px-8 py-3 bg-[#9D1B1B] text-white font-bold rounded-full shadow-lg text-sm pointer-events-none">
                         {btnText || 'Texto del Botón'}
                     </button>
                 </div>
@@ -227,7 +227,7 @@ export default function AdminBannersPage() {
                 <h3 className="font-bold text-lg text-slate-800 truncate">{b.title || 'Sin Título'}</h3>
                 <p className="text-sm text-slate-500 line-clamp-1 mb-2">{b.description || 'Sin descripción'}</p>
                 <div className="flex items-center gap-2 justify-center md:justify-start">
-                    <span className="text-xs bg-pink-50 text-pink-700 px-2 py-1 rounded font-mono border border-pink-100 truncate max-w-[200px]">{b.link_url}</span>
+                    <span className="text-xs bg-red-50 text-pink-700 px-2 py-1 rounded font-mono border border-pink-100 truncate max-w-[200px]">{b.link_url}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">

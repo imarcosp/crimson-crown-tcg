@@ -37,12 +37,12 @@ export default function SellPage() {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
             {/* MANUAL */}
-            <Link href="/buylist" className="group bg-white p-8 rounded-2xl border-2 border-slate-200 hover:border-[#E91E63] transition-all hover:shadow-xl cursor-pointer relative overflow-hidden">
+            <Link href="/buylist" className="group bg-white p-8 rounded-2xl border-2 border-slate-200 hover:border-[#9D1B1B] transition-all hover:shadow-xl cursor-pointer relative overflow-hidden">
                 <div className="absolute top-0 right-0 bg-slate-100 px-3 py-1 text-[10px] font-bold uppercase rounded-bl-lg text-slate-500">Recomendado</div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-[#E91E63] transition-colors">Carga Manual</h3>
+                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-[#9D1B1B] transition-colors">Carga Manual</h3>
                 <p className="text-slate-500 text-sm mb-6">Busca carta por carta en nuestro sistema. Ideal para pocas cartas.</p>
                 <p className="text-slate-500 text-sm mb-6">Recuerda seleccionar la versión correcta de cada carta que vendes asi como si es foil o no foil.</p>
-                <span className="flex items-center gap-2 text-sm font-bold text-[#E91E63]">Comenzar <ArrowRight size={16}/></span>
+                <span className="flex items-center gap-2 text-sm font-bold text-[#9D1B1B]">Comenzar <ArrowRight size={16}/></span>
             </Link>
 
             {/* AUTOMÁTICO (ACTIVADO) */}

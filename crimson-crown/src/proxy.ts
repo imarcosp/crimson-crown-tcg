@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const OWNER_EMAIL = "mjperchezabala@gmail.com"
+const ADMIN_EMAILS = ["mjperchezabala@gmail.com", "crimsoncrownimports@gmail.com"]
 
 export async function proxy(request: NextRequest) {
   // Ignorar rutas estáticas y de auth
@@ -51,7 +51,7 @@ export async function proxy(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/admin')) {
     if (error) console.error("❌ [Middleware] Error Auth:", error.message)
     if (!user) return NextResponse.redirect(new URL('/login', request.url))
-    if (user.email !== OWNER_EMAIL) return NextResponse.redirect(new URL('/', request.url))
+    if (!user.email || !ADMIN_EMAILS.includes(user.email)) return NextResponse.redirect(new URL('/', request.url))
   }
 
   return response

@@ -109,7 +109,7 @@ export default function WishlistModal({ product, onClose, userId }: Props) {
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4">
         <div className="bg-[#0F172A] p-4 flex justify-between items-center">
           <h3 className="text-white font-bold flex items-center gap-2">
-            <Bell size={18} className="text-[#E91E63]" /> Crear Alerta de Stock
+            <Bell size={18} className="text-[#9D1B1B]" /> Crear Alerta de Stock
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
             <X size={20} />
@@ -136,9 +136,9 @@ export default function WishlistModal({ product, onClose, userId }: Props) {
           <p className="text-sm font-bold text-slate-700 mb-3">¿Qué versión buscas?</p>
           
           <div className="space-y-3">
-            <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${mode === 'any' ? 'border-[#E91E63] bg-pink-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+            <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${mode === 'any' ? 'border-[#9D1B1B] bg-red-50' : 'border-slate-200 hover:bg-slate-50'}`}>
                 <div className="mt-0.5">
-                    <input type="radio" name="mode" checked={mode === 'any'} onChange={() => setMode('any')} className="accent-[#E91E63]" />
+                    <input type="radio" name="mode" checked={mode === 'any'} onChange={() => setMode('any')} className="accent-[#9D1B1B]" />
                 </div>
                 <div>
                     <span className="block font-bold text-slate-900 text-sm">Cualquier Versión</span>
@@ -146,9 +146,9 @@ export default function WishlistModal({ product, onClose, userId }: Props) {
                 </div>
             </label>
 
-            <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${mode === 'specific' ? 'border-[#E91E63] bg-pink-50' : 'border-slate-200 hover:bg-slate-50'}`}>
+            <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${mode === 'specific' ? 'border-[#9D1B1B] bg-red-50' : 'border-slate-200 hover:bg-slate-50'}`}>
                 <div className="mt-0.5">
-                    <input type="radio" name="mode" checked={mode === 'specific'} onChange={() => setMode('specific')} className="accent-[#E91E63]" />
+                    <input type="radio" name="mode" checked={mode === 'specific'} onChange={() => setMode('specific')} className="accent-[#9D1B1B]" />
                 </div>
                 <div>
                     <span className="block font-bold text-slate-900 text-sm">Solo Esta Versión Exacta</span>

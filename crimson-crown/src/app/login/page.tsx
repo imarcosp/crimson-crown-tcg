@@ -125,7 +125,7 @@ export default function LoginPage() {
             </div>
           )}
           
-          <button type="submit" disabled={loading} className="w-full bg-[#9D1B1B] hover:bg-[#7E1515] text-white py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-pink-900/10 cursor-pointer disabled:cursor-not-allowed">
+          <button type="submit" disabled={loading} className="w-full bg-[#9D1B1B] hover:bg-[#7E1515] text-white py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-900/10 cursor-pointer disabled:cursor-not-allowed">
             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : (
               view === 'sign-in' ? 'Ingresar' :
               view === 'sign-up' ? 'Registrarse' : 'Enviar Link de Recuperación'

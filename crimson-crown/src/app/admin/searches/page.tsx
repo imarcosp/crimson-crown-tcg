@@ -57,7 +57,7 @@ export default function SearchAnalyticsPage() {
         {/* TOP BÚSQUEDAS */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[600px]">
             <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
-                <TrendingUp className="text-[#E91E63]" size={20}/>
+                <TrendingUp className="text-[#9D1B1B]" size={20}/>
                 <h3 className="font-bold text-slate-800">Lo Más Buscado (Top 20)</h3>
             </div>
             <div className="flex-1 overflow-y-auto p-0">
@@ -82,7 +82,7 @@ export default function SearchAnalyticsPage() {
                                         </span>
                                         {item.term}
                                     </td>
-                                    <td className="px-6 py-3 text-right font-bold text-[#E91E63]">
+                                    <td className="px-6 py-3 text-right font-bold text-[#9D1B1B]">
                                         {item.count}
                                     </td>
                                 </tr>

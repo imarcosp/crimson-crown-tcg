@@ -31,7 +31,7 @@ export default function OrderRow({ order, customer, onUpdated }: { order: any, c
       <div className="col-span-2">
         <div className="truncate" title={customer}>{customer || '—'}</div>
       </div>
-      <div className="col-span-1 font-bold text-[#E91E63]">US$ {(order.total_amount || 0).toFixed(2)}</div>
+      <div className="col-span-1 font-bold text-[#9D1B1B]">US$ {(order.total_amount || 0).toFixed(2)}</div>
       <div className="col-span-2">
         <select value={status} onChange={(e) => saveStatus(e.target.value)} className="w-full border border-slate-300 rounded px-2 py-1 text-sm">
           <option value="pending_payment">pending_payment</option>
@@ -60,7 +60,7 @@ export default function OrderRow({ order, customer, onUpdated }: { order: any, c
                   <div className="text-sm font-medium text-slate-900">{it.products?.name || 'Producto'}</div>
                   <div className="text-xs text-slate-600">x{it.quantity}</div>
                 </div>
-                <div className="text-sm font-bold text-[#E91E63]">US$ {(it.price_at_purchase || 0).toFixed(2)}</div>
+                <div className="text-sm font-bold text-[#9D1B1B]">US$ {(it.price_at_purchase || 0).toFixed(2)}</div>
               </div>
             ))}
           </div>

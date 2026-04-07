@@ -412,7 +412,7 @@ export default function HangOrderModal() {
                             const totalEst = basePrice > 0 ? (basePrice + tax + shipping) : 0
 
                             return (
-                            <div key={item.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex gap-3 items-start group hover:border-[#E91E63]/30">
+                            <div key={item.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex gap-3 items-start group hover:border-[#9D1B1B]/30">
                                 <div className="w-12 h-16 bg-slate-100 rounded-lg overflow-hidden shrink-0 relative cursor-zoom-in cursor-pointer" onClick={() => item.image && setZoomedImage(item.image)}>
                                     {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[8px]">Sin img</div>}
                                 </div>
@@ -460,7 +460,7 @@ export default function HangOrderModal() {
                     {!existingOrderId && (
                         <div className="space-y-3">
                             <label className="text-xs font-bold text-slate-500 uppercase block">Notas Adicionales</label>
-                            <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Ej: Busco cartas en japonés..." className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#E91E63] outline-none resize-none h-24 bg-white text-slate-900"/>
+                            <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Ej: Busco cartas en japonés..." className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#9D1B1B] outline-none resize-none h-24 bg-white text-slate-900"/>
                         </div>
                     )}
                 </div>

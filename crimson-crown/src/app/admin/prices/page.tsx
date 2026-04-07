@@ -110,9 +110,9 @@ export default function AdminPricesMasterPage() {
       <h1 className="text-3xl font-bold text-slate-800">Configuración Maestra</h1>
 
       <div className="flex items-center gap-2 border-b">
-        <button onClick={() => setTab('currency')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='currency' ? 'text-[#E91E63] border-b-2 border-[#E91E63]' : 'text-slate-600'}`}><DollarSign size={16}/> Moneda y Tienda</button>
-        <button onClick={() => setTab('banners')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='banners' ? 'text-[#E91E63] border-b-2 border-[#E91E63]' : 'text-slate-600'}`}><Images size={16}/> Banners Home</button>
-        <button onClick={() => setTab('coupons')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='coupons' ? 'text-[#E91E63] border-b-2 border-[#E91E63]' : 'text-slate-600'}`}><Ticket size={16}/> Cupones</button>
+        <button onClick={() => setTab('currency')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='currency' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><DollarSign size={16}/> Moneda y Tienda</button>
+        <button onClick={() => setTab('banners')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='banners' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><Images size={16}/> Banners Home</button>
+        <button onClick={() => setTab('coupons')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='coupons' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><Ticket size={16}/> Cupones</button>
       </div>
 
       {tab === 'currency' && (

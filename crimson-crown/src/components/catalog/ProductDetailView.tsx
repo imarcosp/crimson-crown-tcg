@@ -71,7 +71,7 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
         </div>
       )}
 
-      <Link href="/catalog" className="inline-flex items-center text-sm text-slate-500 hover:text-[#E91E63] mb-6 transition-colors">
+      <Link href="/catalog" className="inline-flex items-center text-sm text-slate-500 hover:text-[#9D1B1B] mb-6 transition-colors">
         <ArrowLeft size={16} className="mr-1" /> Volver al Catálogo
       </Link>
       
@@ -103,7 +103,7 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
                         <button 
                             key={idx} 
                             onClick={() => setActiveImg(img)}
-                            className={`relative w-16 h-20 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all cursor-pointer ${activeImg === img ? 'border-[#E91E63] shadow-md scale-105 ring-2 ring-[#E91E63]/20' : 'border-white hover:border-slate-300 opacity-80 hover:opacity-100'}`}
+                            className={`relative w-16 h-20 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all cursor-pointer ${activeImg === img ? 'border-[#9D1B1B] shadow-md scale-105 ring-2 ring-[#9D1B1B]/20' : 'border-white hover:border-slate-300 opacity-80 hover:opacity-100'}`}
                         >
                             <img src={img} className="w-full h-full object-cover" alt="" />
                         </button>
@@ -128,7 +128,7 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
                   
                   <button 
                     onClick={handleWishlistClick}
-                    className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:text-[#E91E63] hover:bg-pink-50 transition-colors border border-slate-200 flex items-center gap-2 text-xs font-bold shadow-sm"
+                    className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 hover:text-[#9D1B1B] hover:bg-red-50 transition-colors border border-slate-200 flex items-center gap-2 text-xs font-bold shadow-sm"
                   >
                     <Bell size={16} className="stroke-[2.5]" />
                     <span>Agregar a Wishlist</span>
@@ -144,7 +144,7 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
               
               {p.stock > 0 && (
                   <div className="flex items-baseline gap-2 mb-4">
-                    <span className="text-5xl font-bold text-[#E91E63] tracking-tight">{symbol} {price.toFixed(2)}</span>
+                    <span className="text-5xl font-bold text-[#9D1B1B] tracking-tight">{symbol} {price.toFixed(2)}</span>
                     {currency !== 'USD' && <span className="text-slate-400 text-sm">aprox. (Cotización del día)</span>}
                   </div>
               )}
@@ -168,17 +168,17 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
                       <div className="flex justify-center">
                         <QuantitySelector productId={p.id} maxStock={p.stock} />
                       </div>
-                      <button onClick={openCart} className="w-full mt-3 text-sm text-[#E91E63] font-bold hover:underline">Ver Carrito</button>
+                      <button onClick={openCart} className="w-full mt-3 text-sm text-[#9D1B1B] font-bold hover:underline">Ver Carrito</button>
                     </div>
                   ) : (
-                    <button onClick={() => { addItem({ ...p, imageUrl: p.image, stock: p.stock }); openCart() }} className="w-full bg-[#E91E63] hover:bg-[#D81B60] text-white py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl shadow-pink-900/10 transition-transform active:scale-95 cursor-pointer">
+                    <button onClick={() => { addItem({ ...p, imageUrl: p.image, stock: p.stock }); openCart() }} className="w-full bg-[#9D1B1B] hover:bg-[#7E1515] text-white py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl shadow-red-900/10 transition-transform active:scale-95 cursor-pointer">
                       <ShoppingCart /> Agregar al Carrito
                     </button>
                   )}
                 </div>
               ) : (
                 <div className="flex flex-col md:flex-row items-center gap-4">
-                  <button onClick={() => { addQuote({ id: p.id, name: p.name, price: p.priceUsd, image: p.image, setName: p.setName }); toggleHangModal() }} className="w-full md:w-auto px-8 bg-white border-2 border-[#E91E63] text-[#E91E63] hover:bg-pink-50 py-4 rounded-xl font-bold text-lg transition-colors cursor-pointer whitespace-nowrap">
+                  <button onClick={() => { addQuote({ id: p.id, name: p.name, price: p.priceUsd, image: p.image, setName: p.setName }); toggleHangModal() }} className="w-full md:w-auto px-8 bg-white border-2 border-[#9D1B1B] text-[#9D1B1B] hover:bg-red-50 py-4 rounded-xl font-bold text-lg transition-colors cursor-pointer whitespace-nowrap">
                     Solicitar Cotización
                   </button>
                   <p className="text-slate-500 text-sm font-medium flex items-center gap-2">

@@ -100,7 +100,7 @@ export default async function Home() {
                     <h2 className="text-2xl font-bold text-[#0F172A] flex items-center gap-2">
                         <Sparkles className="text-purple-500"/> Últimos Ingresos Magic
                     </h2>
-                    <Link href="/catalog?tcg=Magic&sort=newest" className="text-sm font-bold text-slate-500 hover:text-[#E91E63] flex items-center gap-1 transition-colors group">
+                    <Link href="/catalog?tcg=Magic&sort=newest" className="text-sm font-bold text-slate-500 hover:text-[#9D1B1B] flex items-center gap-1 transition-colors group">
                         Ver novedades Magic <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
                     </Link>
                 </div>

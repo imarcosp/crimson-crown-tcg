@@ -49,7 +49,7 @@ export default function TestPaymentPage() {
             </div>
             <div className="pt-3 border-t border-slate-100 flex justify-between items-end">
               <span className="font-bold text-slate-800">Total a pagar</span>
-              <span className="text-2xl font-black text-[#E91E63]">${amountToPay.toLocaleString('es-AR')}</span>
+              <span className="text-2xl font-black text-[#9D1B1B]">${amountToPay.toLocaleString('es-AR')}</span>
             </div>
           </div>
         </div>
@@ -97,7 +97,7 @@ export default function TestPaymentPage() {
             <div className="flex gap-4 mb-6">
               <button 
                 onClick={() => setTestMode('card')}
-                className={`flex-1 py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2 border-2 transition-all ${testMode === 'card' ? 'border-[#E91E63] text-[#E91E63] bg-pink-50' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                className={`flex-1 py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2 border-2 transition-all ${testMode === 'card' ? 'border-[#9D1B1B] text-[#9D1B1B] bg-red-50' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
               >
                 <CreditCard size={20} /> Checkout Embebido
               </button>

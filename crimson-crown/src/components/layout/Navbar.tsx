@@ -11,7 +11,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useConfig } from '@/context/ConfigContext'
-import { OWNER_EMAIL } from '@/lib/constants'
+import { ADMIN_EMAILS } from '@/lib/constants'
 import NotificationsMenu from './NotificationsMenu'
 import { siteConfig } from '@/config/site'
 
@@ -38,7 +38,6 @@ export default function Navbar() {
   const [userProfile, setUserProfile] = useState<any>(null)
   const lastUserId = useRef<string | null>(null)
   const pathname = usePathname()
-  const OWNER = (process.env.NEXT_PUBLIC_OWNER_EMAIL as string) || OWNER_EMAIL
 
   // ESTADOS FEEDBACK
   const [showFeedback, setShowFeedback] = useState(false)
@@ -136,25 +135,12 @@ export default function Navbar() {
               </button>
               {isMtgOpen && (
                   <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
-                      <Link href="/catalog?tcg=Magic&sort=newest" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#E91E63] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#E91E63] transition-colors cursor-pointer">
+                      <Link href="/catalog?tcg=Magic&sort=newest" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
                           Ver todas las singles
                       </Link>
-                      <Link href="/tools/moxfield" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#E91E63] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#E91E63] transition-colors cursor-pointer">
+                      <Link href="/tools/moxfield" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
                           Búsqueda desde Moxfield
                       </Link>
-                      {siteConfig.features?.showSealed && (
-                        <>
-                          <button onClick={() => setIsSealedOpen(!isSealedOpen)} className="w-full flex items-center justify-between py-2 text-sm text-slate-500 hover:text-[#E91E63] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#E91E63] transition-colors cursor-pointer text-left">
-                              <span className="flex items-center gap-2"><Layers size={14}/> Producto Sellado</span>
-                              <ChevronDown size={14} className={`transition-transform duration-300 ${isSealedOpen ? 'rotate-180' : ''}`}/>
-                          </button>
-                          {isSealedOpen && (
-                              <div className="pl-4 space-y-1 animate-in slide-in-from-top-2 duration-300">
-                                  {/* Aquí irán los productos sellados en el futuro */}
-                              </div>
-                          )}
-                        </>
-                      )}
                   </div>
               )}
               {siteConfig.features?.showRiftbound && (
@@ -164,7 +150,7 @@ export default function Navbar() {
               )}
               {siteConfig.features?.showSecretLair && (
                 <Link href="/catalog?tcg=Secret Lair&sort=newest" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
-                    <Box className="text-pink-500" size={18}/> Secret Lair
+                    <Box className="text-[#9D1B1B]" size={18}/> Secret Lair
                 </Link>
               )}
               <div className="border-t my-2 mx-4 border-slate-100"></div>
@@ -253,21 +239,21 @@ export default function Navbar() {
                             {!user ? (
                                 <div className="space-y-2 p-1">
                                     <p className="text-xs text-center text-slate-400 mb-2">Accede para ver tus compras</p>
-                                    <Link href="/login" onClick={closeMenus} className="block w-full text-center bg-[#E91E63] text-white py-2 rounded-lg text-sm font-bold hover:bg-[#D81B60] transition-colors">Iniciar Sesión</Link>
+                                    <Link href="/login" onClick={closeMenus} className="block w-full text-center bg-[#9D1B1B] text-white py-2 rounded-lg text-sm font-bold hover:bg-[#7E1515] transition-colors">Iniciar Sesión</Link>
                                     <Link href="/login?view=signup" onClick={closeMenus} className="block w-full text-center border border-slate-300 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors">Registrarse</Link>
                                 </div>
                             ) : (
                                 <>
                                     <div className="p-3 border-b border-slate-100 mb-2 bg-slate-50 rounded-t-lg">
                                         <p className="font-bold truncate text-sm">Hola, {userProfile?.first_name || 'Viajero'}</p>
-                    <p className="text-xs text-[#E91E63] font-mono font-bold mt-1">{currency === 'ARS' ? `Créditos: $${(credits * exchangeRate).toLocaleString()}` : `Créditos: US$ ${credits.toFixed(2)}`}</p>
+                    <p className="text-xs text-[#9D1B1B] font-mono font-bold mt-1">{currency === 'ARS' ? `Créditos: $${(credits * exchangeRate).toLocaleString()}` : `Créditos: US$ ${credits.toFixed(2)}`}</p>
                                     </div>
                                     <div className="space-y-1">
-                                        {user?.email === OWNER && <Link href="/admin" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 bg-slate-900 text-yellow-500 hover:bg-slate-800 rounded-lg text-sm font-bold mb-2 transition-colors"><span className="text-lg">🛡️</span> Panel de Admin</Link>}
-                                        <Link href="/sell" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors"><Banknote size={16} className="text-slate-400"/> Vender Cartas</Link>
-                                        <Link href="/profile" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors"><User size={16} className="text-slate-400"/> Mi Cuenta</Link>
-                                        <Link href="/profile?tab=stock" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors"><Package size={16} className="text-slate-400"/> Mis Pedidos</Link>
-                                        <button onClick={openFeedback} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-sky-50 text-sky-600 rounded-lg text-sm transition-colors text-left"><MessageSquarePlus size={16} /> Dejar Sugerencia</button>
+                                        {user?.email && ADMIN_EMAILS.includes(user.email) && <Link href="/admin" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 bg-slate-900 text-yellow-500 hover:bg-slate-800 rounded-lg text-sm font-bold mb-2 transition-colors"><span className="text-lg">🛡️</span> Panel de Admin</Link>}
+                                        <Link href="/sell" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 hover:bg-red-50 hover:text-[#9D1B1B] rounded-lg text-sm transition-colors group"><Banknote size={16} className="text-slate-400 group-hover:text-[#9D1B1B]"/> Vender Cartas</Link>
+                                        <Link href="/profile" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 hover:bg-red-50 hover:text-[#9D1B1B] rounded-lg text-sm transition-colors group"><User size={16} className="text-slate-400 group-hover:text-[#9D1B1B]"/> Mi Cuenta</Link>
+                                        <Link href="/profile?tab=stock" onClick={closeMenus} className="flex items-center gap-3 px-3 py-2 hover:bg-red-50 hover:text-[#9D1B1B] rounded-lg text-sm transition-colors group"><Package size={16} className="text-slate-400 group-hover:text-[#9D1B1B]"/> Mis Pedidos</Link>
+                                        <button onClick={openFeedback} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-red-50 hover:text-[#9D1B1B] text-sky-600 rounded-lg text-sm transition-colors text-left group"><MessageSquarePlus size={16} className="group-hover:text-[#9D1B1B]" /> Dejar Sugerencia</button>
                                     </div>
                                     <div className="border-t border-slate-100 mt-2 pt-2">
                                         <button onClick={() => {handleLogout(); closeMenus()}} className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 rounded-lg flex items-center gap-3 text-sm transition-colors"><LogOut size={16}/> Cerrar Sesión</button>
@@ -350,11 +336,11 @@ export default function Navbar() {
                         <p className="text-xs text-[#9D1B1B] font-mono font-bold mt-1">{currency === 'ARS' ? `Créditos: $${(credits * exchangeRate).toLocaleString()}` : `Créditos: US$ ${credits.toFixed(2)}`}</p>
                       </div>
                       <div className="space-y-1">
-                        {user?.email === OWNER && <Link href="/admin" className="flex items-center gap-3 px-3 py-2 bg-slate-900 text-yellow-500 hover:bg-slate-800 rounded-lg text-sm font-bold mb-2 transition-colors cursor-pointer"><span className="text-lg">🛡️</span> Panel de Admin</Link>}
-                        <Link href="/sell" className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors cursor-pointer"><Banknote size={16} className="text-slate-400"/> Vender Cartas</Link>
-                        <Link href="/profile" className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors cursor-pointer"><User size={16} className="text-slate-400"/> Mi Cuenta</Link>
-                        <Link href="/profile?tab=stock" className="flex items-center gap-3 px-3 py-2 hover:bg-slate-100 rounded-lg text-sm transition-colors cursor-pointer"><Package size={16} className="text-slate-400"/> Mis Pedidos</Link>
-                        <button onClick={openFeedback} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-sky-50 text-sky-600 rounded-lg text-sm transition-colors text-left cursor-pointer"><MessageSquarePlus size={16} /> Dejar Sugerencia</button>
+                        {user?.email && ADMIN_EMAILS.includes(user.email) && <Link href="/admin" className="flex items-center gap-3 px-3 py-2 bg-slate-900 text-yellow-500 hover:bg-slate-800 rounded-lg text-sm font-bold mb-2 transition-colors cursor-pointer"><span className="text-lg">🛡️</span> Panel de Admin</Link>}
+                        <Link href="/sell" className="flex items-center gap-3 px-3 py-2 hover:bg-red-50 hover:text-[#9D1B1B] rounded-lg text-sm transition-colors cursor-pointer group"><Banknote size={16} className="text-slate-400 group-hover:text-[#9D1B1B]"/> Vender Cartas</Link>
+                        <Link href="/profile" className="flex items-center gap-3 px-3 py-2 hover:bg-red-50 hover:text-[#9D1B1B] rounded-lg text-sm transition-colors cursor-pointer group"><User size={16} className="text-slate-400 group-hover:text-[#9D1B1B]"/> Mi Cuenta</Link>
+                        <Link href="/profile?tab=stock" className="flex items-center gap-3 px-3 py-2 hover:bg-red-50 hover:text-[#9D1B1B] rounded-lg text-sm transition-colors cursor-pointer group"><Package size={16} className="text-slate-400 group-hover:text-[#9D1B1B]"/> Mis Pedidos</Link>
+                        <button onClick={openFeedback} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-red-50 hover:text-[#9D1B1B] text-sky-600 rounded-lg text-sm transition-colors text-left cursor-pointer group"><MessageSquarePlus size={16} className="group-hover:text-[#9D1B1B]" /> Dejar Sugerencia</button>
                       </div>
                       <div className="border-t border-slate-100 mt-2 pt-2">
                         <button onClick={handleLogout} className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 rounded-lg flex items-center gap-3 text-sm transition-colors cursor-pointer"><LogOut size={16}/> Cerrar Sesión</button>

@@ -26,8 +26,8 @@ export default function PriceHistory({ data }: Props) {
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#E91E63" stopOpacity={0.1}/>
-                <stop offset="95%" stopColor="#E91E63" stopOpacity={0}/>
+                <stop offset="5%" stopColor="#9D1B1B" stopOpacity={0.1}/>
+                <stop offset="95%" stopColor="#9D1B1B" stopOpacity={0}/>
               </linearGradient>
             </defs>
             <XAxis 
@@ -55,7 +55,7 @@ export default function PriceHistory({ data }: Props) {
             <Area 
                 type="monotone" 
                 dataKey="price" 
-                stroke="#E91E63" 
+                stroke="#9D1B1B" 
                 strokeWidth={2}
                 fillOpacity={1} 
                 fill="url(#colorPrice)" 

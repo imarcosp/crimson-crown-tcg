@@ -243,10 +243,10 @@ function ProfileContent() {
             <div className="text-right bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10">
                 <p className="text-xs text-slate-300 uppercase tracking-wider mb-1">Tus Créditos ({currency})</p>
                 <div className="flex flex-col items-end">
-                    <span className="text-2xl font-mono font-bold text-[#E91E63]">{formatMoney(Number(profile?.credits || 0))}</span>
+                    <span className="text-2xl font-mono font-bold text-[#9D1B1B]">{formatMoney(Number(profile?.credits || 0))}</span>
                 </div>
             </div>
-            <button onClick={() => setShowTransferModal(true)} className="h-full px-4 py-4 rounded-xl bg-[#E91E63] hover:bg-pink-600 text-white font-bold transition-colors flex flex-col items-center justify-center gap-1 shadow-lg cursor-pointer">
+            <button onClick={() => setShowTransferModal(true)} className="h-full px-4 py-4 rounded-xl bg-[#9D1B1B] hover:bg-[#7E1515] text-white font-bold transition-colors flex flex-col items-center justify-center gap-1 shadow-lg cursor-pointer">
                 <Send size={20} /> <span className="text-[10px] uppercase tracking-wide">Transferir</span>
             </button>
         </div>
@@ -262,18 +262,18 @@ function ProfileContent() {
                 <form onSubmit={handleTransfer} className="p-6 space-y-4">
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Email Destinatario</label>
-                        <input type="email" required placeholder="email@ejemplo.com" value={transferEmail} onChange={(e) => setTransferEmail(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-[#E91E63] outline-none"/>
+                        <input type="email" required placeholder="email@ejemplo.com" value={transferEmail} onChange={(e) => setTransferEmail(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-[#9D1B1B] outline-none"/>
                     </div>
                     <div>
                         <label className="block text-sm font-bold text-slate-700 mb-1">Monto (USD)</label>
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
-                            <input type="number" required min="0.01" step="0.01" placeholder="0.00" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border border-slate-300 rounded-lg pl-6 p-2 font-mono font-bold focus:ring-2 focus:ring-[#E91E63] outline-none"/>
+                            <input type="number" required min="0.01" step="0.01" placeholder="0.00" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full border border-slate-300 rounded-lg pl-6 p-2 font-mono font-bold focus:ring-2 focus:ring-[#9D1B1B] outline-none"/>
                         </div>
                     </div>
                     <div className="pt-2 flex gap-3">
                         <button type="button" onClick={() => setShowTransferModal(false)} className="flex-1 py-2 rounded-lg border border-slate-300 font-bold text-slate-600 hover:bg-slate-50 cursor-pointer">Cancelar</button>
-                        <button type="submit" disabled={transferLoading} className="flex-1 py-2 rounded-lg bg-[#E91E63] hover:bg-pink-600 text-white font-bold cursor-pointer disabled:opacity-50">
+                        <button type="submit" disabled={transferLoading} className="flex-1 py-2 rounded-lg bg-[#9D1B1B] hover:bg-[#7E1515] text-white font-bold cursor-pointer disabled:opacity-50">
                             {transferLoading ? 'Enviando...' : 'Confirmar'}
                         </button>
                     </div>
@@ -284,12 +284,12 @@ function ProfileContent() {
 
       {/* BARRA DE PESTAÑAS */}
       <div className="flex border-b border-slate-200 mb-6 overflow-x-auto no-scrollbar">
-        <button onClick={() => router.push('/profile?tab=stock')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'stock' ? 'border-b-2 border-[#E91E63] text-[#E91E63]' : 'text-slate-500 hover:text-slate-700'}`}><Package size={18} /> Mi Stock</button>
-        <button onClick={() => router.push('/profile?tab=imports')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'imports' ? 'border-b-2 border-[#E91E63] text-[#E91E63]' : 'text-slate-500 hover:text-slate-700'}`}><Plane size={18} /> Pedidos Exterior</button>
-        <button onClick={() => router.push('/profile?tab=wishlist')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'wishlist' ? 'border-b-2 border-[#E91E63] text-[#E91E63]' : 'text-slate-500 hover:text-slate-700'}`}><Bell size={18} /> Wishlist</button>
-        <button onClick={() => router.push('/profile?tab=quotes')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'quotes' ? 'border-b-2 border-[#E91E63] text-[#E91E63]' : 'text-slate-500 hover:text-slate-700'}`}><Banknote size={18} /> Ventas</button>
-        <button onClick={() => router.push('/profile?tab=history')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'history' ? 'border-b-2 border-[#E91E63] text-[#E91E63]' : 'text-slate-500 hover:text-slate-700'}`}><Clock size={18} /> Historial</button>
-        <button onClick={() => router.push('/profile?tab=settings')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'settings' ? 'border-b-2 border-[#E91E63] text-[#E91E63]' : 'text-slate-500 hover:text-slate-700'}`}><UserCog size={18} /> Datos</button>
+        <button onClick={() => router.push('/profile?tab=stock')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'stock' ? 'border-b-2 border-[#9D1B1B] text-[#9D1B1B]' : 'text-slate-500 hover:text-slate-700'}`}><Package size={18} /> Mis Compras</button>
+        <button onClick={() => router.push('/profile?tab=imports')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'imports' ? 'border-b-2 border-[#9D1B1B] text-[#9D1B1B]' : 'text-slate-500 hover:text-slate-700'}`}><Plane size={18} /> Pedidos Exterior</button>
+        <button onClick={() => router.push('/profile?tab=wishlist')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'wishlist' ? 'border-b-2 border-[#9D1B1B] text-[#9D1B1B]' : 'text-slate-500 hover:text-slate-700'}`}><Bell size={18} /> Wishlist</button>
+        <button onClick={() => router.push('/profile?tab=quotes')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'quotes' ? 'border-b-2 border-[#9D1B1B] text-[#9D1B1B]' : 'text-slate-500 hover:text-slate-700'}`}><Banknote size={18} /> Ventas</button>
+        <button onClick={() => router.push('/profile?tab=history')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'history' ? 'border-b-2 border-[#9D1B1B] text-[#9D1B1B]' : 'text-slate-500 hover:text-slate-700'}`}><Clock size={18} /> Historial</button>
+        <button onClick={() => router.push('/profile?tab=settings')} className={`pb-3 px-6 font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${activeTab === 'settings' ? 'border-b-2 border-[#9D1B1B] text-[#9D1B1B]' : 'text-slate-500 hover:text-slate-700'}`}><UserCog size={18} /> Datos</button>
       </div>
 
       {activeTab === 'stock' && (
@@ -419,7 +419,7 @@ function ProfileContent() {
         <div className="space-y-4">
           {importOrders.length === 0 ? <div className="text-center py-12 bg-slate-50 rounded-xl"><p className="text-slate-500">Sin pedidos al exterior.</p><button onClick={toggleHangModal} className="mt-4 px-6 py-2 bg-[#0F172A] text-white font-bold rounded-lg text-sm hover:bg-slate-800 cursor-pointer">Crear Pedido</button></div> : (
             importOrders.map((order) => (
-              <Link key={order.id} href={`/profile/imports/${order.id}`} className="block bg-white border border-slate-200 rounded-xl p-5 hover:shadow-md transition-all hover:border-[#E91E63]/30 group cursor-pointer">
+              <Link key={order.id} href={`/profile/imports/${order.id}`} className="block bg-white border border-slate-200 rounded-xl p-5 hover:shadow-md transition-all hover:border-[#9D1B1B]/30 group cursor-pointer">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-3 mb-1">
@@ -430,7 +430,7 @@ function ProfileContent() {
                     </div>
                     <span className="text-xs text-slate-500 flex items-center gap-1"><Calendar size={12}/> {new Date(order.created_at).toLocaleDateString()}</span>
                   </div>
-                  <ChevronRight className="text-slate-300 group-hover:text-[#E91E63] transition-colors"/>
+                  <ChevronRight className="text-slate-300 group-hover:text-[#9D1B1B] transition-colors"/>
                 </div>
               </Link>
             ))

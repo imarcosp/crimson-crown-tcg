@@ -73,10 +73,10 @@ export async function processWishlistNotifications(newItems: { id: string, name:
                     
                     <h3 style="font-size: 20px; font-weight: 800; color: #0F172A; margin: 5px 0;">${item.name}</h3>
                     <p style="margin: 0; color: #64748b; font-size: 14px;">${setName} • ${finish}</p>
-                    <p style="font-size: 24px; font-weight: bold; color: #E91E63; margin: 15px 0;">${price}</p>
+                    <p style="font-size: 24px; font-weight: bold; color: #9D1B1B; margin: 15px 0;">${price}</p>
                     
                     <div style="margin-top: 25px;">
-                      <a href="${BASE_URL}/product/${item.id}" style="background: #E91E63; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Comprar Ahora</a>
+                      <a href="${BASE_URL}/product/${item.id}" style="background: #9D1B1B; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Comprar Ahora</a>
                     </div>
                     <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">Corre antes de que se agote.</p>
                   </div>

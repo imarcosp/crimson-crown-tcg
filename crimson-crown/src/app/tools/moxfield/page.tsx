@@ -554,7 +554,7 @@ const enriched = rawVersions.map((v: any) => {
                         <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
                             <div className="p-4 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
                                 <h3 className="font-bold text-amber-800 flex items-center gap-2"><Plane size={18}/> Para Importar ({results.missing.length})</h3>
-                                {results.missing.length > 0 && <button onClick={handleQuoteAllMissing} className="px-3 py-1.5 bg-[#E91E63] hover:bg-[#d81557] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-sm cursor-pointer"><ArrowRight size={14}/> Cotizar Todo</button>}
+                                {results.missing.length > 0 && <button onClick={handleQuoteAllMissing} className="px-3 py-1.5 bg-[#9D1B1B] hover:bg-[#d81557] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-sm cursor-pointer"><ArrowRight size={14}/> Cotizar Todo</button>}
                             </div>
                             <div className="max-h-[500px] overflow-y-auto p-2 space-y-2">
                                 {results.missing.length === 0 ? <p className="text-center py-8 text-slate-400 text-sm">¡Tienes todo disponible!</p> : (
@@ -597,7 +597,7 @@ const enriched = rawVersions.map((v: any) => {
                                             <div className="text-right flex flex-row sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-2 border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0 mt-2 sm:mt-0 min-w-[90px]">
                                                 <div>
                                                     <p className="text-[9px] text-slate-400 uppercase font-bold">Estimado</p>
-                                                    {basePrice > 0 ? <p className="font-bold text-[#E91E63] text-lg">US$ {importPrice.toFixed(2)}</p> : <p className="font-bold text-slate-400 text-xs italic">Cotizar</p>}
+                                                    {basePrice > 0 ? <p className="font-bold text-[#9D1B1B] text-lg">US$ {importPrice.toFixed(2)}</p> : <p className="font-bold text-slate-400 text-xs italic">Cotizar</p>}
                                                 </div>
                                                 <button onClick={() => handleAddMissingItem(card)} className="px-4 py-2 bg-slate-900 hover:bg-slate-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer w-full sm:w-auto shadow-sm">Cotizar</button>
                                             </div>
@@ -617,7 +617,7 @@ const enriched = rawVersions.map((v: any) => {
 // --- EXPORT DEFAULT CON SUSPENSE (FIX BUILD) ---
 export default function MoxfieldToolPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><Loader2 className="animate-spin text-[#E91E63]" size={40}/></div>}>
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><Loader2 className="animate-spin text-[#9D1B1B]" size={40}/></div>}>
       <MoxfieldToolContent />
     </Suspense>
   )

@@ -12,25 +12,34 @@ export default function AdminPage() {
   useEffect(() => {
     const fetchStats = async () => {
       const now = new Date()
-      const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString()
+      
+      // Año actual: 1 de enero a las 00:00:00 hasta el 31 de diciembre a las 23:59:59
+      const startOfYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0)
       
       const { data: orders } = await supabase
         .from('orders')
         .select('total_amount, created_at')
-        .gte('created_at', oneYearAgo)
+        .gte('created_at', startOfYear.toISOString())
         .in('status', ['paid', 'shipped', 'completed'])
 
       if (orders) {
-        const oneWeekAgoTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).getTime()
-        const oneMonthAgoTime = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).getTime()
+        // Semana actual: Lunes a las 00:00:00 hasta Domingo a las 23:59:59
+        // En JavaScript, getDay() devuelve 0 para Domingo, 1 para Lunes, etc.
+        const dayOfWeek = now.getDay()
+        const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // Ajustar para que la semana empiece el Lunes
+        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday, 0, 0, 0, 0)
+
+        // Mes actual: Día 1 del mes a las 00:00:00
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
 
         const newStats = orders.reduce((acc, order) => {
           const orderTime = new Date(order.created_at).getTime()
           const amount = Number(order.total_amount || 0)
 
+          // Como la query ya filtra desde startOfYear, todas aplican al año
           acc.year += amount
-          if (orderTime >= oneMonthAgoTime) acc.month += amount
-          if (orderTime >= oneWeekAgoTime) acc.week += amount
+          if (orderTime >= startOfMonth.getTime()) acc.month += amount
+          if (orderTime >= startOfWeek.getTime()) acc.week += amount
           return acc
         }, { week: 0, month: 0, year: 0 })
 
@@ -56,7 +65,7 @@ export default function AdminPage() {
             <p className="text-3xl font-extrabold text-slate-900">
                 {loading ? '...' : `US$ ${stats.week.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
             </p>
-            <p className="text-xs text-slate-400 mt-2">Últimos 7 días</p>
+            <p className="text-xs text-slate-400 mt-2">Semana en curso (Lunes a Domingo)</p>
         </div>
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex items-center gap-3 mb-2">
@@ -66,7 +75,7 @@ export default function AdminPage() {
             <p className="text-3xl font-extrabold text-slate-900">
                 {loading ? '...' : `US$ ${stats.month.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
             </p>
-            <p className="text-xs text-slate-400 mt-2">Últimos 30 días</p>
+            <p className="text-xs text-slate-400 mt-2">Mes en curso</p>
         </div>
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
             <div className="flex items-center gap-3 mb-2">
@@ -76,7 +85,7 @@ export default function AdminPage() {
             <p className="text-3xl font-extrabold text-slate-900">
                 {loading ? '...' : `US$ ${stats.year.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
             </p>
-            <p className="text-xs text-slate-400 mt-2">Últimos 365 días</p>
+            <p className="text-xs text-slate-400 mt-2">Año en curso</p>
         </div>
       </div>
 
@@ -132,7 +141,7 @@ export default function AdminPage() {
 
         <Link href="/admin/searches" className="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition-shadow">
           <div className="flex items-start gap-4">
-            <div className="p-3 rounded-lg bg-pink-50 text-pink-600"><Search size={32} /></div>
+            <div className="p-3 rounded-lg bg-red-50 text-[#7E1515]"><Search size={32} /></div>
             <div>
               <div className="text-lg font-bold text-slate-900">Demanda / Búsquedas</div>
               <p className="text-sm text-slate-600">Analiza qué cartas buscan tus usuarios.</p>

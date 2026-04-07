@@ -130,7 +130,7 @@ export default function NotificationsMenu({ userId }: { userId: string }) {
       >
         <Bell className="h-6 w-6 text-slate-200" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 bg-[#E91E63] text-white text-[10px] font-bold h-4 w-4 flex items-center justify-center rounded-full shadow-sm animate-pulse">
+          <span className="absolute top-1 right-1 bg-[#9D1B1B] text-white text-[10px] font-bold h-4 w-4 flex items-center justify-center rounded-full shadow-sm animate-pulse">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -141,7 +141,7 @@ export default function NotificationsMenu({ userId }: { userId: string }) {
           <div className="p-3 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
             <h3 className="font-bold text-slate-700 text-sm">Notificaciones</h3>
             {unreadCount > 0 && (
-                <button onClick={markAllRead} className="text-xs text-[#E91E63] font-bold hover:underline cursor-pointer">
+                <button onClick={markAllRead} className="text-xs text-[#9D1B1B] font-bold hover:underline cursor-pointer">
                     Marcar todo leído
                 </button>
             )}
@@ -172,7 +172,7 @@ export default function NotificationsMenu({ userId }: { userId: string }) {
                                     <p className={cn("text-sm text-slate-800 leading-tight", !notif.is_read && "font-bold")}>
                                         {notif.title}
                                     </p>
-                                    {!notif.is_read && <span className="h-2 w-2 rounded-full bg-[#E91E63] shrink-0 mt-1"></span>}
+                                    {!notif.is_read && <span className="h-2 w-2 rounded-full bg-[#9D1B1B] shrink-0 mt-1"></span>}
                                 </div>
                                 <p className="text-xs text-slate-500 line-clamp-2">{notif.message}</p>
                                 <p className="text-[10px] text-slate-400 font-medium">
