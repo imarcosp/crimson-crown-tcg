@@ -23,6 +23,7 @@ export const siteConfig = {
     showRiftbound: false,
     showSecretLair: false,
     showAccessories: false,
+    showSealed: false,
   },
 };
 

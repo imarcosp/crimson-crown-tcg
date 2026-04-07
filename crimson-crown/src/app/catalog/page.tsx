@@ -275,7 +275,7 @@ export default async function CatalogPage({
             <div className="py-20 text-center border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center">
               <SearchX className="text-slate-300 mb-4" size={48} />
               <p className="text-slate-500 mb-2 font-medium">No se encontraron productos.</p>
-              <Link href="/catalog" className="px-6 py-2 bg-[#E91E63] text-white rounded-lg font-bold hover:bg-pink-600 transition-colors mt-4">Limpiar Filtros</Link>
+              <Link href="/catalog" className="px-6 py-2 bg-[#9D1B1B] text-white rounded-lg font-bold hover:bg-[#7E1515] transition-colors mt-4">Limpiar Filtros</Link>
             </div>
           )}
         </div>

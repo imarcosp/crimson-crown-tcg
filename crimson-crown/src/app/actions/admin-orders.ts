@@ -53,7 +53,7 @@ if (userEmail && ['shipped', 'completed', 'ready_pickup', 'cancelled'].includes(
       }
 
       await resend.emails.send({
-        from: `${siteConfig.shortName} <pedidos@elpercherotcg.com>`,
+        from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
         to: userEmail,
         subject: subject,
         html: `

@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { type, email, customerName, orderNumber, newStatus, link } = body
 
-    const SENDER_EMAIL = `${siteConfig.shortName} <pedidos@elpercherotcg.com>`
+    const SENDER_EMAIL = `${siteConfig.shortName} <ventas@crimsoncrown.com>`
 
     let subject = ''
     let htmlContent = ''

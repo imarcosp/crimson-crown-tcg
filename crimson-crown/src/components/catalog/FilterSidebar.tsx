@@ -77,7 +77,7 @@ export default function FilterSidebar() {
         className="w-full flex items-center justify-between p-4 md:cursor-default md:pointer-events-none bg-slate-50 md:bg-white"
       >
         <div className="flex items-center gap-2 font-bold text-slate-800">
-          <FilterIcon size={20} className="text-[#E91E63]" />
+          <FilterIcon size={20} className="text-[#9D1B1B]" />
           <span>Filtros</span>
         </div>
         <div className="md:hidden text-slate-500">
@@ -89,7 +89,7 @@ export default function FilterSidebar() {
         
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-[#0F172A] text-sm uppercase tracking-wider">Opciones</h3>
+          <h3 className="font-bold text-[#1C1B22] text-sm uppercase tracking-wider">Opciones</h3>
           <button onClick={clearFilters} className="text-xs text-red-500 font-bold hover:underline flex items-center gap-1">
             <X size={12}/> Limpiar
           </button>
@@ -100,8 +100,8 @@ export default function FilterSidebar() {
           <h4 className="font-bold text-slate-900 mb-3 text-sm">Juego (TCG)</h4>
           <div className="space-y-2">
             {TCGS.map((t) => (
-              <label key={t} className="flex items-center gap-2 text-sm text-slate-600 hover:text-[#E91E63] cursor-pointer transition-colors group">
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${hasFilter('tcg', t) ? 'bg-[#E91E63] border-[#E91E63]' : 'border-slate-300 group-hover:border-[#E91E63]'}`}>
+              <label key={t} className="flex items-center gap-2 text-sm text-slate-600 hover:text-[#9D1B1B] cursor-pointer transition-colors group">
+                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${hasFilter('tcg', t) ? 'bg-[#9D1B1B] border-[#9D1B1B]' : 'border-slate-300 group-hover:border-[#9D1B1B]'}`}>
                     {hasFilter('tcg', t) && <div className="w-2 h-2 bg-white rounded-full"/>}
                 </div>
                 <input type="checkbox" className="hidden" checked={hasFilter('tcg', t)} onChange={() => updateFilter('tcg', t)} />
@@ -123,7 +123,7 @@ export default function FilterSidebar() {
                     onChange={(e) => { setSetSearch(e.target.value); setShowSetDropdown(true) }}
                     onFocus={() => setShowSetDropdown(true)}
                     placeholder="Buscar set..." 
-                    className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F172A]" 
+                    className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C1B22]" 
                 />
                 {searchParams.get('set') && (
                     <button onClick={() => { updateFilter('set', null); setSetSearch('') }} className="absolute right-2 top-2 text-slate-400 hover:text-red-500">
@@ -135,7 +135,7 @@ export default function FilterSidebar() {
             {showSetDropdown && (setSearch.length > 0 || loadingSets) && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-20 max-h-48 overflow-y-auto">
                     {loadingSets ? (
-                        <div className="p-3 text-center"><Loader2 className="animate-spin mx-auto w-4 h-4 text-[#E91E63]"/></div>
+                        <div className="p-3 text-center"><Loader2 className="animate-spin mx-auto w-4 h-4 text-[#9D1B1B]"/></div>
                     ) : filteredSets.length > 0 ? (
                         filteredSets.map((s) => (
                             <button 
@@ -171,7 +171,7 @@ export default function FilterSidebar() {
                     <button
                         key={opt.label}
                         onClick={() => updateFilter('finish', opt.val)}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${isActive ? 'bg-white text-[#E91E63] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${isActive ? 'bg-white text-[#9D1B1B] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                     >
                         {opt.label}
                     </button>
@@ -185,8 +185,8 @@ export default function FilterSidebar() {
           <h4 className="font-bold text-slate-900 mb-3 text-sm">Rareza</h4>
           <div className="space-y-2">
             {RARITIES.map((r) => (
-              <label key={r} className="flex items-center gap-2 text-sm text-slate-600 hover:text-[#E91E63] cursor-pointer group">
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${hasFilter('rarity', r) ? 'bg-[#E91E63] border-[#E91E63]' : 'border-slate-300 group-hover:border-[#E91E63]'}`}>
+              <label key={r} className="flex items-center gap-2 text-sm text-slate-600 hover:text-[#9D1B1B] cursor-pointer group">
+                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${hasFilter('rarity', r) ? 'bg-[#9D1B1B] border-[#9D1B1B]' : 'border-slate-300 group-hover:border-[#9D1B1B]'}`}>
                     {hasFilter('rarity', r) && <div className="w-2 h-2 bg-white rounded-full"/>}
                 </div>
                 <input type="checkbox" className="hidden" checked={hasFilter('rarity', r)} onChange={() => updateFilter('rarity', r)} />

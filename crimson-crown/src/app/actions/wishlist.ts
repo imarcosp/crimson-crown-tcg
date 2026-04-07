@@ -58,7 +58,7 @@ export async function processWishlistNotifications(newItems: { id: string, name:
           if (email) {
             // EMAIL MEJORADO CON IMAGEN Y DATOS
             await resend.emails.send({
-              from: `${siteConfig.shortName} <pedidos@elpercherotcg.com>`,
+              from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
               to: email,
               subject: `🔔 ¡Stock Disponible! ${item.name}`,
               html: `

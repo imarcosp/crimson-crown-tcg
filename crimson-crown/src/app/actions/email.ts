@@ -88,7 +88,7 @@ export async function sendOrderEmails(orderId: string, userEmail: string, items:
 
   try {
     await resend.emails.send({
-      from: `${siteConfig.shortName} <pedidos@elpercherotcg.com>`,
+      from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
       to: userEmail,
       subject: `Confirmación de Orden #${orderId.slice(0, 8)}`,
       html: customerHtml
@@ -100,7 +100,7 @@ export async function sendOrderEmails(orderId: string, userEmail: string, items:
 
   try {
     await resend.emails.send({
-      from: `${siteConfig.shortName} <pedidos@elpercherotcg.com>`,
+      from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
       to: ADMIN_EMAIL,
       subject: `💰 Nueva Venta: #${orderId.slice(0, 8)}`,
       html: adminHtml
@@ -222,7 +222,7 @@ export async function sendImportNotification(
     }
 
     await resend.emails.send({
-      from: `${siteConfig.shortName} <pedidos@elpercherotcg.com>`,
+      from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
       to: email,
       subject,
       html,
@@ -282,7 +282,7 @@ export async function sendBuylistNotification(params: {
         }
 
         await resend.emails.send({
-            from: `${siteConfig.shortName} <pedidos@elpercherotcg.com>`,
+            from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
             to: recipient,
             subject,
             html: `<div style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;text-align:center;">${htmlBody}</div>`
@@ -304,7 +304,7 @@ export async function notifyAdminOrderUpdated(params: {
 }) {
     try {
         await resend.emails.send({
-            from: `${siteConfig.shortName} <pedidos@elpercherotcg.com>`,
+            from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
             to: ADMIN_EMAIL,
             subject: `📦 Orden Actualizada #${params.orderNumber} (Items Agregados)`,
             html: `
