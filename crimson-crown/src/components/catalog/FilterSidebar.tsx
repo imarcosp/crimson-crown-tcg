@@ -5,7 +5,7 @@ import { Filter as FilterIcon, ChevronDown, ChevronUp, X, Search, Loader2 } from
 import Image from 'next/image'
 
 // TCGs Limpios
-const TCGS = ['Magic', 'Riftbound']
+const TCGS = ['Magic']
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Mythic']
 const CONDITIONS = ['NM', 'PL', 'HP', 'DMG']
 

@@ -19,7 +19,7 @@ type Props = {
 
 export default function ProductDetailView({ product: p, priceHistory }: Props) {
   const currency = useStore((s) => s.currency)
-  const { exchangeRate } = useConfig()
+  const { exchangeRate, enableImports } = useConfig()
   const cartItems = useCartStore((s) => s.items)
   const addItem = useCartStore((s) => s.addItem)
   const openCart = useUIStore((s) => s.openCart)
@@ -178,12 +178,21 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
                 </div>
               ) : (
                 <div className="flex flex-col md:flex-row items-center gap-4">
-                  <button onClick={() => { addQuote({ id: p.id, name: p.name, price: p.priceUsd, image: p.image, setName: p.setName }); toggleHangModal() }} className="w-full md:w-auto px-8 bg-white border-2 border-[#9D1B1B] text-[#9D1B1B] hover:bg-red-50 py-4 rounded-xl font-bold text-lg transition-colors cursor-pointer whitespace-nowrap">
-                    Solicitar Cotización
-                  </button>
-                  <p className="text-slate-500 text-sm font-medium flex items-center gap-2">
-                    <span>📦</span> Sin stock, disponible para importación (15 dias).
-                  </p>
+                  {enableImports ? (
+                    <>
+                      <button onClick={() => { addQuote({ id: p.id, name: p.name, price: p.priceUsd, image: p.image, setName: p.setName }); toggleHangModal() }} className="w-full md:w-auto px-8 bg-white border-2 border-[#9D1B1B] text-[#9D1B1B] hover:bg-red-50 py-4 rounded-xl font-bold text-lg transition-colors cursor-pointer whitespace-nowrap">
+                        Solicitar Cotización
+                      </button>
+                      <p className="text-slate-500 text-sm font-medium flex items-center gap-2">
+                        <span>🇯🇵</span> Podés pedirlas desde Japón. Sumalo a tu cotización para saber el precio y tiempo de entrega.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="w-full p-4 bg-slate-50 rounded-xl border border-slate-200 text-center">
+                      <p className="text-slate-500 font-medium">Sin stock disponible</p>
+                      <button onClick={handleWishlistClick} className="mt-3 text-sm font-bold text-[#9D1B1B] hover:underline cursor-pointer">Avisarme cuando haya stock</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

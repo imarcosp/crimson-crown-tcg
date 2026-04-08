@@ -39,9 +39,10 @@ const BANK_DETAILS_HTML = `
     <div style="margin-bottom: 16px;">
       <strong style="color: #475569; font-size: 12px; text-transform: uppercase;">Transferencia Bancaria (ARS)</strong>
       <ul style="margin: 4px 0 0 0; padding-left: 0; list-style: none; font-size: 14px; color: #334155;">
-        <li><strong>Titular:</strong> Marcos Perche</li>
+        <li><strong>Banco:</strong> ${siteConfig.payment.bankName}</li>
+        <li><strong>Titular:</strong> ${siteConfig.payment.bankOwner}</li>
         <li><strong>Alias:</strong> ${siteConfig.payment.bankAliasArs}</li>
-        <li><strong>CBU/CVU:</strong> 0000003100020475220684</li>
+        <li><strong>CVU:</strong> ${siteConfig.payment.bankCbuArs}</li>
       </ul>
     </div>
 

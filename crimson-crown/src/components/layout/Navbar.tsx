@@ -17,7 +17,7 @@ import { siteConfig } from '@/config/site'
 
 export default function Navbar() {
   const currency = useStore((s) => s.currency)
-  const { exchangeRate } = useConfig()
+  const { exchangeRate, enableImports } = useConfig()
   
   // Estados de Menús
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -153,14 +153,18 @@ export default function Navbar() {
                     <Box className="text-[#9D1B1B]" size={18}/> Secret Lair
                 </Link>
               )}
-              <div className="border-t my-2 mx-4 border-slate-100"></div>
-              <button 
-                  onClick={() => { closeMenus(); toggleHangModal() }} 
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left cursor-pointer group"
-              >
-                  <Plane className="text-[#9D1B1B] group-hover:scale-110 transition-transform" size={18}/> 
-                  Pedido a Japón
-              </button>
+              {enableImports && (
+                <>
+                  <div className="border-t my-2 mx-4 border-slate-100"></div>
+                  <button 
+                      onClick={() => { closeMenus(); toggleHangModal() }} 
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors text-left cursor-pointer group"
+                  >
+                      <Plane className="text-[#9D1B1B] group-hover:scale-110 transition-transform" size={18}/> 
+                      Pedido a Japón
+                  </button>
+                </>
+              )}
               <div className="border-t my-2 mx-4 border-slate-100"></div>
               {siteConfig.features?.showAccessories && (
                 <>
@@ -313,9 +317,11 @@ export default function Navbar() {
 
               <button onClick={toggleCart} className="relative p-2 rounded hover:bg-slate-700 cursor-pointer transition-colors"><ShoppingCart className="h-6 w-6" />{cartCount > 0 && <span className="absolute -top-1 -right-1 bg-[#9D1B1B] text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full shadow-sm">{cartCount > 99 ? '99+' : cartCount}</span>}</button>
               
-              <Link href="/hang" className="bg-[#9D1B1B] hover:bg-[#7E1515] text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); toggleHangModal() }}>
-                <ClipboardList className="h-6 w-6" /> Pedido a Japón
-              </Link>
+              {enableImports && (
+                <Link href="/hang" className="bg-[#9D1B1B] hover:bg-[#7E1515] text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); toggleHangModal() }}>
+                  <ClipboardList className="h-6 w-6" /> Pedido a Japón
+                </Link>
+              )}
               
               <div className="relative group z-50">
                 <button className="flex items-center gap-2 hover:text-[#9D1B1B] py-2 cursor-pointer transition-colors">

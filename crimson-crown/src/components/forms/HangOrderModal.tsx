@@ -2,7 +2,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useUIStore } from '@/store/uiStore'
 import { useQuoteStore } from '@/store/quoteStore'
-import { Trash, Search, Plus, Loader2, X, Sparkles, ZoomIn, AlertTriangle, Calculator, Calendar, ArrowRight, CheckCircle, ExternalLink, Package } from 'lucide-react'
+import { useConfig } from '@/context/ConfigContext'
+import { Trash, Search, Plus, Loader2, X, Sparkles, ZoomIn, AlertTriangle, Calculator, Calendar, ArrowRight, CheckCircle, ExternalLink, Package, Link as LinkIcon, Image as ImageIcon, Upload } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -28,6 +29,7 @@ const getCollectorNumber = (item: any) => {
 export default function HangOrderModal() {
   const isOpen = useUIStore((s) => s.isHangModalOpen)
   const closeAll = useUIStore((s) => s.closeAll)
+  const { importWarningText } = useConfig()
   
   const [step, setStep] = useState<'form' | 'stock-warning' | 'success'>('form')
   const [message, setMessage] = useState('')
@@ -50,6 +52,10 @@ export default function HangOrderModal() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
+  const [customProductMode, setCustomProductMode] = useState(false)
+  const [customProduct, setCustomProduct] = useState({ name: '', url: '', image_url: '' })
+  const [customFile, setCustomFile] = useState<File | null>(null)
+  const [uploadingCustom, setUploadingCustom] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
@@ -143,6 +149,75 @@ export default function HangOrderModal() {
     } else {
         createOrder()
     }
+  }
+
+  useEffect(() => {
+    if (!customProduct.url) return
+    const url = customProduct.url.toLowerCase()
+    if (url.match(/\.(jpeg|jpg|gif|png|webp|avif)(\?.*)?$/) || url.includes('images.')) {
+        setCustomProduct(prev => ({ ...prev, image_url: customProduct.url }))
+    }
+  }, [customProduct.url])
+
+  const handleCustomFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files?.length) return
+      const file = e.target.files[0]
+      if (file.size > 5 * 1024 * 1024) {
+          alert('El archivo es muy pesado (Máx 5MB).')
+          return
+      }
+      setCustomFile(file)
+      setCustomProduct(prev => ({ ...prev, image_url: URL.createObjectURL(file) }))
+  }
+
+  const handleAddCustomProduct = async () => {
+    if (!customProduct.name.trim()) {
+        alert('Por favor ingresa una descripción para el producto.')
+        return
+    }
+
+    setAddingItem(true)
+    let finalImageUrl = customProduct.image_url
+
+    // Si el usuario subió una imagen local, la subimos a Supabase
+    if (customFile) {
+        setUploadingCustom(true)
+        try {
+            const ext = customFile.name.split('.').pop()
+            const fileName = `imports/custom_${Date.now()}.${ext}`
+            const { error: uploadError } = await supabase.storage.from('products').upload(fileName, customFile)
+            if (uploadError) throw uploadError
+            const { data } = supabase.storage.from('products').getPublicUrl(fileName)
+            finalImageUrl = data.publicUrl
+        } catch (error: any) {
+            alert('Error al subir imagen: ' + error.message)
+            setUploadingCustom(false)
+            setAddingItem(false)
+            return
+        }
+        setUploadingCustom(false)
+    }
+    
+    addItem({
+        id: `custom_${Date.now()}`,
+        name: customProduct.name.trim(),
+        setName: customProduct.url.trim() ? customProduct.url.trim() : 'Otro Producto',
+        collectorNumber: '',
+        image: finalImageUrl,
+        quantity: 1,
+        isFoil: false,
+        foilLocked: true, 
+        foilLabel: 'Normal',
+        rawNormal: 0,
+        rawFoil: 0,
+        price: 0,
+        isCustom: true
+    } as any)
+    
+    setCustomProduct({ name: '', url: '', image_url: '' })
+    setCustomFile(null)
+    setCustomProductMode(false)
+    setAddingItem(false)
   }
 
   const handleAddItem = async (card: any) => {
@@ -255,10 +330,21 @@ export default function HangOrderModal() {
             targetOrderId = existingOrder.id
             targetOrderNumber = existingOrder.order_number
             isMerge = true
+            
+            // Si hay un nuevo mensaje/nota, lo agregamos a user_notes
+            if (message.trim()) {
+                const newNote = message.trim()
+                const currentNotes = existingOrder.user_notes || ''
+                const updatedNotes = currentNotes ? `${currentNotes}\n---\n[Agregado]: ${newNote}` : newNote
+                
+                await supabase.from('import_orders').update({ user_notes: updatedNotes }).eq('id', targetOrderId)
+            }
         } else {
             // NUEVA ORDEN
             const { data: newOrder, error: orderError } = await supabase.from('import_orders').insert({
-                user_id: session.user.id, status: 'Iniciada'
+                user_id: session.user.id, 
+                status: 'Iniciada',
+                user_notes: message.trim() || null
             }).select().single()
 
             if (orderError) throw orderError
@@ -275,7 +361,8 @@ export default function HangOrderModal() {
             return {
                 order_id: targetOrderId,
                 product_name: item.isFoil ? `${item.name} (Foil)` : item.name,
-                set_name: item.setName,
+                set_name: item.setName, // Si es custom, aquí va la URL temporalmente o 'Otro Producto'
+                product_url: i.isCustom ? item.setName : null, // Usamos setName para guardar la url en caso de producto custom
                 collector_number: item.collectorNumber,
                 image_url: item.image,
                 quantity: item.quantity,
@@ -365,7 +452,7 @@ export default function HangOrderModal() {
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
             <div>
                 <h3 className="text-xl font-bold text-slate-800">
-                    {step === 'form' && 'Colgar Pedido'}
+                    {step === 'form' && 'Pedido a Japón'}
                     {step === 'stock-warning' && '⚠️ Revisión de Stock'}
                     {step === 'success' && '✅ Pedido Creado'}
                 </h3>
@@ -383,22 +470,60 @@ export default function HangOrderModal() {
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
             <div className="flex-1 flex flex-col border-r border-slate-100 min-h-0">
                 <div className="p-4 border-b border-slate-100 z-20">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-2.5 text-slate-400" size={18}/>
-                        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar carta..." className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#9D1B1B] outline-none" autoFocus/>
-                        {(searching || addingItem) && <Loader2 className="absolute right-3 top-2.5 animate-spin text-[#9D1B1B]" size={18}/>}
-                        {results.length > 0 && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 max-h-60 overflow-y-auto z-30">
-                                {results.map((r) => (
-                                    <button key={r.id} onClick={() => handleAddItem(r)} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b last:border-0 flex items-center gap-3 cursor-pointer">
-                                        <div className="w-8 h-11 bg-slate-200 rounded overflow-hidden shrink-0">{getImageUrl(r) && <img src={getImageUrl(r)} className="w-full h-full object-cover" />}</div>
-                                        <div><div className="font-bold text-sm text-slate-800">{r.name}</div><div className="text-xs text-slate-500">{r.set_name} #{r.collector_number}</div></div>
-                                        <Plus size={16} className="ml-auto text-emerald-600"/>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+                    <div className="flex gap-2 mb-3">
+                        <button onClick={() => setCustomProductMode(false)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${!customProductMode ? 'bg-[#9D1B1B] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Cartas (Magic)</button>
+                        <button onClick={() => setCustomProductMode(true)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${customProductMode ? 'bg-[#9D1B1B] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Otro Producto</button>
                     </div>
+
+                    {!customProductMode ? (
+                        <div className="relative">
+                            <Search className="absolute left-3 top-2.5 text-slate-400" size={18}/>
+                            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar carta..." className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#9D1B1B] outline-none" autoFocus/>
+                            {(searching || addingItem) && <Loader2 className="absolute right-3 top-2.5 animate-spin text-[#9D1B1B]" size={18}/>}
+                            {results.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 max-h-60 overflow-y-auto z-30">
+                                    {results.map((r) => (
+                                        <button key={r.id} onClick={() => handleAddItem(r)} className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b last:border-0 flex items-center gap-3 cursor-pointer">
+                                            <div className="w-8 h-11 bg-slate-200 rounded overflow-hidden shrink-0">{getImageUrl(r) && <img src={getImageUrl(r)} className="w-full h-full object-cover" />}</div>
+                                            <div><div className="font-bold text-sm text-slate-800">{r.name}</div><div className="text-xs text-slate-500">{r.set_name} #{r.collector_number}</div></div>
+                                            <Plus size={16} className="ml-auto text-emerald-600"/>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">¿Qué quieres traer de Japón?</label>
+                                <input value={customProduct.name} onChange={(e) => setCustomProduct({...customProduct, name: e.target.value})} placeholder="Ej: Playmat de One Piece, Caja Sellada..." className="w-full py-2 px-3 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-[#9D1B1B] outline-none"/>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Link del producto (Opcional)</label>
+                                <input value={customProduct.url} onChange={(e) => setCustomProduct({...customProduct, url: e.target.value})} placeholder="Ej: https://amazon.co.jp/..." className="w-full py-2 px-3 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-[#9D1B1B] outline-none"/>
+                                <p className="text-[10px] text-slate-400 mt-1">Si el link es una imagen, se detectará automáticamente.</p>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">O sube una imagen (Opcional)</label>
+                                <div className="flex gap-2 items-start">
+                                    <div className="w-12 h-12 bg-white rounded border border-slate-200 shrink-0 flex items-center justify-center overflow-hidden">
+                                        {customProduct.image_url ? (
+                                            <img src={customProduct.image_url} alt="Preview" className="w-full h-full object-cover"/>
+                                        ) : (
+                                            <ImageIcon size={16} className="text-slate-300"/>
+                                        )}
+                                    </div>
+                                    <label className="flex-1 cursor-pointer w-full py-2 px-3 border border-dashed border-slate-300 rounded-md text-xs text-slate-500 hover:bg-white transition-colors flex items-center justify-center gap-2">
+                                        <Upload size={14}/> {customFile ? "Cambiar Imagen" : "Elegir archivo"}
+                                        <input type="file" accept="image/*" onChange={handleCustomFileUpload} className="hidden" />
+                                    </label>
+                                </div>
+                            </div>
+                            <button onClick={handleAddCustomProduct} disabled={addingItem || uploadingCustom} className="w-full bg-slate-800 hover:bg-black text-white text-xs font-bold py-2 rounded-md transition-colors flex items-center justify-center gap-2 disabled:opacity-70 mt-2">
+                                {(addingItem || uploadingCustom) ? <Loader2 size={14} className="animate-spin"/> : <Plus size={14}/>} Agregar a la lista
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30">
@@ -426,7 +551,9 @@ export default function HangOrderModal() {
                                             <span className={`text-xs font-bold ${item.isFoil ? 'text-purple-600' : 'text-slate-500'}`}><Sparkles size={10} className="inline mr-0.5"/> {item.foilLabel || 'Foil'}</span>
                                         </label>
                                         <div className="bg-slate-50 p-2 rounded text-[10px] font-mono text-slate-500 border border-slate-100">
-                                            {basePrice > 0 ? (
+                                            {item.isCustom ? (
+                                                <span className="text-slate-400 italic">Se cotizará manualmente</span>
+                                            ) : basePrice > 0 ? (
                                                 <>
                                                     <div className="flex justify-between"><span>Base:</span><span>${basePrice.toFixed(2)}</span></div>
                                                     <div className="flex justify-between text-slate-400"><span>+ Tax (10%):</span><span>${tax.toFixed(2)}</span></div>
@@ -453,9 +580,8 @@ export default function HangOrderModal() {
             
             <div className="w-full md:w-80 bg-slate-50 flex flex-col border-l border-slate-100 overflow-y-auto">
                 <div className="p-6 flex-1 space-y-6">
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-blue-800 text-xs space-y-2">
-                        <div className="flex items-start gap-2"><Calendar size={14} className="shrink-0 mt-0.5"/><p><strong>Días de Pedido:</strong> Lunes, Miércoles y Viernes.</p></div>
-                        <div className="flex items-start gap-2"><AlertTriangle size={14} className="shrink-0 mt-0.5"/><p>Los precios mostrados son una <strong>estimación</strong>. El precio final se te informará antes de pagar.</p></div>
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-blue-800 text-xs space-y-2 whitespace-pre-wrap">
+                        {importWarningText}
                     </div>
                     {!existingOrderId && (
                         <div className="space-y-3">

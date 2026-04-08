@@ -7,12 +7,13 @@ import AdminCoupons from '@/app/admin/coupons/page'
 
 export default function AdminPricesMasterPage() {
   const supabase = createClient()
-  const [tab, setTab] = useState<'currency' | 'banners' | 'coupons'>('currency')
+  const [tab, setTab] = useState<'currency' | 'banners' | 'coupons' | 'orders'>('currency')
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   const [exchangeRate, setExchangeRate] = useState<string>('')
+  const [enableImports, setEnableImports] = useState<boolean>(true)
 
   const [info, setInfo] = useState({
     contact_whatsapp: '',
@@ -22,7 +23,8 @@ export default function AdminPricesMasterPage() {
     contact_address_note: '',
     contact_schedule: '',
     store_description: '',
-    quote_rules: ''
+    quote_rules: '',
+    import_warning_text: 'Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.'
   })
 
   const [faqs, setFaqs] = useState<any[]>([])
@@ -44,6 +46,7 @@ export default function AdminPricesMasterPage() {
           settings.forEach((item: any) => {
             const val = cleanValue(item.value)
             if (item.key === 'exchange_rate') rate = String(val || '')
+            if (item.key === 'enable_imports') setEnableImports(val === true || val === 'true')
             if (Object.prototype.hasOwnProperty.call(nextInfo, item.key)) nextInfo[item.key] = val
           })
           setInfo(nextInfo)
@@ -88,6 +91,22 @@ export default function AdminPricesMasterPage() {
     }
   }
 
+  const handleToggleImports = async () => {
+    setSaving(true)
+    try {
+      const newValue = !enableImports
+      const updates = [{ key: 'enable_imports', value: JSON.stringify(newValue), updated_at: new Date().toISOString() }]
+      const { error } = await supabase.from('system_settings').upsert(updates)
+      if (error) throw error
+      setEnableImports(newValue)
+      alert('¡Estado de pedidos al exterior actualizado!')
+    } catch (e: any) {
+      alert('Error al actualizar: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleAddFaq = async () => {
     if (!newFaq.question || !newFaq.answer) return alert('Completa pregunta y respuesta')
     const { data, error } = await supabase.from('faqs').insert([newFaq]).select()
@@ -113,6 +132,7 @@ export default function AdminPricesMasterPage() {
         <button onClick={() => setTab('currency')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='currency' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><DollarSign size={16}/> Moneda y Tienda</button>
         <button onClick={() => setTab('banners')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='banners' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><Images size={16}/> Banners Home</button>
         <button onClick={() => setTab('coupons')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='coupons' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><Ticket size={16}/> Cupones</button>
+        <button onClick={() => setTab('orders')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='orders' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><Plus size={16}/> Pedidos</button>
       </div>
 
       {tab === 'currency' && (
@@ -224,6 +244,42 @@ export default function AdminPricesMasterPage() {
       {tab === 'coupons' && (
         <div className="space-y-6">
           <AdminCoupons />
+        </div>
+      )}
+      {tab === 'orders' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h2 className="text-xl font-bold mb-4">Pedidos al Exterior (Importaciones)</h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-slate-50 border rounded-lg">
+                <div>
+                  <p className="font-bold text-slate-800">Habilitar Pedidos a Japón</p>
+                  <p className="text-xs text-slate-500">Muestra los botones y funciones para encargar cartas desde el exterior.</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={enableImports} onChange={handleToggleImports} disabled={saving} />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9D1B1B]/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#9D1B1B]"></div>
+                </label>
+              </div>
+
+              <div className="p-4 border rounded-lg bg-slate-50">
+                <label className="block text-sm font-bold text-slate-800 mb-2">Mensaje de Advertencia en "Pedido a Japón"</label>
+                <p className="text-xs text-slate-500 mb-2">Este texto lo verán los usuarios en el modal al crear un pedido a Japón.</p>
+                <textarea
+                  className="w-full border rounded p-3 text-sm h-32 resize-none"
+                  value={info.import_warning_text}
+                  onChange={e => setInfo({...info, import_warning_text: e.target.value})}
+                  placeholder="Escribe el aviso para tus clientes..."
+                />
+                <div className="flex justify-end mt-2">
+                  <button onClick={handleSaveInfo} disabled={saving} className="bg-[#0F172A] text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-black transition-colors text-sm">
+                    {saving ? <Loader2 className="animate-spin h-4 w-4"/> : <Save className="h-4 w-4"/>}
+                    Guardar Mensaje
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

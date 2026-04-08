@@ -4,13 +4,23 @@ import { EXCHANGE_RATE } from '@/lib/constants'
 
 type Ctx = {
   exchangeRate: number
+  enableImports: boolean
+  importWarningText: string
   setExchangeRate: (v: number) => void
   refreshExchangeRate: () => Promise<void>
 }
 
-const Ctx = createContext<Ctx>({ exchangeRate: EXCHANGE_RATE, setExchangeRate: () => {}, refreshExchangeRate: async () => {} })
+const Ctx = createContext<Ctx>({ 
+    exchangeRate: EXCHANGE_RATE, 
+    enableImports: true, 
+    importWarningText: 'Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.',
+    setExchangeRate: () => {}, 
+    refreshExchangeRate: async () => {} 
+})
 
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
+  const [enableImports, setEnableImports] = useState<boolean>(true)
+  const [importWarningText, setImportWarningText] = useState<string>('Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.')
   const [exchangeRate, setExchangeRate] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('lastExchangeRate')
@@ -31,13 +41,19 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         setExchangeRate(v)
         localStorage.setItem('lastExchangeRate', String(v))
       }
+      if (json?.enableImports !== undefined) {
+        setEnableImports(json.enableImports)
+      }
+      if (json?.importWarningText !== undefined) {
+        setImportWarningText(json.importWarningText)
+      }
     } catch {}
   }, [])
 
   useEffect(() => { refreshExchangeRate() }, [refreshExchangeRate])
 
   return (
-    <Ctx.Provider value={{ exchangeRate, setExchangeRate, refreshExchangeRate }}>
+    <Ctx.Provider value={{ exchangeRate, enableImports, importWarningText, setExchangeRate, refreshExchangeRate }}>
       {children}
     </Ctx.Provider>
   )

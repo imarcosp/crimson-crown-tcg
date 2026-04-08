@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation' 
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowLeft, CheckCircle, Package, Truck, Clock, ZoomIn, X, Banknote, Upload, CreditCard, Copy, Trash2, Plus, Info, MapPin, DollarSign, Loader2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Package, Truck, Clock, ZoomIn, X, Banknote, Upload, CreditCard, Copy, Trash2, Plus, Info, MapPin, DollarSign, Loader2, ExternalLink } from 'lucide-react'
 import { useStore } from '@/store/useStore' 
 import { useUIStore } from '@/store/uiStore'
 import HangOrderModal from '@/components/forms/HangOrderModal'
@@ -530,9 +530,15 @@ export default function UserOrderDetailPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-4">
                             <div className="bg-white p-3 rounded-lg border border-amber-200 shadow-sm">
                                 <span className="block text-xs font-bold text-amber-700 uppercase mb-1">Transferencia Pesos (ARS)</span>
-                                <div className="flex items-center justify-between">
-                                    <span className="font-mono text-slate-700">Alias: {siteConfig.payment.bankAliasArs}</span>
-                                    <button onClick={() => copyToClipboard(siteConfig.payment.bankAliasArs)} className="p-1.5 hover:bg-amber-50 rounded text-amber-400 hover:text-amber-600 cursor-pointer transition-colors" title="Copiar"><Copy size={16}/></button>
+                                <div className="flex flex-col gap-1 text-xs">
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-mono text-slate-700">Alias: {siteConfig.payment.bankAliasArs}</span>
+                                        <button onClick={() => copyToClipboard(siteConfig.payment.bankAliasArs)} className="p-1.5 hover:bg-amber-50 rounded text-amber-400 hover:text-amber-600 cursor-pointer transition-colors" title="Copiar"><Copy size={16}/></button>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-mono text-slate-700">CVU: {siteConfig.payment.bankCbuArs}</span>
+                                        <button onClick={() => copyToClipboard(siteConfig.payment.bankCbuArs)} className="p-1.5 hover:bg-amber-50 rounded text-amber-400 hover:text-amber-600 cursor-pointer transition-colors" title="Copiar"><Copy size={16}/></button>
+                                    </div>
                                 </div>
                             </div>
                             {/* Eliminado bloque de pago cripto */}
@@ -667,8 +673,13 @@ export default function UserOrderDetailPage() {
                                     </td>
                                     <td className="px-4 py-3">
                                         <div className="font-bold text-slate-800">{item.product_name}</div>
-                                        {/* INFO EXTRA (Set y Collector) */}
-                                        {(item.set_name || item.collector_number) && (
+                                        {item.product_url ? (
+                                            <div className="mt-1">
+                                                <a href={item.product_url.startsWith('http') ? item.product_url : `https://${item.product_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                                                    Link Referencia <ExternalLink size={10}/>
+                                                </a>
+                                            </div>
+                                        ) : (
                                             <div className="text-[10px] text-slate-500 font-mono mt-0.5">
                                                 {item.set_name} {item.collector_number ? `#${item.collector_number}` : ''}
                                             </div>

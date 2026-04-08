@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, use } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, Save, Plus, Trash2, Search, Edit, CheckCircle, Package, Truck, Upload, Sparkles, Loader2, Image as ImageIcon, Bell, ZoomIn, X, Calendar, FileText, DollarSign, Phone } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Search, Edit, CheckCircle, Package, Truck, Upload, Sparkles, Loader2, Image as ImageIcon, Bell, ZoomIn, X, Calendar, FileText, DollarSign, Phone, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -43,10 +43,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     quantity: 1,
     platform: 'Cardkingdom' as Platform,
     unit_price: 0,
-    tax_percent: 10, // CAMBIO: Default 10%
+    tax_percent: 10,
     shipping_cost: 0.5,
     set_name: '',
-    collector_number: ''
+    collector_number: '',
+    product_url: ''
   })
 
   // HELPER PARA OBTENER IMAGEN
@@ -245,12 +246,13 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               tax_percent: item.tax_percent || 10,
               shipping_cost: item.shipping_cost,
               set_name: item.set_name || '',
-              collector_number: item.collector_number || ''
+              collector_number: item.collector_number || '',
+              product_url: item.product_url || ''
           })
           setPreviewUrl(item.image_url); setIsFoil(isItemFoil); setMode('Manual')
       } else {
           setEditItem(null)
-          setFormData({ product_name: '', image_url: '', quantity: 1, platform: 'Cardkingdom', unit_price: 0, tax_percent: 10, shipping_cost: 0.5, set_name: '', collector_number: '' })
+          setFormData({ product_name: '', image_url: '', quantity: 1, platform: 'Cardkingdom', unit_price: 0, tax_percent: 10, shipping_cost: 0.5, set_name: '', collector_number: '', product_url: '' })
           setPreviewUrl(''); setFile(null); setIsFoil(false); setMode('Buscador'); setSearchQuery(''); setSearchResults([])
       }
       setShowModal(true)
@@ -417,6 +419,12 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   onBlur={(e) => updateOrder({ admin_notes: e.target.value })}
               />
           </div>
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-2">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText size={16}/> Notas del Cliente</h3>
+              <div className="w-full text-sm p-3 border rounded-lg bg-slate-50 border-slate-200 text-slate-700 min-h-[100px] whitespace-pre-wrap">
+                  {order.user_notes || <span className="text-slate-400 italic">Sin notas adicionales del cliente.</span>}
+              </div>
+          </div>
       </div>
 
       {/* TABLA ITEMS */}
@@ -454,12 +462,20 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                                   </div>
                               </td>
                               <td className="px-4 py-3">
-                                  <div className="font-bold text-slate-800">{item.product_name}</div>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                      <span className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{item.platform}</span>
-                                      {item.set_name && <span className="text-[10px] text-slate-500 font-mono">{item.set_name} {item.collector_number ? `#${item.collector_number}` : ''}</span>}
-                                  </div>
-                              </td>
+                                    <div className="font-bold text-slate-800">{item.product_name}</div>
+                                    {item.product_url ? (
+                                        <div className="mt-1">
+                                            <a href={item.product_url.startsWith('http') ? item.product_url : `https://${item.product_url}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                                                Link Referencia <ExternalLink size={10}/>
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{item.platform}</span>
+                                            {item.set_name && <span className="text-[10px] text-slate-500 font-mono">{item.set_name} {item.collector_number ? `#${item.collector_number}` : ''}</span>}
+                                        </div>
+                                    )}
+                                </td>
                               <td className="px-4 py-3 text-center font-bold">{item.quantity}</td>
                               <td className="px-4 py-3 text-right font-mono text-slate-500 text-xs">
                                   {item.suggested_price > 0 ? `$${Number(item.suggested_price).toFixed(2)}` : '-'}
@@ -555,6 +571,12 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                               <label className="text-xs font-bold text-slate-500 uppercase">Nro. Colección</label>
                               <input value={formData.collector_number} onChange={e => setFormData({...formData, collector_number: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-xs font-mono" placeholder="Ej: 123"/>
                           </div>
+                          {mode === 'Manual' && (
+                              <div className="md:col-span-2 space-y-1">
+                                  <label className="text-xs font-bold text-slate-500 uppercase">Link del Producto (URL)</label>
+                                  <input value={formData.product_url} onChange={e => setFormData({...formData, product_url: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-xs" placeholder="https://..."/>
+                              </div>
+                          )}
                           <div className="md:col-span-2 flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer" onClick={() => setIsFoil(!isFoil)}>
                               <div className="flex items-center gap-2">
                                   <Sparkles size={16} className={isFoil ? "text-purple-500" : "text-slate-400"}/>

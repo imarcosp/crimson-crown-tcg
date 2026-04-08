@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     // 3. Mensaje "Verde" con Emoji
     const displayMessage = hasStock 
       ? "✅ En Stock (Envío Inmediato)"  // Emoji verde para simular el color
-      : "📦 Sin stock, disponible para importación (15 dias). Cotizar al Instagram @elpercherotcg"
+      : "🇯🇵 Podés pedirlas desde Japón. Sumalo a tu cotización para saber el precio y tiempo de entrega."
 
     formattedResults.push({
       id: linkId,
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       foil: isFoilPrice,
       lenguaje: 'English',
       stock: 0,
-      availability_message: "📦 Sin stock, disponible para importación (15 dias). Cotizar al Instagram @elpercherotcg",
+      availability_message: "🇯🇵 Podés pedirlas desde Japón. Sumalo a tu cotización para saber el precio y tiempo de entrega.",
       link: `https://www.elpercherotcg.com/product/${card.id}`, 
       game: 'Magic'
     })

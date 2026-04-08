@@ -24,10 +24,21 @@ export async function GET() {
   const { data } = await supabase
     .from('system_settings')
     .select('*')
-    .eq('key', 'dolar_cotizacion')
-    .limit(1)
+    .in('key', ['dolar_cotizacion', 'enable_imports', 'import_warning_text'])
 
-  const current = data?.[0]
+  const current = data?.find(s => s.key === 'dolar_cotizacion')
+  let enableImports = true
+  const importsSetting = data?.find(s => s.key === 'enable_imports')
+  if (importsSetting) {
+    const val = importsSetting.value
+    enableImports = val === true || val === 'true'
+  }
+  
+  let importWarningText = 'Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.'
+  const warningSetting = data?.find(s => s.key === 'import_warning_text')
+  if (warningSetting && warningSetting.value) {
+      importWarningText = typeof warningSetting.value === 'string' ? warningSetting.value : String(warningSetting.value)
+  }
   if (current) {
     const raw = typeof current.value === 'number' ? current.value : Number(current.value)
     if (!Number.isNaN(raw) && raw > 0) value = raw
@@ -49,5 +60,5 @@ export async function GET() {
   }
 
   const clientExchangeRate = Math.floor(value / 10) * 10
-  return NextResponse.json({ exchangeRate: clientExchangeRate })
+  return NextResponse.json({ exchangeRate: clientExchangeRate, enableImports, importWarningText })
 }

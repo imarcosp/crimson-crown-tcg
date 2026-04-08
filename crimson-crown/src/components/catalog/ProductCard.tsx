@@ -41,7 +41,7 @@ const LANG_MAP: Record<string, string> = {
 
 export default function ProductCard(p: Props) {
   const currency = useStore((s) => s.currency)
-  const { exchangeRate } = useConfig()
+  const { exchangeRate, enableImports } = useConfig()
   const cartItems = useCartStore((s) => s.items)
   const addItem = useCartStore((s) => s.addItem)
   const addQuote = useQuoteStore((s) => s.addItem)
@@ -200,10 +200,16 @@ export default function ProductCard(p: Props) {
                 </div>
             ) : (
                 <div className="flex flex-col gap-2">
-                    <span className="text-xs font-medium text-slate-500 flex items-center gap-1 leading-tight max-[400px]:text-[10px]">📦 Sin stock, disponible para importación (15 dias).</span>
-                    <button className="w-full px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border border-[#9D1B1B] text-[#9D1B1B] hover:bg-[#9D1B1B] hover:text-white transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); const quoteName = wantsFoil ? `${p.name} (Foil)` : p.name; addQuote({ id: p.id, name: quoteName, setName: p.setName, image: currentImage, quantity: 1 }); toggleHangModal() }}>
-                        Cotizar
-                    </button>
+                    {enableImports ? (
+                        <>
+                            <span className="text-xs font-medium text-slate-500 flex items-center gap-1 leading-tight max-[400px]:text-[10px]">🇯🇵 Podés pedirlas desde Japón. Sumalo a tu cotización para saber el precio y tiempo de entrega.</span>
+                            <button className="w-full px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border border-[#9D1B1B] text-[#9D1B1B] hover:bg-[#9D1B1B] hover:text-white transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const quoteName = wantsFoil ? `${p.name} (Foil)` : p.name; addQuote({ id: p.id, name: quoteName, setName: p.setName, image: currentImage, quantity: 1 }); toggleHangModal() }}>
+                                Cotizar
+                            </button>
+                        </>
+                    ) : (
+                        <span className="text-xs font-medium text-slate-500 flex items-center justify-center py-2 bg-slate-50 rounded-lg border border-slate-100">Sin stock disponible</span>
+                    )}
                 </div>
             )}
             </div>

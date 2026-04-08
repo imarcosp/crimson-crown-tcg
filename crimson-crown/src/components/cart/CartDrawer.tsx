@@ -333,8 +333,7 @@ export default function CartDrawer() {
                                     <div className="bg-slate-50 p-3 text-xs font-bold text-slate-500 uppercase flex items-center gap-2 border-b border-slate-200"><CreditCard size={14}/> Transferencia</div>
                                     <div className="divide-y divide-slate-100">
                                         {[
-                                            { id: 'transfer_ars', label: 'Pesos (ARS)', alias: siteConfig.payment.bankAliasArs },
-                                            { id: 'transfer_usd', label: 'Dólares (Banco)', alias: siteConfig.payment.bankAliasUsd }
+                                            { id: 'transfer_ars', label: 'Pesos (ARS)', alias: siteConfig.payment.bankAliasArs }
                                         ].map((pm) => (
                                             <label key={pm.id} className={`flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 transition-colors ${paymentMethod === pm.id ? 'bg-sky-50' : ''}`}>
                                                 <input type="radio" name="payment" checked={paymentMethod === pm.id} onChange={() => setPaymentMethod(pm.id as any)} className="w-4 h-4 accent-sky-600 cursor-pointer"/>

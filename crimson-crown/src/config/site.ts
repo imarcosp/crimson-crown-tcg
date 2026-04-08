@@ -10,8 +10,10 @@ export const siteConfig = {
     email: "crimsoncrownimports@gmail.com",
   },
   payment: {
-    bankAliasArs: "Facundo Ezequiel Lira Rodríguez",
-    bankAliasUsd: "0000003100018685270995"
+    bankOwner: "Facundo Ezequiel Lira Rodríguez",
+    bankName: "Mercado Pago",
+    bankAliasArs: "coronamtg",
+    bankCbuArs: "0000003100018685270995"
   },
   theme: {
     primary: "#1C1B22",      // fondo principal oscuro

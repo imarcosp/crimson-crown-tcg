@@ -321,9 +321,15 @@ function ProfileContent() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-4">
                                     <div className="bg-white p-3 rounded-lg border border-amber-200">
                                         <span className="block text-xs font-bold text-amber-700 uppercase mb-1">Transferencia Pesos (ARS)</span>
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-mono text-slate-700">Alias: elpercherotcg</span>
-                                            <button onClick={() => copyToClipboard('elpercherotcg')} className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 cursor-pointer"><Copy size={14}/></button>
+                                        <div className="flex flex-col gap-1 text-xs">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-mono text-slate-700">Alias: coronamtg</span>
+                                                <button onClick={() => copyToClipboard('coronamtg')} className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 cursor-pointer"><Copy size={14}/></button>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-mono text-slate-700">CVU: 0000003100018685270995</span>
+                                                <button onClick={() => copyToClipboard('0000003100018685270995')} className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 cursor-pointer"><Copy size={14}/></button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="bg-white p-3 rounded-lg border border-amber-200">

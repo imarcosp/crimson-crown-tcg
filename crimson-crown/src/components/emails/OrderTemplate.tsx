@@ -77,9 +77,10 @@ export const OrderTemplate = ({ orderId, items, total, totalArs, type }: any) =>
                   Transferencia Bancaria (ARS)
                 </Text>
                 <ul style={{ margin: '0 0 0 0', paddingLeft: '0', listStyle: 'none', fontSize: '14px', color: '#334155' }}>
-                  <li style={{ marginBottom: '4px' }}><strong>Titular:</strong> Marcos Perche</li>
-                  <li style={{ marginBottom: '4px' }}><strong>Alias:</strong> Elpercherotcg</li>
-                  <li style={{ marginBottom: '4px' }}><strong>CBU/CVU:</strong> 0000003100020475220684</li>
+                  <li style={{ marginBottom: '4px' }}><strong>Banco:</strong> {siteConfig.payment.bankName}</li>
+                  <li style={{ marginBottom: '4px' }}><strong>Titular:</strong> {siteConfig.payment.bankOwner}</li>
+                  <li style={{ marginBottom: '4px' }}><strong>Alias:</strong> {siteConfig.payment.bankAliasArs}</li>
+                  <li style={{ marginBottom: '4px' }}><strong>CVU:</strong> {siteConfig.payment.bankCbuArs}</li>
                 </ul>
               </div>
 
