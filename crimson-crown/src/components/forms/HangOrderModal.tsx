@@ -579,9 +579,10 @@ export default function HangOrderModal() {
             
             <div className="w-full md:w-80 bg-slate-50 flex flex-col border-l border-slate-100 overflow-y-auto">
                 <div className="p-6 flex-1 space-y-6">
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-blue-800 text-xs space-y-2 whitespace-pre-wrap">
-                        {importWarningText}
-                    </div>
+                    <div 
+                        className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-blue-800 text-xs space-y-2"
+                        dangerouslySetInnerHTML={{ __html: importWarningText || '' }}
+                    />
                     {!existingOrderId && (
                         <div className="space-y-3">
                             <label className="text-xs font-bold text-slate-500 uppercase block">Notas Adicionales</label>

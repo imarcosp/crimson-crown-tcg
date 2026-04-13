@@ -34,10 +34,25 @@ export async function GET() {
     enableImports = val === true || val === 'true'
   }
   
-  let importWarningText = 'Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.'
+  let importWarningText = 'Días de Pedido: Lunes, Miércoles y Viernes.<br /><br />Los precios mostrados son una estimación. El precio final se te informará antes de pagar.'
   const warningSetting = data?.find(s => s.key === 'import_warning_text')
   if (warningSetting && warningSetting.value) {
-      importWarningText = typeof warningSetting.value === 'string' ? warningSetting.value : String(warningSetting.value)
+      let rawText = typeof warningSetting.value === 'string' ? warningSetting.value : String(warningSetting.value)
+      
+      // Limpieza profunda:
+      // 1. Si viene como un JSON stringificado, lo parseamos
+      if (rawText.startsWith('"') && rawText.endsWith('"')) {
+          try {
+              rawText = JSON.parse(rawText)
+          } catch {
+              rawText = rawText.slice(1, -1) // Fallback simple
+          }
+      }
+      
+      // 2. Reemplazar explícitamente los caracteres \n literales por saltos de linea HTML
+      rawText = rawText.replace(/\\n/g, '<br />').replace(/\n/g, '<br />')
+      
+      importWarningText = rawText
   }
   if (current) {
     const raw = typeof current.value === 'number' ? current.value : Number(current.value)

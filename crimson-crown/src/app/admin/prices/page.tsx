@@ -34,8 +34,15 @@ export default function AdminPricesMasterPage() {
     const fetchData = async () => {
       try {
         const cleanValue = (val: any) => {
-          if (typeof val === 'string' && val.startsWith('"') && val.endsWith('"')) {
-            try { return JSON.parse(val) } catch { return val.slice(1, -1) }
+          if (typeof val === 'string') {
+            // First check if it's a JSON string
+            if (val.startsWith('"') && val.endsWith('"')) {
+                try { return JSON.parse(val) } catch { return val.slice(1, -1) }
+            }
+            // If it's a string representation of an object/array, try to parse it
+            if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
+                try { return JSON.parse(val) } catch { return val }
+            }
           }
           return val
         }
@@ -264,12 +271,20 @@ export default function AdminPricesMasterPage() {
 
               <div className="p-4 border rounded-lg bg-slate-50">
                 <label className="block text-sm font-bold text-slate-800 mb-2">Mensaje de Advertencia en "Pedido a Japón"</label>
-                <p className="text-xs text-slate-500 mb-2">Este texto lo verán los usuarios en el modal al crear un pedido a Japón.</p>
+                <p className="text-xs text-slate-500 mb-2">Este texto lo verán los usuarios en el modal al crear un pedido a Japón. Puedes usar formato HTML básico para darle estilo:</p>
+                <ul className="text-xs text-slate-500 mb-3 ml-4 list-disc space-y-1">
+                    <li>Negrita: <code>&lt;b&gt;texto&lt;/b&gt;</code> o <code>&lt;strong&gt;texto&lt;/strong&gt;</code></li>
+                    <li>Cursiva: <code>&lt;i&gt;texto&lt;/i&gt;</code> o <code>&lt;em&gt;texto&lt;/em&gt;</code></li>
+                    <li>Saltos de línea: <code>&lt;br /&gt;</code> (Usa dos seguidos para separar párrafos: <code>&lt;br /&gt;&lt;br /&gt;</code>)</li>
+                    <li>Enlaces: <code>&lt;a href="url" target="_blank" className="underline text-blue-600"&gt;link&lt;/a&gt;</code></li>
+                    <li>Listas: <code>&lt;ul className="list-disc ml-4"&gt;&lt;li&gt;item&lt;/li&gt;&lt;/ul&gt;</code></li>
+                    <li>Emojis: Simplemente cópialos y pégalos (⭐ ⚠️ 🇯🇵)</li>
+                </ul>
                 <textarea
-                  className="w-full border rounded p-3 text-sm h-32 resize-none"
+                  className="w-full border rounded p-3 text-sm h-48 resize-none font-mono"
                   value={info.import_warning_text}
                   onChange={e => setInfo({...info, import_warning_text: e.target.value})}
-                  placeholder="Escribe el aviso para tus clientes..."
+                  placeholder="Escribe el aviso para tus clientes usando HTML..."
                 />
                 <div className="flex justify-end mt-2">
                   <button onClick={handleSaveInfo} disabled={saving} className="bg-[#0F172A] text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-black transition-colors text-sm">

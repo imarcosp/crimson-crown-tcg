@@ -45,7 +45,12 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         setEnableImports(json.enableImports)
       }
       if (json?.importWarningText !== undefined) {
-        setImportWarningText(json.importWarningText)
+        // En caso de que queden \n escapados desde la base de datos
+        let cleanedText = json.importWarningText
+        if (typeof cleanedText === 'string') {
+            cleanedText = cleanedText.replace(/\\n/g, '<br />').replace(/\n/g, '<br />')
+        }
+        setImportWarningText(cleanedText)
       }
     } catch {}
   }, [])
