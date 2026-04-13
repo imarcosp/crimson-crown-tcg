@@ -97,7 +97,7 @@ export default function HangOrderModal() {
           const qty = item.quantity || 1
           const i = item as any
           const base = i.isFoil ? (i.rawFoil || 0) : (i.rawNormal || 0)
-          const estUnit = base > 0 ? (base * 1.10) + 0.5 : 0
+          const estUnit = base > 0 ? (base * 1.10) : 0 // Envío eliminado (antes + 0.5)
           return acc + (estUnit * qty)
       }, 0)
   }, [quoteItems])
@@ -356,7 +356,7 @@ export default function HangOrderModal() {
             // Recalcular estimado unitario para guardarlo
             const i = item as any
             const base = i.isFoil ? (i.rawFoil || 0) : (i.rawNormal || 0)
-            const estUnit = base > 0 ? (base * 1.10) + 0.5 : 0
+            const estUnit = base > 0 ? (base * 1.10) : 0 // Envío eliminado
 
             return {
                 order_id: targetOrderId,
@@ -369,7 +369,7 @@ export default function HangOrderModal() {
                 platform: 'Manapool',
                 unit_price: 0, 
                 tax_percent: 0,
-                shipping_cost: 0.5,
+                shipping_cost: 0, // Envío en 0
                 suggested_price: estUnit, // Guardamos el precio que vio el cliente
                 is_available: false, is_delivered: false
             }
@@ -533,7 +533,7 @@ export default function HangOrderModal() {
                         quoteItems.map((item: any) => {
                             const basePrice = item.isFoil ? (item.rawFoil || 0) : (item.rawNormal || 0)
                             const tax = basePrice * 0.10
-                            const shipping = 0.50
+                            const shipping = 0 // Envío eliminado
                             const totalEst = basePrice > 0 ? (basePrice + tax + shipping) : 0
 
                             return (
@@ -556,8 +556,7 @@ export default function HangOrderModal() {
                                             ) : basePrice > 0 ? (
                                                 <>
                                                     <div className="flex justify-between"><span>Base:</span><span>${basePrice.toFixed(2)}</span></div>
-                                                    <div className="flex justify-between text-slate-400"><span>+ Tax (10%):</span><span>${tax.toFixed(2)}</span></div>
-                                                    <div className="flex justify-between text-slate-400 border-b border-slate-200 pb-1 mb-1"><span>+ Envío:</span><span>${shipping.toFixed(2)}</span></div>
+                                                    <div className="flex justify-between text-slate-400 border-b border-slate-200 pb-1 mb-1"><span>+ Tax (10%):</span><span>${tax.toFixed(2)}</span></div>
                                                     <div className="flex justify-between font-bold text-slate-800"><span>Total:</span><span>${totalEst.toFixed(2)}</span></div>
                                                 </>
                                             ) : <span className="text-slate-400 italic">Consultar precio</span>}
@@ -595,7 +594,7 @@ export default function HangOrderModal() {
                         <span className="text-sm font-bold text-slate-500 uppercase">Total Estimado</span>
                         <div className="text-right">
                             <span className="block text-2xl font-extrabold text-[#9D1B1B] flex items-center gap-2"><Calculator size={20} className="text-slate-300"/> US$ {totals.toFixed(2)}</span>
-                            <span className="text-[10px] text-slate-400 font-bold">Incluye Tax (10%) + Envío ($0.5/u)</span>
+                            <span className="text-[10px] text-slate-400 font-bold">Incluye Tax (10%)</span>
                         </div>
                     </div>
                     <button onClick={checkStockAndProceed} disabled={checkingStock || isProcessing || quoteItems.length === 0} className="w-full py-4 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer">

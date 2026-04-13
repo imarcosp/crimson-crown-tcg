@@ -44,7 +44,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     platform: 'Cardkingdom' as Platform,
     unit_price: 0,
     tax_percent: 10,
-    shipping_cost: 0.5,
+    shipping_cost: 0,
     set_name: '',
     collector_number: '',
     product_url: ''
@@ -252,7 +252,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           setPreviewUrl(item.image_url); setIsFoil(isItemFoil); setMode('Manual')
       } else {
           setEditItem(null)
-          setFormData({ product_name: '', image_url: '', quantity: 1, platform: 'Cardkingdom', unit_price: 0, tax_percent: 10, shipping_cost: 0.5, set_name: '', collector_number: '', product_url: '' })
+          setFormData({ product_name: '', image_url: '', quantity: 1, platform: 'Cardkingdom', unit_price: 0, tax_percent: 10, shipping_cost: 0, set_name: '', collector_number: '', product_url: '' })
           setPreviewUrl(''); setFile(null); setIsFoil(false); setMode('Buscador'); setSearchQuery(''); setSearchResults([])
       }
       setShowModal(true)
@@ -320,7 +320,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   }
 
   const deleteItem = async (itemId: number) => { if(confirm('¿Borrar este item?')) { await supabase.from('import_items').delete().eq('id', itemId); fetchOrder() } }
-  const calculateTotal = (item: any) => ((item.unit_price * (1 + (item.tax_percent / 100))) + item.shipping_cost) * item.quantity
+  const calculateTotal = (item: any) => ((item.unit_price * (1 + (item.tax_percent / 100)))) * item.quantity
   const orderTotal = items.reduce((acc, item) => acc + calculateTotal(item), 0)
 
   if (loading) return <div className="p-12 text-center text-slate-500">Cargando orden...</div>
@@ -443,7 +443,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                           <th className="px-4 py-3 text-right">Precio Sug.</th>
                           <th className="px-4 py-3 text-right">Precio U.</th>
                           <th className="px-4 py-3 text-right">Tax</th>
-                          <th className="px-4 py-3 text-right">Envío</th>
                           <th className="px-4 py-3 text-right">Total</th>
                           <th className="px-4 py-3 text-center">Admin</th>
                           <th className="px-4 py-3 text-center">Estado</th>
@@ -487,7 +486,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                                   <div className="text-[9px] text-slate-400">({item.tax_percent}%)</div>
                               </td>
                               
-                              <td className="px-4 py-3 text-right font-mono text-slate-500">${Number(item.shipping_cost).toFixed(2)}</td>
                               <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">${calculateTotal(item).toFixed(2)}</td>
                               <td className="px-4 py-3">
                                   <div className="flex justify-center gap-2">
@@ -511,7 +509,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                       })}
                       {items.length > 0 && (
                           <tr className="bg-slate-50 border-t border-slate-200">
-                              <td colSpan={7} className="px-4 py-3 text-right font-bold text-slate-600 uppercase text-xs">Total Estimado:</td>
+                              <td colSpan={6} className="px-4 py-3 text-right font-bold text-slate-600 uppercase text-xs">Total Estimado:</td>
                               <td className="px-4 py-3 text-right font-mono font-extrabold text-lg text-slate-900">${orderTotal.toFixed(2)}</td>
                               <td colSpan={2}></td>
                           </tr>
@@ -626,15 +624,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                               <label className="text-xs font-bold text-slate-500 uppercase">Tax %</label>
                               <input type="number" step="0.1" value={formData.tax_percent} onChange={e => setFormData({...formData, tax_percent: Number(e.target.value)})} className="w-full px-3 py-2 border rounded-lg font-mono"/>
                           </div>
-                          <div className="space-y-1">
-                              <label className="text-xs font-bold text-slate-500 uppercase">Envío (USD)</label>
-                              <input type="number" step="0.01" value={formData.shipping_cost} onChange={e => setFormData({...formData, shipping_cost: Number(e.target.value)})} className="w-full px-3 py-2 border rounded-lg font-mono"/>
-                          </div>
                       </div>
                       <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm space-y-1">
                           <div className="flex justify-between font-bold text-slate-900 text-lg border-t pt-2 border-slate-200">
                               <span>Total Item:</span>
-                              <span>${(((formData.unit_price * (1 + formData.tax_percent/100)) + formData.shipping_cost) * formData.quantity).toFixed(2)}</span>
+                              <span>${(((formData.unit_price * (1 + formData.tax_percent/100))) * formData.quantity).toFixed(2)}</span>
                           </div>
                       </div>
                   </div>

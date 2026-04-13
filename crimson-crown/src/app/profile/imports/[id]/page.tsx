@@ -605,20 +605,19 @@ export default function UserOrderDetailPage() {
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
                     <thead className="bg-white text-slate-500 uppercase text-xs font-bold border-b border-slate-100">
-                        <tr>
-                            <th className="px-4 py-3 w-16">Img</th>
-                            <th className="px-4 py-3">Producto</th>
-                            <th className="px-4 py-3 text-center">Cant.</th>
-                            <th className="px-4 py-3 text-right hidden sm:table-cell">
-                                {isInitiated ? 'Precio Estimado' : 'Precio Final'}
-                            </th>
-                            <th className="px-4 py-3 text-right hidden sm:table-cell">Tax</th>
-                            <th className="px-4 py-3 text-right hidden sm:table-cell">Envío</th>
-                            <th className="px-4 py-3 text-right">Total Item</th>
-                            <th className="px-4 py-3 text-center">Disponibilidad</th>
-                            {(isInitiated || isQuoted) && <th className="px-4 py-3 text-right"></th>}
-                        </tr>
-                    </thead>
+                      <tr>
+                          <th className="px-4 py-3 w-16">Img</th>
+                          <th className="px-4 py-3">Producto</th>
+                          <th className="px-4 py-3 text-center">Cant.</th>
+                          <th className="px-4 py-3 text-right hidden sm:table-cell">
+                              {isInitiated ? 'Precio Estimado' : 'Precio Final'}
+                          </th>
+                          <th className="px-4 py-3 text-right hidden sm:table-cell">Tax</th>
+                          <th className="px-4 py-3 text-right">Total Item</th>
+                          <th className="px-4 py-3 text-center">Disponibilidad</th>
+                          {(isInitiated || isQuoted) && <th className="px-4 py-3 text-right"></th>}
+                      </tr>
+                  </thead>
                     <tbody className="divide-y divide-slate-100">
                         {items.map((item) => {
                             const qty = Number(item.quantity || 1)
@@ -695,9 +694,6 @@ export default function UserOrderDetailPage() {
                                     <td className="px-4 py-3 text-right font-mono text-xs text-slate-400 hidden sm:table-cell">
                                         +${taxAmount.toFixed(2)} <span className="text-[9px]">({taxPct}%)</span>
                                     </td>
-                                    <td className="px-4 py-3 text-right font-mono text-xs text-slate-400 hidden sm:table-cell">
-                                        +${ship.toFixed(2)}
-                                    </td>
                                     <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">${totalItem.toFixed(2)}</td>
                                     <td className="px-4 py-3 text-center">
                                       {item.is_delivered ? (
@@ -728,7 +724,7 @@ export default function UserOrderDetailPage() {
                         {/* Footer Totales */}
                         {items.length > 0 && (
                           <tr className="bg-slate-50 border-t border-slate-200">
-                              <td colSpan={isInitiated ? 5 : 6} className="px-4 py-4 text-right font-bold text-slate-600 uppercase text-xs hidden sm:table-cell align-top pt-5">
+                              <td colSpan={isInitiated ? 4 : 5} className="px-4 py-4 text-right font-bold text-slate-600 uppercase text-xs hidden sm:table-cell align-top pt-5">
                                   {isInitiated ? 'Total Estimado:' : 'Total Final Orden:'}
                               </td>
                               <td colSpan={2} className="px-4 py-4 text-right sm:text-left">
