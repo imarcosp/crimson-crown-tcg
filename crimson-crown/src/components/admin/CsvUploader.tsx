@@ -71,6 +71,53 @@ export default function CsvUploader() {
 
   const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+  const getInitialPriceFromExternal = async (
+    scryfallId: string | null,
+    finish: string,
+    condition: string
+  ) => {
+    const fallbackPrice = 0.5
+    if (!scryfallId) return fallbackPrice
+
+    const { data, error } = await supabase
+      .from('external_prices')
+      .select('cardkingdom_retail_normal, cardkingdom_retail_foil, tcgplayer_market_normal, tcgplayer_market_foil')
+      .eq('scryfall_id', scryfallId)
+      .maybeSingle()
+
+    if (error || !data) return fallbackPrice
+
+    const normalizedFinish = String(finish || '').toLowerCase()
+    const isFoil =
+      (normalizedFinish.includes('foil') && !normalizedFinish.includes('non')) ||
+      normalizedFinish.includes('etched') ||
+      normalizedFinish.includes('halo') ||
+      normalizedFinish.includes('surge') ||
+      normalizedFinish.includes('confetti') ||
+      normalizedFinish.includes('galaxy')
+
+    const ckPrice = isFoil
+      ? Number(data.cardkingdom_retail_foil || 0)
+      : Number(data.cardkingdom_retail_normal || 0)
+    const tcgPrice = isFoil
+      ? Number(data.tcgplayer_market_foil || 0)
+      : Number(data.tcgplayer_market_normal || 0)
+
+    const basePrice = ckPrice > 0 ? ckPrice : tcgPrice
+    if (basePrice <= 0) return fallbackPrice
+
+    const normalizedCondition = String(condition || 'NM').toUpperCase()
+    let multiplier = 1
+    if (normalizedCondition === 'PL' || normalizedCondition === 'SP') multiplier = 0.85
+    if (normalizedCondition === 'HP' || normalizedCondition === 'MP') multiplier = 0.75
+    if (normalizedCondition === 'DMG') multiplier = 0.5
+
+    let finalPrice = basePrice * multiplier
+    if (finalPrice < 0.35) finalPrice = 0.35
+
+    return Math.round(finalPrice * 100) / 100
+  }
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
     if (!selectedFile) return
@@ -158,6 +205,7 @@ export default function CsvUploader() {
             } else {
               await delay(100)
               const fetchedImage = await fetchScryfallImage(scryfallId, name, setName)
+              const initialPrice = await getInitialPriceFromExternal(scryfallId, finish, condition)
               const rpcPayload = {
                 p_name: normName,
                 p_set_name: normSet,
@@ -167,7 +215,7 @@ export default function CsvUploader() {
                 p_finish: finish,
                 p_condition: condition,
                 p_language: language,
-                p_price_usd: 0.5,
+                p_price_usd: initialPrice,
                 p_image_url: fetchedImage || null,
                 p_metadata: null,
                 p_stock: stockToAdd,
@@ -185,7 +233,7 @@ export default function CsvUploader() {
                   scryfall_id: scryfallId,
                   tcg: 'Magic',
                   stock: stockToAdd,
-                  price_usd: 0.5,
+                  price_usd: initialPrice,
                   is_manual_price: false,
                   condition,
                   language,
@@ -339,7 +387,7 @@ export default function CsvUploader() {
             {stats.errors > 0 && <span className="text-red-500 block mt-2">Errores: {stats.errors}</span>}
           </p>
           <button onClick={() => window.location.reload()} className="px-8 py-3 rounded-lg bg-[#0F172A] text-white font-bold hover:bg-slate-800 shadow-lg">Volver al Inventario</button>
-          <p className="text-xs text-slate-400 mt-4">No olvides correr el script de precios ahora.</p>
+          <p className="text-xs text-slate-400 mt-4">Los precios se asignaron al importar cuando hubo referencia en `external_prices`.</p>
         </div>
       )}
     </div>
