@@ -13,6 +13,8 @@ export default function InventoryPage() {
   const [editing, setEditing] = useState<any | null>(null)
   const [creating, setCreating] = useState(false)
   const [productToDelete, setProductToDelete] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [view, setView] = useState<'list' | 'csv'>('list')
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -84,6 +86,11 @@ export default function InventoryPage() {
     return result
   }, [items, searchTerm, selectedCategory, showManualOnly, showOutOfStock])
 
+  useEffect(() => {
+    const visibleIds = new Set(filteredItems.map((item) => item.id))
+    setSelectedIds((prev) => prev.filter((id) => visibleIds.has(id)))
+  }, [filteredItems])
+
   const stats = useMemo(() => {
     return filteredItems.reduce((acc, item) => {
       const qty = Number(item.stock || 0)
@@ -111,6 +118,10 @@ export default function InventoryPage() {
     return filteredItems.slice(start, start + ITEMS_PER_PAGE)
   }, [filteredItems, currentPage])
 
+  const currentPageIds = useMemo(() => paginatedItems.map((item) => item.id), [paginatedItems])
+  const allFilteredSelected = filteredItems.length > 0 && filteredItems.every((item) => selectedIds.includes(item.id))
+  const allPageSelected = currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.includes(id))
+
   const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE)
 
   const confirmDelete = async () => {
@@ -118,6 +129,37 @@ export default function InventoryPage() {
     const { error } = await supabase.from('products').delete().eq('id', productToDelete)
     if (!error) load()
     setProductToDelete(null)
+  }
+
+  const toggleSelectedId = (id: string) => {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((currentId) => currentId !== id) : [...prev, id])
+  }
+
+  const toggleCurrentPageSelection = () => {
+    setSelectedIds((prev) => {
+      if (allPageSelected) return prev.filter((id) => !currentPageIds.includes(id))
+      return Array.from(new Set([...prev, ...currentPageIds]))
+    })
+  }
+
+  const toggleFilteredSelection = () => {
+    const filteredIds = filteredItems.map((item) => item.id)
+    setSelectedIds((prev) => {
+      if (allFilteredSelected) return prev.filter((id) => !filteredIds.includes(id))
+      return Array.from(new Set([...prev, ...filteredIds]))
+    })
+  }
+
+  const clearSelection = () => setSelectedIds([])
+
+  const confirmBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    const { error } = await supabase.from('products').delete().in('id', selectedIds)
+    if (!error) {
+      setSelectedIds([])
+      setBulkDeleteOpen(false)
+      load()
+    }
   }
 
   return (
@@ -200,6 +242,36 @@ export default function InventoryPage() {
         )}
       </div>
 
+      {view === 'list' && filteredItems.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-lg border border-slate-200">
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={toggleCurrentPageSelection} className="px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors">
+              {allPageSelected ? 'Deseleccionar página' : 'Seleccionar página'}
+            </button>
+            <button onClick={toggleFilteredSelection} className="px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors">
+              {allFilteredSelected ? 'Deseleccionar filtrados' : 'Seleccionar filtrados'}
+            </button>
+            {selectedIds.length > 0 && (
+              <button onClick={clearSelection} className="px-3 py-1.5 rounded-md border border-slate-200 bg-white text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                Limpiar selección
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-500">
+              Seleccionados: <span className="font-bold text-slate-800">{selectedIds.length}</span>
+            </span>
+            <button
+              onClick={() => setBulkDeleteOpen(true)}
+              disabled={selectedIds.length === 0}
+              className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              <Trash2 size={16} /> Eliminar seleccionados
+            </button>
+          </div>
+        </div>
+      )}
+
       {view === 'list' ? (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col h-full">
           {loading ? (
@@ -212,6 +284,9 @@ export default function InventoryPage() {
                 <table className="min-w-full text-sm text-left">
                   <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
                     <tr>
+                      <th className="px-4 py-3 text-center">
+                        <input type="checkbox" checked={allPageSelected} onChange={toggleCurrentPageSelection} className="h-4 w-4 rounded border-slate-300 text-[#9D1B1B] focus:ring-[#9D1B1B]" />
+                      </th>
                       <th className="px-4 py-3">Imagen</th>
                       <th className="px-4 py-3">Detalle</th>
                       <th className="px-4 py-3 text-center">Estado</th>
@@ -225,6 +300,9 @@ export default function InventoryPage() {
                   <tbody className="divide-y divide-slate-100">
                     {paginatedItems.map((it) => (
                       <tr key={it.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-2 text-center">
+                          <input type="checkbox" checked={selectedIds.includes(it.id)} onChange={() => toggleSelectedId(it.id)} className="h-4 w-4 rounded border-slate-300 text-[#9D1B1B] focus:ring-[#9D1B1B]" />
+                        </td>
                         <td className="px-4 py-2">
                           {it.image_url ? (
                             <div 
@@ -310,6 +388,21 @@ export default function InventoryPage() {
             <div className="flex justify-end gap-3">
               <button onClick={() => setProductToDelete(null)} className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors">Cancelar</button>
               <button onClick={confirmDelete} className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-900/20">Sí, eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl border border-slate-200 p-6 animate-in fade-in zoom-in duration-200">
+            <h3 className="text-lg font-bold text-[#0F172A] mb-2">Confirmar eliminación masiva</h3>
+            <p className="text-sm text-slate-600 mb-6">
+              Estás a punto de borrar <span className="font-bold text-slate-900">{selectedIds.length}</span> productos seleccionados. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setBulkDeleteOpen(false)} className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors">Cancelar</button>
+              <button onClick={confirmBulkDelete} className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-900/20">Sí, eliminar</button>
             </div>
           </div>
         </div>

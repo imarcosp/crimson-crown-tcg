@@ -1,13 +1,14 @@
 "use client"
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { DollarSign, Images, Ticket, Save, Plus, Trash2, Loader2, Upload, Image as ImageIcon } from 'lucide-react'
+import { DollarSign, Images, Ticket, Save, Plus, Trash2, Loader2, FileText } from 'lucide-react'
 import AdminBanners from '@/app/admin/banners/page'
 import AdminCoupons from '@/app/admin/coupons/page'
+import { DEFAULT_HOW_TO_CONTENT, parseHowToContent, type HowToContent, type HowToSection } from '@/lib/howToContent'
 
 export default function AdminPricesMasterPage() {
   const supabase = createClient()
-  const [tab, setTab] = useState<'currency' | 'banners' | 'coupons' | 'orders'>('currency')
+  const [tab, setTab] = useState<'currency' | 'banners' | 'coupons' | 'orders' | 'howto'>('currency')
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -29,6 +30,7 @@ export default function AdminPricesMasterPage() {
 
   const [faqs, setFaqs] = useState<any[]>([])
   const [newFaq, setNewFaq] = useState({ question: '', answer: '', display_order: 0 })
+  const [howToContent, setHowToContent] = useState<HowToContent>(DEFAULT_HOW_TO_CONTENT)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -54,6 +56,7 @@ export default function AdminPricesMasterPage() {
             const val = cleanValue(item.value)
             if (item.key === 'exchange_rate') rate = String(val || '')
             if (item.key === 'enable_imports') setEnableImports(val === true || val === 'true')
+            if (item.key === 'how_to_content') setHowToContent(parseHowToContent(val))
             if (Object.prototype.hasOwnProperty.call(nextInfo, item.key)) nextInfo[item.key] = val
           })
           setInfo(nextInfo)
@@ -114,6 +117,59 @@ export default function AdminPricesMasterPage() {
     }
   }
 
+  const updateHowToSection = (sectionKey: keyof Pick<HowToContent, 'stock' | 'imports' | 'moxfield' | 'sell'>, nextSection: HowToSection) => {
+    setHowToContent((prev) => ({ ...prev, [sectionKey]: nextSection }))
+  }
+
+  const updateHowToBullets = (sectionKey: keyof Pick<HowToContent, 'stock' | 'moxfield' | 'sell'>, rawValue: string) => {
+    const bullets = rawValue.split('\n').map((line) => line.trim()).filter(Boolean)
+    updateHowToSection(sectionKey, { ...howToContent[sectionKey], bullets })
+  }
+
+  const updateHowToStep = (index: number, field: 'title' | 'description', value: string) => {
+    const nextSteps = [...(howToContent.imports.steps || [])]
+    nextSteps[index] = { ...nextSteps[index], [field]: value }
+    updateHowToSection('imports', { ...howToContent.imports, steps: nextSteps })
+  }
+
+  const updateHowToFaq = (index: number, field: 'question' | 'answer', value: string) => {
+    const nextFaqs = [...howToContent.faqs]
+    nextFaqs[index] = { ...nextFaqs[index], [field]: value }
+    setHowToContent((prev) => ({ ...prev, faqs: nextFaqs }))
+  }
+
+  const addHowToFaq = () => {
+    setHowToContent((prev) => ({
+      ...prev,
+      faqs: [...prev.faqs, { question: '', answer: '' }],
+    }))
+  }
+
+  const removeHowToFaq = (index: number) => {
+    setHowToContent((prev) => ({
+      ...prev,
+      faqs: prev.faqs.filter((_, currentIndex) => currentIndex !== index),
+    }))
+  }
+
+  const handleSaveHowTo = async () => {
+    setSaving(true)
+    try {
+      const payload = [{
+        key: 'how_to_content',
+        value: JSON.stringify(howToContent),
+        updated_at: new Date().toISOString(),
+      }]
+      const { error } = await supabase.from('system_settings').upsert(payload)
+      if (error) throw error
+      alert('¡Contenido de /info/how-to guardado correctamente!')
+    } catch (e: any) {
+      alert('Error al guardar /info/how-to: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleAddFaq = async () => {
     if (!newFaq.question || !newFaq.answer) return alert('Completa pregunta y respuesta')
     const { data, error } = await supabase.from('faqs').insert([newFaq]).select()
@@ -140,6 +196,7 @@ export default function AdminPricesMasterPage() {
         <button onClick={() => setTab('banners')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='banners' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><Images size={16}/> Banners Home</button>
         <button onClick={() => setTab('coupons')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='coupons' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><Ticket size={16}/> Cupones</button>
         <button onClick={() => setTab('orders')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='orders' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><Plus size={16}/> Pedidos</button>
+        <button onClick={() => setTab('howto')} className={`px-4 py-2 font-bold text-sm flex items-center gap-2 ${tab==='howto' ? 'text-[#9D1B1B] border-b-2 border-[#9D1B1B]' : 'text-slate-600'}`}><FileText size={16}/> Cómo Funciona</button>
       </div>
 
       {tab === 'currency' && (
@@ -293,6 +350,131 @@ export default function AdminPricesMasterPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {tab === 'howto' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h2 className="text-xl font-bold mb-4">Hero / Encabezado</h2>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Título Inicio</label>
+                <input className="w-full border rounded p-2 text-sm" value={howToContent.heroTitleStart} onChange={(e) => setHowToContent({ ...howToContent, heroTitleStart: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Título Resaltado</label>
+                <input className="w-full border rounded p-2 text-sm" value={howToContent.heroTitleHighlight} onChange={(e) => setHowToContent({ ...howToContent, heroTitleHighlight: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Título Final</label>
+                <input className="w-full border rounded p-2 text-sm" value={howToContent.heroTitleEnd} onChange={(e) => setHowToContent({ ...howToContent, heroTitleEnd: e.target.value })} />
+              </div>
+            </div>
+            <div className="mt-4">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descripción Principal</label>
+              <textarea className="w-full border rounded p-2 text-sm" rows={3} value={howToContent.heroDescription} onChange={(e) => setHowToContent({ ...howToContent, heroDescription: e.target.value })} />
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+            <h2 className="text-xl font-bold">Secciones</h2>
+
+            {([
+              { key: 'stock', title: 'Stock Local', bulletsLabel: 'Beneficios', hasSteps: false, hasHref: true },
+              { key: 'imports', title: 'Pedidos al Exterior', bulletsLabel: 'Bullets', hasSteps: true, hasHref: false },
+              { key: 'moxfield', title: 'Importador de Moxfield', bulletsLabel: 'Beneficios', hasSteps: false, hasHref: true },
+              { key: 'sell', title: 'Vender Cartas', bulletsLabel: 'Beneficios', hasSteps: false, hasHref: true },
+            ] as const).map((sectionMeta) => {
+              const section = howToContent[sectionMeta.key]
+
+              return (
+                <div key={sectionMeta.key} className="border rounded-xl p-4 space-y-4">
+                  <h3 className="font-bold text-slate-800">{sectionMeta.title}</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Badge</label>
+                      <input className="w-full border rounded p-2 text-sm" value={section.badge} onChange={(e) => updateHowToSection(sectionMeta.key, { ...section, badge: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label>
+                      <input className="w-full border rounded p-2 text-sm" value={section.title} onChange={(e) => updateHowToSection(sectionMeta.key, { ...section, title: e.target.value })} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descripción</label>
+                    <textarea className="w-full border rounded p-2 text-sm" rows={3} value={section.description} onChange={(e) => updateHowToSection(sectionMeta.key, { ...section, description: e.target.value })} />
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Texto del Botón</label>
+                      <input className="w-full border rounded p-2 text-sm" value={section.ctaLabel} onChange={(e) => updateHowToSection(sectionMeta.key, { ...section, ctaLabel: e.target.value })} />
+                    </div>
+                    {sectionMeta.hasHref && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Link del Botón</label>
+                        <input className="w-full border rounded p-2 text-sm" value={section.ctaHref || ''} onChange={(e) => updateHowToSection(sectionMeta.key, { ...section, ctaHref: e.target.value })} />
+                      </div>
+                    )}
+                  </div>
+
+                  {!sectionMeta.hasSteps && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{sectionMeta.bulletsLabel} (uno por línea)</label>
+                      <textarea className="w-full border rounded p-2 text-sm font-mono" rows={4} value={section.bullets.join('\n')} onChange={(e) => updateHowToBullets(sectionMeta.key as 'stock' | 'moxfield' | 'sell', e.target.value)} />
+                    </div>
+                  )}
+
+                  {sectionMeta.hasSteps && (
+                    <div className="grid gap-4 md:grid-cols-3">
+                      {(section.steps || []).map((step, index) => (
+                        <div key={index} className="border rounded-lg p-3 bg-slate-50 space-y-2">
+                          <label className="block text-xs font-bold text-slate-500 uppercase">Paso {index + 1} Título</label>
+                          <input className="w-full border rounded p-2 text-sm" value={step.title} onChange={(e) => updateHowToStep(index, 'title', e.target.value)} />
+                          <label className="block text-xs font-bold text-slate-500 uppercase">Paso {index + 1} Descripción</label>
+                          <textarea className="w-full border rounded p-2 text-sm" rows={3} value={step.description} onChange={(e) => updateHowToStep(index, 'description', e.target.value)} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold">FAQ de /info/how-to</h2>
+              <button onClick={addHowToFaq} className="bg-emerald-600 text-white px-3 py-1.5 rounded text-sm font-bold flex items-center gap-2"><Plus size={16}/> Agregar FAQ</button>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Título FAQ</label>
+              <input className="w-full border rounded p-2 text-sm" value={howToContent.faqTitle} onChange={(e) => setHowToContent({ ...howToContent, faqTitle: e.target.value })} />
+            </div>
+            <div className="space-y-3">
+              {howToContent.faqs.map((faq, index) => (
+                <div key={index} className="border rounded-lg p-4 bg-slate-50 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <p className="font-bold text-sm text-slate-700">FAQ #{index + 1}</p>
+                    <button onClick={() => removeHowToFaq(index)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16}/></button>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Pregunta</label>
+                    <input className="w-full border rounded p-2 text-sm" value={faq.question} onChange={(e) => updateHowToFaq(index, 'question', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Respuesta</label>
+                    <textarea className="w-full border rounded p-2 text-sm" rows={3} value={faq.answer} onChange={(e) => updateHowToFaq(index, 'answer', e.target.value)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <button onClick={handleSaveHowTo} disabled={saving} className="bg-[#0F172A] text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-black transition-colors text-sm">
+                {saving ? <Loader2 className="animate-spin h-4 w-4"/> : <Save className="h-4 w-4"/>}
+                Guardar /info/how-to
+              </button>
             </div>
           </div>
         </div>
