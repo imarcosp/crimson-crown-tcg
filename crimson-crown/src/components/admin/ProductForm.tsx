@@ -42,6 +42,8 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
   const [mode, setMode] = useState<'Magic' | 'Other'>('Magic')
   const [isRiftbound, setIsRiftbound] = useState(false)
   const [availableFinishes, setAvailableFinishes] = useState<string[] | null>(null)
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([])
+  const [subcategoryOptions, setSubcategoryOptions] = useState<Record<string, string[]>>({})
   const supabase = createClient()
 
   const [formData, setFormData] = useState({
@@ -58,7 +60,15 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
     collector_number: '',
     scryfall_id: '',
     is_manual_price: false,
-    metadata: { might: null as number | null, energy: null as number | null, power: null as number | null, type: '', gallery: [] as string[] },
+    metadata: {
+      might: null as number | null,
+      energy: null as number | null,
+      power: null as number | null,
+      type: '',
+      gallery: [] as string[],
+      subcategory: '',
+      manual_category_mode: false,
+    },
   })
 
   // ... (Resto del estado y useEffects igual) ...
@@ -81,12 +91,73 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
   }, [availableFinishes, mode])
 
   useEffect(() => {
+    let mounted = true
+
+    const loadCategoryOptions = async () => {
+      try {
+        let from = 0
+        const PAGE_SIZE = 1000
+        let keepLoading = true
+        const categories = new Set<string>()
+        const subcategoriesByCategory = new Map<string, Set<string>>()
+
+        while (keepLoading) {
+          const { data, error } = await supabase
+            .from('products')
+            .select('tcg, metadata')
+            .range(from, from + PAGE_SIZE - 1)
+
+          if (error) throw error
+
+          const rows = Array.isArray(data) ? data : []
+          rows.forEach((row: any) => {
+            const category = String(row?.tcg || '').trim()
+            if (!category) return
+            categories.add(category)
+
+            const subcategory = String(row?.metadata?.subcategory || '').trim()
+            if (!subcategory) return
+
+            if (!subcategoriesByCategory.has(category)) {
+              subcategoriesByCategory.set(category, new Set<string>())
+            }
+            subcategoriesByCategory.get(category)?.add(subcategory)
+          })
+
+          if (rows.length < PAGE_SIZE) keepLoading = false
+          else from += PAGE_SIZE
+        }
+
+        if (!mounted) return
+
+        setCategoryOptions(Array.from(categories).sort((a, b) => a.localeCompare(b)))
+        setSubcategoryOptions(
+          Array.from(subcategoriesByCategory.entries()).reduce((acc, [category, values]) => {
+            acc[category] = Array.from(values).sort((a, b) => a.localeCompare(b))
+            return acc
+          }, {} as Record<string, string[]>)
+        )
+      } catch (error) {
+        console.error('Error cargando categorías manuales:', error)
+      }
+    }
+
+    loadCategoryOptions()
+
+    return () => {
+      mounted = false
+    }
+  }, [supabase])
+
+  useEffect(() => {
     if (initial) {
       const rb = initial.tcg === 'Riftbound'
-      setIsRiftbound(rb)
-      setMode(initial.tcg === 'Magic' ? 'Magic' : 'Other')
-      setAvailableFinishes(null)
       const meta = initial.metadata || {}
+      const isManualCategoryMode = meta.manual_category_mode === true
+      const shouldOpenAsMagicAuto = initial.tcg === 'Magic' && !!initial.scryfall_id && !isManualCategoryMode
+      setIsRiftbound(rb)
+      setMode(shouldOpenAsMagicAuto ? 'Magic' : 'Other')
+      setAvailableFinishes(null)
       setFormData({
         name: initial.name || '',
         set_name: initial.set_name || '',
@@ -101,7 +172,19 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
         collector_number: initial.collector_number || '',
         scryfall_id: rb ? '' : (initial.scryfall_id || ''),
         is_manual_price: initial.is_manual_price || false,
-        metadata: { ...meta, gallery: meta.gallery || [] },
+        metadata: {
+          might: null,
+          energy: null,
+          power: null,
+          type: '',
+          gallery: [],
+          subcategory: '',
+          manual_category_mode: false,
+          ...meta,
+          gallery: meta.gallery || [],
+          subcategory: meta.subcategory || '',
+          manual_category_mode: isManualCategoryMode,
+        },
       })
       const existingMedia = []
       if (initial.image_url) existingMedia.push({ url: initial.image_url })
@@ -152,7 +235,12 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
         finish: 'Non-Foil',
         price_usd: Number(card.priceUsd || card.price_usd || 0),
         is_manual_price: false,
-        metadata: card.metadata || prev.metadata,
+        metadata: {
+          ...prev.metadata,
+          ...(card.metadata || {}),
+          subcategory: '',
+          manual_category_mode: false,
+        },
       }))
       if (card.image_url) setMedia([{ url: card.image_url }])
     } else {
@@ -201,6 +289,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
         finish: initialFinish,
         price_usd: initialPrice,
         is_manual_price: false,
+        metadata: { ...prev.metadata, subcategory: '', manual_category_mode: false },
       }))
       setAvailableFinishes(uniqueNext.length ? uniqueNext : null)
       if (card.image_url) setMedia([{ url: card.image_url }])
@@ -276,16 +365,26 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
     const mainImage = finalUrls[0] || ''
     const gallery = finalUrls.slice(1)
     const normalize = (s: any) => String(s || '').trim().replace(/\s+/g, ' ')
+    const normalizedCategory = normalize(formData.tcg)
+    const normalizedSubcategory = normalize(formData.metadata?.subcategory)
+    const nextMetadata: any = {
+      ...formData.metadata,
+      gallery,
+      manual_category_mode: mode === 'Other' && normalizedCategory === 'Magic',
+    }
+    if (normalizedSubcategory) nextMetadata.subcategory = normalizedSubcategory
+    else delete nextMetadata.subcategory
     const payload: any = { 
         ...formData, 
         name: normalize(formData.name),
         set_name: normalize(formData.set_name),
+        tcg: normalizedCategory,
         language: normalize(formData.language),
         condition: normalize(formData.condition),
         finish: normalize(formData.finish),
         scryfall_id: formData.scryfall_id || null,
         image_url: mainImage,
-        metadata: { ...formData.metadata, gallery }
+        metadata: nextMetadata,
     }
     if (mode === 'Other') {
       payload.scryfall_id = undefined
@@ -351,8 +450,8 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full cursor-pointer"><X size={20} /></button>
         </div>
         <div className="flex border-b">
-          <button onClick={() => { setMode('Magic'); setFormData((p) => ({ ...p, tcg: 'Magic' })) }} className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors cursor-pointer ${mode === 'Magic' ? 'border-purple-600 text-purple-700 bg-purple-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}>✨ Magic (Auto)</button>
-          <button onClick={() => { setMode('Other'); setFormData((p) => ({ ...p, tcg: 'Pokémon' })) }} className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors cursor-pointer ${mode === 'Other' ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}>📦 Otros TCG / Accesorios (Manual)</button>
+          <button onClick={() => { setMode('Magic'); setFormData((p) => ({ ...p, tcg: 'Magic', metadata: { ...p.metadata, subcategory: '', manual_category_mode: false } })) }} className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors cursor-pointer ${mode === 'Magic' ? 'border-purple-600 text-purple-700 bg-purple-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}>✨ Magic (Auto)</button>
+          <button onClick={() => { setMode('Other'); setFormData((p) => ({ ...p, tcg: p.tcg || 'Magic', metadata: { ...p.metadata, manual_category_mode: p.tcg === 'Magic' } })) }} className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors cursor-pointer ${mode === 'Other' ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}>📦 Otros TCG / Accesorios (Manual)</button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {mode === 'Magic' && (
@@ -389,25 +488,49 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
             </div>
             <div>
               <label className="label-form">Categoría</label>
-              <select value={formData.tcg} onChange={(e) => setFormData({ ...formData, tcg: e.target.value })} className="input-form" disabled={mode === 'Magic'}>
-                <option>Magic</option>
-                <option>Pokémon</option>
-                <option>Lorcana</option>
-                <option>Yu-Gi-Oh!</option>
-                <option>One Piece</option>
-                <option>Star Wars</option>
-                <option>Riftbound</option>
-                <option>Secret Lair</option>
-                <option disabled>──────────</option>
-                <option>Folios</option>
-                <option>Top Loaders</option>
-                <option>Perfect Fit</option>
-                <option>Deck Boxes</option>
-                <option>Dados</option>
-                <option>Carpetas</option>
-                <option>Playmats</option>
-              </select>
+              {mode === 'Magic' ? (
+                <input value="Magic" className="input-form bg-slate-50" readOnly />
+              ) : (
+                <>
+                  <input
+                    list="manual-category-options"
+                    value={formData.tcg}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, tcg: e.target.value }))}
+                    className="input-form"
+                    placeholder="Ej: Magic, Pokémon, Accesorios..."
+                  />
+                  <datalist id="manual-category-options">
+                    {categoryOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                  <p className="text-[10px] text-slate-500 mt-1">Puedes elegir una categoría existente o escribir una nueva.</p>
+                </>
+              )}
             </div>
+            {mode === 'Other' && (
+              <div>
+                <label className="label-form">Subcategoría (Opcional)</label>
+                <input
+                  list="manual-subcategory-options"
+                  value={String(formData.metadata?.subcategory || '')}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      metadata: { ...prev.metadata, subcategory: e.target.value },
+                    }))
+                  }
+                  className="input-form"
+                  placeholder="Ej: Precons, Sellado, Deck Boxes..."
+                />
+                <datalist id="manual-subcategory-options">
+                  {(subcategoryOptions[formData.tcg] || []).map((option) => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
+                <p className="text-[10px] text-slate-500 mt-1">Se mostrará en el menú sólo si hay stock.</p>
+              </div>
+            )}
             <div>
               <div className="flex justify-between">
                 <label className="label-form">Precio (USD)</label>

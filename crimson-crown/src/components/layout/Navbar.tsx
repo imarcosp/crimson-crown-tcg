@@ -15,6 +15,11 @@ import { ADMIN_EMAILS } from '@/lib/constants'
 import NotificationsMenu from './NotificationsMenu'
 import { siteConfig } from '@/config/site'
 
+type MenuCategory = {
+  category: string
+  subcategories: string[]
+}
+
 export default function Navbar() {
   const currency = useStore((s) => s.currency)
   const { exchangeRate, enableImports } = useConfig()
@@ -27,7 +32,8 @@ export default function Navbar() {
   // Estados de los submenús del Sidebar
   const [isMtgOpen, setIsMtgOpen] = useState(false)
   const [isSealedOpen, setIsSealedOpen] = useState(false)
-  const [isAccessoriesOpen, setIsAccessoriesOpen] = useState(false)
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([])
+  const [openDynamicCategories, setOpenDynamicCategories] = useState<Record<string, boolean>>({})
 
   const toggleCart = useUIStore((s) => s.toggleCart)
   const toggleHangModal = useUIStore((s) => s.toggleHangModal)
@@ -94,6 +100,67 @@ export default function Navbar() {
       setIsMobileUserMenuOpen(false)
   }, [pathname])
 
+  useEffect(() => {
+    let mounted = true
+
+    const loadMenuCategories = async () => {
+      try {
+        let from = 0
+        const PAGE_SIZE = 1000
+        let keepLoading = true
+        const categoryMap = new Map<string, Set<string>>()
+
+        while (keepLoading) {
+          const { data, error } = await supabase
+            .from('products')
+            .select('tcg, metadata, name')
+            .gt('stock', 0)
+            .not('name', 'ilike', '%(ARCHIVADO)%')
+            .range(from, from + PAGE_SIZE - 1)
+
+          if (error) throw error
+
+          const rows = Array.isArray(data) ? data : []
+          rows.forEach((row: any) => {
+            const category = String(row?.tcg || '').trim()
+            if (!category) return
+
+            if (!categoryMap.has(category)) {
+              categoryMap.set(category, new Set<string>())
+            }
+
+            const subcategory = String(row?.metadata?.subcategory || '').trim()
+            if (subcategory) {
+              categoryMap.get(category)?.add(subcategory)
+            }
+          })
+
+          if (rows.length < PAGE_SIZE) keepLoading = false
+          else from += PAGE_SIZE
+        }
+
+        if (!mounted) return
+
+        const nextMenu = Array.from(categoryMap.entries())
+          .map(([category, subcategories]) => ({
+            category,
+            subcategories: Array.from(subcategories).sort((a, b) => a.localeCompare(b)),
+          }))
+          .sort((a, b) => a.category.localeCompare(b.category))
+
+        setMenuCategories(nextMenu)
+      } catch (error) {
+        console.error('Error cargando categorías del menú:', error)
+      }
+    }
+
+    loadMenuCategories()
+
+    return () => {
+      mounted = false
+    }
+  }, [supabase])
+
   const handleLogout = async () => { await supabase.auth.signOut(); router.refresh(); router.replace('/') }
 
   const openFeedback = () => { 
@@ -122,6 +189,23 @@ export default function Navbar() {
       setIsMobileUserMenuOpen(false)
   }
 
+  const buildCatalogHref = (category: string, subcategory?: string) => {
+    const params = new URLSearchParams({ tcg: category, sort: 'newest' })
+    if (subcategory) params.set('subcategory', subcategory)
+    return `/catalog?${params.toString()}`
+  }
+
+  const toggleDynamicCategory = (category: string) => {
+    setOpenDynamicCategories((prev) => ({ ...prev, [category]: !prev[category] }))
+  }
+
+  const hasMenuCategory = (category: string) => menuCategories.some((entry) => entry.category === category)
+  const magicMenu = menuCategories.find((entry) => entry.category === 'Magic') || null
+  const dynamicCategories = menuCategories.filter((entry) => {
+    if (['Magic', 'Riftbound', 'Secret Lair'].includes(entry.category)) return false
+    return true
+  })
+
   const SidebarContent = () => (
       <div className="flex flex-col h-full text-slate-800 bg-white shadow-2xl border-r border-slate-200">
           <div className="p-4 border-b flex items-center justify-between bg-slate-50">
@@ -129,27 +213,36 @@ export default function Navbar() {
               <button onClick={closeMenus} className="p-2 hover:bg-slate-200 rounded-full cursor-pointer transition-colors"><X size={20}/></button>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              <button onClick={() => setIsMtgOpen(!isMtgOpen)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 group cursor-pointer transition-colors">
-                  <div className="flex items-center gap-3"><Sparkles className="text-purple-600" size={18}/> MTG Singles</div>
-                  <ChevronDown size={16} className={`transition-transform duration-300 ${isMtgOpen ? 'rotate-180' : ''}`}/>
-              </button>
-              {isMtgOpen && (
-                  <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
-                      <Link href="/catalog?tcg=Magic&sort=newest" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
-                          Ver todas las singles
-                      </Link>
-                      <Link href="/tools/moxfield" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
-                          Búsqueda desde Moxfield
-                      </Link>
-                  </div>
+              {magicMenu && (
+                <>
+                  <button onClick={() => setIsMtgOpen(!isMtgOpen)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 group cursor-pointer transition-colors">
+                      <div className="flex items-center gap-3"><Sparkles className="text-purple-600" size={18}/> Magic: The Gathering</div>
+                      <ChevronDown size={16} className={`transition-transform duration-300 ${isMtgOpen ? 'rotate-180' : ''}`}/>
+                  </button>
+                  {isMtgOpen && (
+                      <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
+                          <Link href={buildCatalogHref('Magic')} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
+                              Ver todo Magic
+                          </Link>
+                          {magicMenu.subcategories.map((subcategory) => (
+                            <Link key={subcategory} href={buildCatalogHref('Magic', subcategory)} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
+                                {subcategory}
+                            </Link>
+                          ))}
+                          <Link href="/tools/moxfield" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
+                              Búsqueda desde Moxfield
+                          </Link>
+                      </div>
+                  )}
+                </>
               )}
-              {siteConfig.features?.showRiftbound && (
-                <Link href="/catalog?tcg=Riftbound&sort=newest" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
-                    <Zap className="text-yellow-500" size={18}/> Riftbound Singles
+              {siteConfig.features?.showRiftbound && hasMenuCategory('Riftbound') && (
+                <Link href={buildCatalogHref('Riftbound')} onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
+                    <Zap className="text-yellow-500" size={18}/> Riftbound
                 </Link>
               )}
-              {siteConfig.features?.showSecretLair && (
-                <Link href="/catalog?tcg=Secret Lair&sort=newest" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
+              {siteConfig.features?.showSecretLair && hasMenuCategory('Secret Lair') && (
+                <Link href={buildCatalogHref('Secret Lair')} onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
                     <Box className="text-[#9D1B1B]" size={18}/> Secret Lair
                 </Link>
               )}
@@ -165,32 +258,40 @@ export default function Navbar() {
                   </button>
                 </>
               )}
-              <div className="border-t my-2 mx-4 border-slate-100"></div>
-              {siteConfig.features?.showAccessories && (
-                <>
-                  <button onClick={() => setIsAccessoriesOpen(!isAccessoriesOpen)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 group cursor-pointer transition-colors">
-                      <div className="flex items-center gap-3"><Package className="text-blue-500" size={18}/> Accesorios</div>
-                      <ChevronDown size={16} className={`transition-transform duration-300 ${isAccessoriesOpen ? 'rotate-180' : ''}`}/>
-                  </button>
-                  {isAccessoriesOpen && (
+              {dynamicCategories.length > 0 && <div className="border-t my-2 mx-4 border-slate-100"></div>}
+              {dynamicCategories.map((entry) => {
+                const isOpen = !!openDynamicCategories[entry.category]
+                const hasSubcategories = entry.subcategories.length > 0
+
+                if (!hasSubcategories) {
+                  return (
+                    <Link key={entry.category} href={buildCatalogHref(entry.category)} onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 transition-colors cursor-pointer">
+                        <Package className="text-blue-500" size={18}/> {entry.category}
+                    </Link>
+                  )
+                }
+
+                return (
+                  <div key={entry.category}>
+                    <button onClick={() => toggleDynamicCategory(entry.category)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 rounded-lg font-bold text-sm text-slate-700 group cursor-pointer transition-colors">
+                        <div className="flex items-center gap-3"><Package className="text-blue-500" size={18}/> {entry.category}</div>
+                        <ChevronDown size={16} className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}/>
+                    </button>
+                    {isOpen && (
                       <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
-                          {[
-                              { name: 'Folios', tcg: 'Folios' },
-                              { name: 'Top Loaders', tcg: 'Top Loaders' },
-                              { name: 'Perfect Fit', tcg: 'Perfect Fit' },
-                              { name: 'Deck Boxes', tcg: 'Deck Boxes' },
-                              { name: 'Dados', tcg: 'Dados' },
-                              { name: 'Carpetas', tcg: 'Carpetas' },
-                              { name: 'Playmats', tcg: 'Playmats' }
-                          ].map(acc => (
-                              <Link key={acc.name} href={`/catalog?tcg=${encodeURIComponent(acc.tcg)}`} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
-                                  {acc.name}
-                              </Link>
+                          <Link href={buildCatalogHref(entry.category)} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
+                              Ver todo {entry.category}
+                          </Link>
+                          {entry.subcategories.map((subcategory) => (
+                            <Link key={subcategory} href={buildCatalogHref(entry.category, subcategory)} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
+                                {subcategory}
+                            </Link>
                           ))}
                       </div>
-                  )}
-                </>
-              )}
+                    )}
+                  </div>
+                )
+              })}
               <div className="border-t my-2 mx-4 border-slate-100"></div>
               <Link href="/info/how-to" onClick={closeMenus} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-100 rounded-lg font-medium text-sm text-slate-600 transition-colors cursor-pointer">
                   <BookOpen size={18}/> Cómo usar {siteConfig.shortName}

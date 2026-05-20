@@ -6,11 +6,6 @@ import CsvUploader from '@/components/admin/CsvUploader'
 import { Search, Package, DollarSign, Trash2, Edit, ChevronLeft, ChevronRight, Filter, Tag, EyeOff, Eye } from 'lucide-react'
 
 const ITEMS_PER_PAGE = 25
-// Actualizado con las categorías solicitadas
-const CATEGORIES = [
-    'Todas', 'Magic', 'Riftbound', 'Pokémon', 'Lorcana', 'Yu-Gi-Oh!', 'One Piece', 'Star Wars', 
-    'Folios', 'Top Loaders', 'Perfect Fit', 'Deck Boxes', 'Dados', 'Carpetas', 'Playmats'
-]
 
 export default function InventoryPage() {
   const [items, setItems] = useState<any[]>([])
@@ -99,6 +94,18 @@ export default function InventoryPage() {
     }, { count: 0, value: 0 })
   }, [filteredItems])
 
+  const categoryOptions = useMemo(() => {
+    const categories = Array.from(
+      new Set(
+        items
+          .map((item) => String(item.tcg || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b))
+
+    return ['Todas', ...categories]
+  }, [items])
+
   const paginatedItems = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE
     return filteredItems.slice(start, start + ITEMS_PER_PAGE)
@@ -157,7 +164,7 @@ export default function InventoryPage() {
                         onChange={(e) => setSelectedCategory(e.target.value)}
                         className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-200 appearance-none cursor-pointer hover:bg-slate-100 transition-colors"
                     >
-                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>
 

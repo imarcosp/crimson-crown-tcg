@@ -60,6 +60,7 @@ export default async function CatalogPage({
     set?: string
     q?: string
     tcg?: string
+    subcategory?: string
     blocked?: string
     condition?: string
     rarity?: string
@@ -98,8 +99,7 @@ export default async function CatalogPage({
   const requestedTcg = smartFilterTcg || params.tcg || ''
   const isBlocked =
     (requestedTcg === 'Riftbound' && !siteConfig.features.showRiftbound) ||
-    (requestedTcg === 'Secret Lair' && !siteConfig.features.showSecretLair) ||
-    (requestedTcg === 'Accesorios' && !siteConfig.features.showAccessories)
+    (requestedTcg === 'Secret Lair' && !siteConfig.features.showSecretLair)
   if (isBlocked) {
     const { tcg, ...rest } = params as any
     const qs = new URLSearchParams({ ...rest, blocked: requestedTcg }).toString()
@@ -124,6 +124,7 @@ export default async function CatalogPage({
 
       if (params.set) q = q.ilike('set_name', `%${params.set}%`)
       if (smartFilterTcg) q = q.eq('tcg', smartFilterTcg)
+      if (params.subcategory) q = q.contains('metadata', { subcategory: params.subcategory })
       if (params.condition) q = q.in('condition', params.condition.split(','))
       if (params.rarity) q = q.in('rarity', params.rarity.split(','))
       if (params.finish === 'foil') q = q.neq('finish', 'Non-Foil')
@@ -228,9 +229,11 @@ export default async function CatalogPage({
                 <h1 className="text-2xl font-bold text-[#1C1B22] flex items-center gap-2">
                     Catálogo 
                     {smartFilterTcg && <span className="text-slate-500 font-normal">/ {smartFilterTcg}</span>}
+                    {params.subcategory && <span className="text-slate-400 font-normal">/ {params.subcategory}</span>}
                     {isSmartSearch && <Sparkles size={18} className="text-[#9D1B1B]" />}
                 </h1>
                 {params.set && <span className="text-xs font-bold text-[#9D1B1B] bg-red-50 px-2 py-1 rounded w-fit mt-1">Set: {params.set}</span>}
+                {params.subcategory && <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded w-fit mt-1">Subcategoría: {params.subcategory}</span>}
             </div>
             <span className="text-sm text-slate-500 font-bold">{count} resultados</span>
           </div>
