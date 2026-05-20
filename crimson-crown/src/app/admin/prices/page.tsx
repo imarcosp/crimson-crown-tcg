@@ -25,7 +25,8 @@ export default function AdminPricesMasterPage() {
     contact_schedule: '',
     store_description: '',
     quote_rules: '',
-    import_warning_text: 'Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.'
+    import_warning_text: 'Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.',
+    next_japan_trip_date: '',
   })
 
   const [faqs, setFaqs] = useState<any[]>([])
@@ -324,6 +325,23 @@ export default function AdminPricesMasterPage() {
                   <input type="checkbox" className="sr-only peer" checked={enableImports} onChange={handleToggleImports} disabled={saving} />
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9D1B1B]/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#9D1B1B]"></div>
                 </label>
+              </div>
+
+              <div className="p-4 border rounded-lg bg-slate-50">
+                <label className="block text-sm font-bold text-slate-800 mb-2">Próximo viaje a Japón</label>
+                <p className="text-xs text-slate-500 mb-3">Cuando los pedidos estén deshabilitados, esta fecha mostrará una cuenta regresiva en la barra de navegación hasta el próximo viaje.</p>
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                  <input
+                    type="date"
+                    className="border rounded p-2 text-sm w-full sm:w-auto"
+                    value={info.next_japan_trip_date || ''}
+                    onChange={e => setInfo({...info, next_japan_trip_date: e.target.value})}
+                  />
+                  <button onClick={handleSaveInfo} disabled={saving} className="bg-[#0F172A] text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-black transition-colors text-sm">
+                    {saving ? <Loader2 className="animate-spin h-4 w-4"/> : <Save className="h-4 w-4"/>}
+                    Guardar fecha
+                  </button>
+                </div>
               </div>
 
               <div className="p-4 border rounded-lg bg-slate-50">

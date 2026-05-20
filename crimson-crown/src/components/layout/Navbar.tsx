@@ -22,7 +22,7 @@ type MenuCategory = {
 
 export default function Navbar() {
   const currency = useStore((s) => s.currency)
-  const { exchangeRate, enableImports } = useConfig()
+  const { exchangeRate, enableImports, nextJapanTripDate } = useConfig()
   
   // Estados de Menús
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -44,6 +44,7 @@ export default function Navbar() {
   const [userProfile, setUserProfile] = useState<any>(null)
   const lastUserId = useRef<string | null>(null)
   const pathname = usePathname()
+  const [nextTripCountdown, setNextTripCountdown] = useState<string>('')
 
   // ESTADOS FEEDBACK
   const [showFeedback, setShowFeedback] = useState(false)
@@ -99,6 +100,56 @@ export default function Navbar() {
       setIsMegaMenuOpen(false)
       setIsMobileUserMenuOpen(false)
   }, [pathname])
+
+  useEffect(() => {
+    if (enableImports || !nextJapanTripDate) {
+      setNextTripCountdown('')
+      return
+    }
+
+    const computeCountdown = () => {
+      const target = new Date(`${nextJapanTripDate}T00:00:00`)
+      const diff = target.getTime() - Date.now()
+
+      if (Number.isNaN(target.getTime()) || diff <= 0) {
+        setNextTripCountdown('')
+        return
+      }
+
+      const totalSeconds = Math.floor(diff / 1000)
+      const totalHours = Math.floor(totalSeconds / 3600)
+      const hoursPerDay = 24
+      const hoursPerWeek = 7 * hoursPerDay
+      const hoursPerMonth = 30 * hoursPerDay
+
+      let remainingHours = totalHours
+      const months = Math.floor(remainingHours / hoursPerMonth)
+      remainingHours -= months * hoursPerMonth
+
+      const weeks = Math.floor(remainingHours / hoursPerWeek)
+      remainingHours -= weeks * hoursPerWeek
+
+      const days = Math.floor(remainingHours / hoursPerDay)
+      remainingHours -= days * hoursPerDay
+
+      const hours = remainingHours
+
+      const parts: string[] = []
+      if (months > 0) parts.push(`${months} mes${months === 1 ? '' : 'es'}`)
+      if (weeks > 0 || months > 0) parts.push(`${weeks} semana${weeks === 1 ? '' : 's'}`)
+      if (days > 0 || weeks > 0 || months > 0) parts.push(`${days} día${days === 1 ? '' : 's'}`)
+      parts.push(`${hours} hora${hours === 1 ? '' : 's'}`)
+
+      setNextTripCountdown(parts.join(', '))
+    }
+
+    computeCountdown()
+    const intervalId = window.setInterval(computeCountdown, 1000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [enableImports, nextJapanTripDate])
 
   useEffect(() => {
     let mounted = true
@@ -418,11 +469,19 @@ export default function Navbar() {
 
               <button onClick={toggleCart} className="relative p-2 rounded hover:bg-slate-700 cursor-pointer transition-colors"><ShoppingCart className="h-6 w-6" />{cartCount > 0 && <span className="absolute -top-1 -right-1 bg-[#9D1B1B] text-white text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full shadow-sm">{cartCount > 99 ? '99+' : cartCount}</span>}</button>
               
-              {enableImports && (
+              {enableImports ? (
                 <Link href="/hang" className="bg-[#9D1B1B] hover:bg-[#7E1515] text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); toggleHangModal() }}>
                   <ClipboardList className="h-6 w-6" /> Pedido a Japón
                 </Link>
-              )}
+              ) : nextTripCountdown ? (
+                <div className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-3 border border-[#9D1B1B]/40 bg-[#9D1B1B]/10 text-white">
+                  <Plane className="h-5 w-5 text-[#C7A316]" />
+                  <div className="flex flex-col leading-tight">
+                    <span className="text-[10px] uppercase tracking-wide text-slate-300">Tiempo restante para el próximo viaje a Japón</span>
+                    <span className="text-sm font-extrabold text-white">{nextTripCountdown}</span>
+                  </div>
+                </div>
+              ) : null}
               
               <div className="relative group z-50">
                 <button className="flex items-center gap-2 hover:text-[#9D1B1B] py-2 cursor-pointer transition-colors">

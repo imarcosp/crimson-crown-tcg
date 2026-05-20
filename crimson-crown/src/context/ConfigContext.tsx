@@ -6,6 +6,7 @@ type Ctx = {
   exchangeRate: number
   enableImports: boolean
   importWarningText: string
+  nextJapanTripDate: string | null
   setExchangeRate: (v: number) => void
   refreshExchangeRate: () => Promise<void>
 }
@@ -14,6 +15,7 @@ const Ctx = createContext<Ctx>({
     exchangeRate: EXCHANGE_RATE, 
     enableImports: true, 
     importWarningText: 'Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.',
+    nextJapanTripDate: null,
     setExchangeRate: () => {}, 
     refreshExchangeRate: async () => {} 
 })
@@ -21,6 +23,7 @@ const Ctx = createContext<Ctx>({
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [enableImports, setEnableImports] = useState<boolean>(true)
   const [importWarningText, setImportWarningText] = useState<string>('Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.')
+  const [nextJapanTripDate, setNextJapanTripDate] = useState<string | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('lastExchangeRate')
@@ -52,13 +55,17 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
         }
         setImportWarningText(cleanedText)
       }
+      if (json?.nextJapanTripDate !== undefined) {
+        const nextDate = String(json.nextJapanTripDate || '').trim()
+        setNextJapanTripDate(nextDate || null)
+      }
     } catch {}
   }, [])
 
   useEffect(() => { refreshExchangeRate() }, [refreshExchangeRate])
 
   return (
-    <Ctx.Provider value={{ exchangeRate, enableImports, importWarningText, setExchangeRate, refreshExchangeRate }}>
+    <Ctx.Provider value={{ exchangeRate, enableImports, importWarningText, nextJapanTripDate, setExchangeRate, refreshExchangeRate }}>
       {children}
     </Ctx.Provider>
   )

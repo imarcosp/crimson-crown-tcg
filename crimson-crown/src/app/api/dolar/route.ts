@@ -24,7 +24,7 @@ export async function GET() {
   const { data } = await supabase
     .from('system_settings')
     .select('*')
-    .in('key', ['dolar_cotizacion', 'enable_imports', 'import_warning_text'])
+    .in('key', ['dolar_cotizacion', 'enable_imports', 'import_warning_text', 'next_japan_trip_date'])
 
   const current = data?.find(s => s.key === 'dolar_cotizacion')
   let enableImports = true
@@ -35,7 +35,13 @@ export async function GET() {
   }
   
   let importWarningText = 'Días de Pedido: Lunes, Miércoles y Viernes.<br /><br />Los precios mostrados son una estimación. El precio final se te informará antes de pagar.'
+  let nextJapanTripDate: string | null = null
   const warningSetting = data?.find(s => s.key === 'import_warning_text')
+  const nextTripSetting = data?.find(s => s.key === 'next_japan_trip_date')
+  if (nextTripSetting && nextTripSetting.value) {
+    const rawDate = String(nextTripSetting.value).replace(/^"|"$/g, '').trim()
+    nextJapanTripDate = rawDate || null
+  }
   if (warningSetting && warningSetting.value) {
       let rawText = typeof warningSetting.value === 'string' ? warningSetting.value : String(warningSetting.value)
       
@@ -75,5 +81,5 @@ export async function GET() {
   }
 
   const clientExchangeRate = Math.floor(value / 10) * 10
-  return NextResponse.json({ exchangeRate: clientExchangeRate, enableImports, importWarningText })
+  return NextResponse.json({ exchangeRate: clientExchangeRate, enableImports, importWarningText, nextJapanTripDate })
 }
