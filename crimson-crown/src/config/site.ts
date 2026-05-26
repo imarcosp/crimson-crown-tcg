@@ -4,6 +4,7 @@ export const siteConfig = {
   description: "Tu tienda especializada en Magic: The Gathering.",
   url: "https://www.elpercherotcg.com",
   logo: "/logo.webp?v=crimson1",
+  socialImage: "/opengraph-image.png",
   socialLinks: {
     instagram: "https://www.instagram.com/elpercherotcg/",
     whatsapp: "5491134739690",

@@ -24,15 +24,24 @@ export async function GET() {
   const { data } = await supabase
     .from('system_settings')
     .select('*')
-    .in('key', ['dolar_cotizacion', 'enable_imports', 'import_warning_text', 'next_japan_trip_date'])
+    .in('key', ['dolar_cotizacion', 'exchange_rate', 'exchange_rate_auto_enabled', 'enable_imports', 'import_warning_text', 'next_japan_trip_date'])
 
   const current = data?.find(s => s.key === 'dolar_cotizacion')
+  const manualRateSetting = data?.find(s => s.key === 'exchange_rate')
+  const autoRateSetting = data?.find(s => s.key === 'exchange_rate_auto_enabled')
   let enableImports = true
+  let exchangeRateAutoEnabled = true
   const importsSetting = data?.find(s => s.key === 'enable_imports')
   if (importsSetting) {
     const val = importsSetting.value
     enableImports = val === true || val === 'true'
   }
+  if (autoRateSetting) {
+    const val = autoRateSetting.value
+    exchangeRateAutoEnabled = val === true || val === 'true'
+  }
+  const manualRateRaw = manualRateSetting?.value
+  const manualRate = typeof manualRateRaw === 'number' ? manualRateRaw : Number(String(manualRateRaw ?? '').replace(/^"|"$/g, ''))
   
   let importWarningText = 'Días de Pedido: Lunes, Miércoles y Viernes.<br /><br />Los precios mostrados son una estimación. El precio final se te informará antes de pagar.'
   let nextJapanTripDate: string | null = null
@@ -70,7 +79,14 @@ export async function GET() {
     }
   }
 
-  if (shouldUpdate) {
+  if (!exchangeRateAutoEnabled) {
+    shouldUpdate = false
+    if (!Number.isNaN(manualRate) && manualRate > 0) {
+      value = manualRate
+    }
+  }
+
+  if (exchangeRateAutoEnabled && shouldUpdate) {
     const fetched = await fetchDolarCripto()
     if (typeof fetched === 'number' && fetched > 0) {
       value = fetched
@@ -81,5 +97,5 @@ export async function GET() {
   }
 
   const clientExchangeRate = Math.floor(value / 10) * 10
-  return NextResponse.json({ exchangeRate: clientExchangeRate, enableImports, importWarningText, nextJapanTripDate })
+  return NextResponse.json({ exchangeRate: clientExchangeRate, enableImports, importWarningText, nextJapanTripDate, exchangeRateAutoEnabled })
 }

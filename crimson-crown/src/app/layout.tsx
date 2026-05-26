@@ -35,10 +35,9 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'es_AR',
     siteName: siteConfig.name,
-    // ESTO SOLUCIONA QUE NO APAREZCA IMAGEN EN GOOGLE/REDES
     images: [
       {
-        url: '/opengraph-image.png', // Asegúrate de subir esta imagen a la carpeta /public
+        url: siteConfig.socialImage,
         width: 1200,
         height: 630,
         alt: siteConfig.name,
@@ -47,6 +46,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    title: siteConfig.name,
+    description: siteConfig.description,
+    images: [siteConfig.socialImage],
   }
 };
 

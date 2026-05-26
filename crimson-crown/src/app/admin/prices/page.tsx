@@ -14,6 +14,7 @@ export default function AdminPricesMasterPage() {
   const [saving, setSaving] = useState(false)
 
   const [exchangeRate, setExchangeRate] = useState<string>('')
+  const [exchangeRateAutoEnabled, setExchangeRateAutoEnabled] = useState<boolean>(true)
   const [enableImports, setEnableImports] = useState<boolean>(true)
 
   const [info, setInfo] = useState({
@@ -56,6 +57,7 @@ export default function AdminPricesMasterPage() {
           settings.forEach((item: any) => {
             const val = cleanValue(item.value)
             if (item.key === 'exchange_rate') rate = String(val || '')
+            if (item.key === 'exchange_rate_auto_enabled') setExchangeRateAutoEnabled(val === true || val === 'true')
             if (item.key === 'enable_imports') setEnableImports(val === true || val === 'true')
             if (item.key === 'how_to_content') setHowToContent(parseHowToContent(val))
             if (Object.prototype.hasOwnProperty.call(nextInfo, item.key)) nextInfo[item.key] = val
@@ -75,12 +77,20 @@ export default function AdminPricesMasterPage() {
   }, [])
 
   const handleSaveCurrency = async () => {
+    const parsedRate = Number(exchangeRate)
+    if (!exchangeRateAutoEnabled && (!Number.isFinite(parsedRate) || parsedRate <= 0)) {
+      alert('Si deshabilitas el actualizador automático, debes guardar un tipo de cambio manual válido.')
+      return
+    }
     setSaving(true)
     try {
-      const updates = [{ key: 'exchange_rate', value: JSON.stringify(exchangeRate), updated_at: new Date().toISOString() }]
+      const updates = [
+        { key: 'exchange_rate', value: JSON.stringify(exchangeRate), updated_at: new Date().toISOString() },
+        { key: 'exchange_rate_auto_enabled', value: JSON.stringify(exchangeRateAutoEnabled), updated_at: new Date().toISOString() }
+      ]
       const { error } = await supabase.from('system_settings').upsert(updates)
       if (error) throw error
-      alert('¡Tipo de cambio guardado!')
+      alert('¡Configuración del dólar guardada!')
     } catch (e: any) {
       alert('Error al guardar el dólar: ' + e.message)
     } finally {
@@ -204,11 +214,40 @@ export default function AdminPricesMasterPage() {
         <div className="space-y-8">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h2 className="text-xl font-bold mb-4">Tipo de Cambio (Dólar)</h2>
-            <div className="flex items-center gap-3">
-              <input value={exchangeRate} onChange={e => setExchangeRate(e.target.value)} placeholder="Ej: 1200" className="border rounded p-2 w-40" />
-              <button onClick={handleSaveCurrency} disabled={saving} className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">
-                <Save size={16}/> Guardar Dólar
-              </button>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-slate-50 border rounded-lg">
+                <div>
+                  <p className="font-bold text-slate-800">Actualizador automático del dólar</p>
+                  <p className="text-xs text-slate-500">Si está habilitado, la web usa el valor del scraper. Si lo deshabilitas, la web usa el tipo de cambio manual guardado aquí.</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={exchangeRateAutoEnabled}
+                    onChange={() => setExchangeRateAutoEnabled((prev) => !prev)}
+                    disabled={saving}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#9D1B1B]/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#9D1B1B]"></div>
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-slate-800">Tipo de cambio manual</label>
+                <p className="text-xs text-slate-500">Este valor se usa solamente cuando el actualizador automático está deshabilitado.</p>
+                <div className="flex items-center gap-3">
+                  <input
+                    value={exchangeRate}
+                    onChange={e => setExchangeRate(e.target.value)}
+                    placeholder="Ej: 1200"
+                    className="border rounded p-2 w-40 disabled:bg-slate-100 disabled:text-slate-500"
+                    disabled={saving || exchangeRateAutoEnabled}
+                  />
+                  <button onClick={handleSaveCurrency} disabled={saving} className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">
+                    <Save size={16}/> Guardar configuración
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
