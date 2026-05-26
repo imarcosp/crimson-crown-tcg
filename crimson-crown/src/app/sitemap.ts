@@ -1,11 +1,12 @@
 import { MetadataRoute } from 'next'
 import { createClient } from '@supabase/supabase-js'
+import { siteConfig } from '@/config/site'
 
 // 1. FORZAR DINAMISMO: Esto obliga a Next.js a regenerar el sitemap en cada petición
 export const dynamic = 'force-dynamic'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://elpercherotcg.com'
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || siteConfig.url
 
   // Rutas estáticas (siempre deben estar)
   const routes: MetadataRoute.Sitemap = [

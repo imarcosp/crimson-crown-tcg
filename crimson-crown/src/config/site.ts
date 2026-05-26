@@ -2,9 +2,9 @@ export const siteConfig = {
   name: "Crimson Crown TCG",
   shortName: "Crimson Crown",
   description: "Tu tienda especializada en Magic: The Gathering.",
-  url: "https://www.elpercherotcg.com",
+  url: "https://www.crimsoncrownimports.com",
   logo: "/logo.webp?v=crimson1",
-  socialImage: "/opengraph-image.png",
+  socialImage: "/opengraph-image.png?v=crimson1",
   socialLinks: {
     instagram: "https://www.instagram.com/elpercherotcg/",
     whatsapp: "5491134739690",
