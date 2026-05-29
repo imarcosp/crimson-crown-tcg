@@ -1,6 +1,6 @@
 "use client"
 import Link from 'next/link'
-import { Package, Plane, Banknote, Users, Settings, ClipboardList, TrendingUp, Calendar, DollarSign, Search, Bell } from 'lucide-react'
+import { Package, Plane, Banknote, Users, Settings, ClipboardList, TrendingUp, Calendar, DollarSign, Search, Bell, Receipt } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -164,6 +164,15 @@ export default function AdminPage() {
             <div>
               <div className="text-lg font-bold text-slate-900">Configuración / Precios</div>
               <p className="text-sm text-slate-600">Ajustes globales y sincronización.</p>
+            </div>
+          </div>
+        </Link>
+        <Link href="/admin/commissions" className="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition-shadow">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-rose-50 text-[#9D1B1B]"><Receipt size={32} /></div>
+            <div>
+              <div className="text-lg font-bold text-slate-900">Comisiones</div>
+              <p className="text-sm text-slate-600">Seguimiento mensual, pagos parciales y saldo de la web.</p>
             </div>
           </div>
         </Link>
