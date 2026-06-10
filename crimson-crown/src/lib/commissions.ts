@@ -1,4 +1,5 @@
 const COMMISSION_TIMEZONE = 'America/Argentina/Buenos_Aires'
+export const COMMISSION_START_PERIOD_KEY = '2026-06'
 
 function parsePeriodKey(periodKey: string) {
   const [year, month] = periodKey.split('-').map(Number)
@@ -25,6 +26,14 @@ export function shiftCommissionMonthKey(periodKey: string, offset: number) {
   const nextYear = date.getUTCFullYear()
   const nextMonth = String(date.getUTCMonth() + 1).padStart(2, '0')
   return `${nextYear}-${nextMonth}`
+}
+
+export function isBeforeCommissionStart(periodKey: string) {
+  return periodKey < COMMISSION_START_PERIOD_KEY
+}
+
+export function clampCommissionMonthKey(periodKey: string) {
+  return isBeforeCommissionStart(periodKey) ? COMMISSION_START_PERIOD_KEY : periodKey
 }
 
 export function formatCommissionPeriodLabel(periodKey: string) {
@@ -56,6 +65,10 @@ export function formatArs(value: number | string | null | undefined) {
 
 export function getPreviousCommissionMonthKey(now = new Date()) {
   return shiftCommissionMonthKey(getCurrentCommissionMonthKey(now), -1)
+}
+
+export function getClientPayableCommissionMonthKey(now = new Date()) {
+  return clampCommissionMonthKey(getPreviousCommissionMonthKey(now))
 }
 
 export function isPastCommissionMonth(periodKey: string) {

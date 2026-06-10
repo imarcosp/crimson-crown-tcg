@@ -7,6 +7,7 @@ import { useQuoteStore } from '@/store/quoteStore'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useConfig } from '@/context/ConfigContext'
 
 // --- CONTENIDO DEL COMPONENTE (Lógica Principal) ---
 function MoxfieldToolContent() {
@@ -31,6 +32,7 @@ function MoxfieldToolContent() {
   const quoteItems = useQuoteStore((s) => s.items)
   const updateQuoteQuantity = useQuoteStore((s) => s.updateQuantity)
   const supabase = createClient()
+  const { enableImports } = useConfig()
 
   // Hooks para Auto-Detección desde Buscador
   const searchParams = useSearchParams()
@@ -550,62 +552,59 @@ const enriched = rawVersions.map((v: any) => {
                             </div>
                         </div>
 
-                        {/* PARA IMPORTAR (VISUAL MEJORADA) */}
-                        <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
-                            <div className="p-4 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
-                                <h3 className="font-bold text-amber-800 flex items-center gap-2"><Plane size={18}/> Para Importar ({results.missing.length})</h3>
-                                {results.missing.length > 0 && <button onClick={handleQuoteAllMissing} className="px-3 py-1.5 bg-[#9D1B1B] hover:bg-[#d81557] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-sm cursor-pointer"><ArrowRight size={14}/> Cotizar Todo</button>}
-                            </div>
-                            <div className="max-h-[500px] overflow-y-auto p-2 space-y-2">
-                                {results.missing.length === 0 ? <p className="text-center py-8 text-slate-400 text-sm">¡Tienes todo disponible!</p> : (
-                                    results.missing.map((card: any, i: number) => {
-                                        const isFoil = card.finish === 'foil' || card.finish === 'etched'
-                                        const basePrice = isFoil ? (card.price_usd_foil || 0) : (card.price_usd || 0)
-                                        const importPrice = calculateImportPrice(basePrice)
-                                        return (
-                                        <div key={i} className="flex flex-col sm:flex-row gap-4 p-3 hover:bg-amber-50/20 rounded-xl bg-white border border-slate-100 transition-colors">
-                                            <div className="w-20 h-28 bg-slate-200 rounded-lg shrink-0 overflow-hidden relative border border-slate-200 cursor-zoom-in self-start" onClick={() => card.image_url && setZoomedImage(card.image_url)}>
-                                                {card.image_url ? <Image src={card.image_url} alt="" fill className="object-cover" unoptimized/> : <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400 p-2 text-center bg-slate-100"><ImageIcon size={24} className="mb-1 opacity-50"/>Sin Foto</div>}
-                                            </div>
-                                            <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
-                                                <div>
-                                                    <div className="flex justify-between items-start gap-2">
-                                                        <p className="font-bold text-slate-800 text-base">{card.name}</p>
-                                                        <span className="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded whitespace-nowrap">x{card.quantity}</span>
-                                                    </div>
-                                                    
-                                                    {/* SECCIÓN EDICIÓN Y VERSIÓN */}
-                                                    <div className="flex flex-wrap gap-2 mt-2 items-center">
+                        {enableImports && (
+                            <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
+                                <div className="p-4 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
+                                    <h3 className="font-bold text-amber-800 flex items-center gap-2"><Plane size={18}/> Para Importar ({results.missing.length})</h3>
+                                    {results.missing.length > 0 && <button onClick={handleQuoteAllMissing} className="px-3 py-1.5 bg-[#9D1B1B] hover:bg-[#d81557] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-sm cursor-pointer"><ArrowRight size={14}/> Cotizar Todo</button>}
+                                </div>
+                                <div className="max-h-[500px] overflow-y-auto p-2 space-y-2">
+                                    {results.missing.length === 0 ? <p className="text-center py-8 text-slate-400 text-sm">¡Tienes todo disponible!</p> : (
+                                        results.missing.map((card: any, i: number) => {
+                                            const isFoil = card.finish === 'foil' || card.finish === 'etched'
+                                            const basePrice = isFoil ? (card.price_usd_foil || 0) : (card.price_usd || 0)
+                                            const importPrice = calculateImportPrice(basePrice)
+                                            return (
+                                            <div key={i} className="flex flex-col sm:flex-row gap-4 p-3 hover:bg-amber-50/20 rounded-xl bg-white border border-slate-100 transition-colors">
+                                                <div className="w-20 h-28 bg-slate-200 rounded-lg shrink-0 overflow-hidden relative border border-slate-200 cursor-zoom-in self-start" onClick={() => card.image_url && setZoomedImage(card.image_url)}>
+                                                    {card.image_url ? <Image src={card.image_url} alt="" fill className="object-cover" unoptimized/> : <div className="w-full h-full flex flex-col items-center justify-center text-xs text-slate-400 p-2 text-center bg-slate-100"><ImageIcon size={24} className="mb-1 opacity-50"/>Sin Foto</div>}
+                                                </div>
+                                                <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
+                                                    <div>
+                                                        <div className="flex justify-between items-start gap-2">
+                                                            <p className="font-bold text-slate-800 text-base">{card.name}</p>
+                                                            <span className="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded whitespace-nowrap">x{card.quantity}</span>
+                                                        </div>
                                                         
-                                                        {/* Badge Nombre Set Completo */}
-                                                        <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded border border-blue-100 truncate max-w-[180px]" title={card.set_name || card.set}>
-                                                            {card.set_name || (card.set ? card.set.toUpperCase() : 'Base')} {card.cn ? `#${card.cn}` : ''}
-                                                        </span>
+                                                        <div className="flex flex-wrap gap-2 mt-2 items-center">
+                                                            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded border border-blue-100 truncate max-w-[180px]" title={card.set_name || card.set}>
+                                                                {card.set_name || (card.set ? card.set.toUpperCase() : 'Base')} {card.cn ? `#${card.cn}` : ''}
+                                                            </span>
 
-                                                        {/* Botón Cambiar Versión */}
-                                                        <button onClick={() => openVersionModal(i)} className="flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded border border-slate-200 hover:bg-slate-200 transition-colors cursor-pointer" title="Cambiar Edición">
-                                                            Cambiar Versión <RefreshCw size={10}/>
-                                                        </button>
-                                                        
-                                                        <label className="flex items-center gap-1 cursor-pointer select-none text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded border border-slate-200 hover:bg-slate-100 transition-colors">
-                                                            <input type="checkbox" checked={isFoil} onChange={() => handleToggleFoil(i)} className="accent-purple-600 w-3 h-3 cursor-pointer"/> Foil
-                                                        </label>
+                                                            <button onClick={() => openVersionModal(i)} className="flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded border border-slate-200 hover:bg-slate-200 transition-colors cursor-pointer" title="Cambiar Edición">
+                                                                Cambiar Versión <RefreshCw size={10}/>
+                                                            </button>
+                                                            
+                                                            <label className="flex items-center gap-1 cursor-pointer select-none text-[10px] font-bold text-slate-600 bg-slate-50 px-2 py-1 rounded border border-slate-200 hover:bg-slate-100 transition-colors">
+                                                                <input type="checkbox" checked={isFoil} onChange={() => handleToggleFoil(i)} className="accent-purple-600 w-3 h-3 cursor-pointer"/> Foil
+                                                            </label>
+                                                        </div>
                                                     </div>
+                                                    <div className="mt-3 text-xs text-slate-500 flex items-center gap-1.5 bg-slate-50 w-fit px-2 py-1 rounded">📦 Disponible para importación (15 días)</div>
                                                 </div>
-                                                <div className="mt-3 text-xs text-slate-500 flex items-center gap-1.5 bg-slate-50 w-fit px-2 py-1 rounded">📦 Disponible para importación (15 días)</div>
-                                            </div>
-                                            <div className="text-right flex flex-row sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-2 border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0 mt-2 sm:mt-0 min-w-[90px]">
-                                                <div>
-                                                    <p className="text-[9px] text-slate-400 uppercase font-bold">Estimado</p>
-                                                    {basePrice > 0 ? <p className="font-bold text-[#9D1B1B] text-lg">US$ {importPrice.toFixed(2)}</p> : <p className="font-bold text-slate-400 text-xs italic">Cotizar</p>}
+                                                <div className="text-right flex flex-row sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-2 border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0 mt-2 sm:mt-0 min-w-[90px]">
+                                                    <div>
+                                                        <p className="text-[9px] text-slate-400 uppercase font-bold">Estimado</p>
+                                                        {basePrice > 0 ? <p className="font-bold text-[#9D1B1B] text-lg">US$ {importPrice.toFixed(2)}</p> : <p className="font-bold text-slate-400 text-xs italic">Cotizar</p>}
+                                                    </div>
+                                                    <button onClick={() => handleAddMissingItem(card)} className="px-4 py-2 bg-slate-900 hover:bg-slate-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer w-full sm:w-auto shadow-sm">Cotizar</button>
                                                 </div>
-                                                <button onClick={() => handleAddMissingItem(card)} className="px-4 py-2 bg-slate-900 hover:bg-slate-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer w-full sm:w-auto shadow-sm">Cotizar</button>
                                             </div>
-                                        </div>
-                                    )})
-                                )}
+                                        )})
+                                    )}
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 )}
             </div>

@@ -6,7 +6,7 @@ import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalL
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { OWNER_ADMIN_EMAIL, STAFF_ADMIN_EMAIL } from '@/lib/constants'
-import { formatArs, formatCommissionPeriodLabel, formatUsd, getCurrentCommissionMonthKey, getPreviousCommissionMonthKey, isPastCommissionMonth, shiftCommissionMonthKey } from '@/lib/commissions'
+import { clampCommissionMonthKey, COMMISSION_START_PERIOD_KEY, formatArs, formatCommissionPeriodLabel, formatUsd, getClientPayableCommissionMonthKey, getCurrentCommissionMonthKey, isPastCommissionMonth, shiftCommissionMonthKey } from '@/lib/commissions'
 import { confirmCommissionPaymentAction, createCommissionAdjustmentAction, lockCommissionPeriodAction, refreshCommissionPeriodAction, rejectCommissionPaymentAction, reportCommissionPaymentAction } from '@/app/actions/commissions'
 
 type CommissionPeriod = {
@@ -107,9 +107,9 @@ export default function AdminCommissionsPage() {
   const supabase = useMemo(() => createClient(), [])
   const { user } = useAuth()
   const currentMonthKey = useMemo(() => getCurrentCommissionMonthKey(), [])
-  const previousMonthKey = useMemo(() => getPreviousCommissionMonthKey(), [currentMonthKey])
+  const payableMonthKey = useMemo(() => getClientPayableCommissionMonthKey(), [currentMonthKey])
 
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentCommissionMonthKey())
+  const [selectedMonth, setSelectedMonth] = useState(() => clampCommissionMonthKey(getCurrentCommissionMonthKey()))
   const [period, setPeriod] = useState<CommissionPeriod | null>(null)
   const [periods, setPeriods] = useState<CommissionPeriod[]>([])
   const [lines, setLines] = useState<CommissionLine[]>([])
@@ -148,13 +148,15 @@ export default function AdminCommissionsPage() {
   const showClientView = isStaff || isPreviewingClientView
 
   const loadPeriod = useCallback(async (monthKey: string, sync = true) => {
+    const normalizedMonthKey = clampCommissionMonthKey(monthKey)
+
     setLoading(true)
     setError('')
 
     try {
       if (sync) {
         setSyncing(true)
-        const refreshResult = await refreshCommissionPeriodAction(monthKey)
+        const refreshResult = await refreshCommissionPeriodAction(normalizedMonthKey)
         if (!refreshResult.success) {
           throw new Error(refreshResult.error || 'No se pudo recalcular el período.')
         }
@@ -163,7 +165,7 @@ export default function AdminCommissionsPage() {
       const { data: periodData, error: periodError } = await supabase
         .from('commission_periods')
         .select('*')
-        .eq('period_key', monthKey)
+        .eq('period_key', normalizedMonthKey)
         .maybeSingle()
 
       if (periodError) throw periodError
@@ -188,6 +190,7 @@ export default function AdminCommissionsPage() {
         supabase
           .from('commission_periods')
           .select('*')
+          .gte('period_key', COMMISSION_START_PERIOD_KEY)
           .order('period_key', { ascending: true }),
         supabase
           .from('commission_period_lines')
@@ -244,14 +247,14 @@ export default function AdminCommissionsPage() {
 
   useEffect(() => {
     if (isStaff || isPreviewingClientView) {
-      setSelectedMonth(previousMonthKey)
+      setSelectedMonth(payableMonthKey)
       return
     }
 
     if (isOwner && viewMode === 'perche') {
-      setSelectedMonth(currentMonthKey)
+      setSelectedMonth(clampCommissionMonthKey(currentMonthKey))
     }
-  }, [currentMonthKey, isOwner, isPreviewingClientView, isStaff, previousMonthKey, viewMode])
+  }, [currentMonthKey, isOwner, isPreviewingClientView, isStaff, payableMonthKey, viewMode])
 
   const fixedFeeLine = lines.find((line) => line.line_type === 'fixed_fee')
   const salesLines = lines.filter((line) => line.line_type === 'stock_order')
@@ -492,14 +495,16 @@ export default function AdminCommissionsPage() {
 
             {showClientView && (
               <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1">
+                {payableMonthKey !== currentMonthKey && (
+                  <button
+                    onClick={() => setSelectedMonth(payableMonthKey)}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors cursor-pointer ${selectedMonth === payableMonthKey ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    Mes a pagar
+                  </button>
+                )}
                 <button
-                  onClick={() => setSelectedMonth(previousMonthKey)}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors cursor-pointer ${selectedMonth === previousMonthKey ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-                >
-                  Mes a pagar
-                </button>
-                <button
-                  onClick={() => setSelectedMonth(currentMonthKey)}
+                  onClick={() => setSelectedMonth(clampCommissionMonthKey(currentMonthKey))}
                   className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors cursor-pointer ${selectedMonth === currentMonthKey ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                   Mes en curso
@@ -509,8 +514,9 @@ export default function AdminCommissionsPage() {
 
             <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1">
               <button
-                onClick={() => setSelectedMonth((prev) => shiftCommissionMonthKey(prev, -1))}
-                className="p-2 rounded-lg text-slate-600 hover:bg-white hover:text-slate-900 transition-colors cursor-pointer"
+                onClick={() => setSelectedMonth((prev) => clampCommissionMonthKey(shiftCommissionMonthKey(prev, -1)))}
+                disabled={selectedMonth <= COMMISSION_START_PERIOD_KEY}
+                className="p-2 rounded-lg text-slate-600 hover:bg-white hover:text-slate-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 <ChevronLeft size={18} />
               </button>

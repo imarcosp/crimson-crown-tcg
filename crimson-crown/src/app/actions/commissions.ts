@@ -5,7 +5,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'
 import { ADMIN_EMAILS, OWNER_ADMIN_EMAIL } from '@/lib/constants'
-import { getCurrentCommissionMonthKey } from '@/lib/commissions'
+import { COMMISSION_START_PERIOD_KEY, getCurrentCommissionMonthKey } from '@/lib/commissions'
 import { siteConfig } from '@/config/site'
 
 type PaymentInput = {
@@ -71,10 +71,21 @@ async function getPeriodKey(admin: ReturnType<typeof createServiceRoleClient>, p
   return data.period_key as string
 }
 
+function assertCommissionPeriodAllowed(periodKey: string) {
+  if (!periodKey || periodKey < COMMISSION_START_PERIOD_KEY) {
+    throw new Error(`Las comisiones solo están habilitadas desde ${COMMISSION_START_PERIOD_KEY}.`)
+  }
+}
+
 async function getPeriodBalances(admin: ReturnType<typeof createServiceRoleClient>, maxPeriodKey?: string) {
+  if (maxPeriodKey && maxPeriodKey < COMMISSION_START_PERIOD_KEY) {
+    return []
+  }
+
   let periodsQuery = admin
     .from('commission_periods')
     .select('id, period_key, total_due_usd, status, locked_at')
+    .gte('period_key', COMMISSION_START_PERIOD_KEY)
     .order('period_key', { ascending: true })
 
   if (maxPeriodKey) {
@@ -240,6 +251,7 @@ async function sendCommissionPaymentReportedEmail(params: {
 export async function refreshCommissionPeriodAction(periodKey: string) {
   try {
     await requireCommissionAdmin()
+    assertCommissionPeriodAllowed(periodKey)
 
     const admin = createServiceRoleClient()
     const { data, error } = await admin.rpc('refresh_commission_period', {
@@ -258,6 +270,7 @@ export async function refreshCommissionPeriodAction(periodKey: string) {
 export async function lockCommissionPeriodAction(periodKey: string) {
   try {
     const user = await requireCommissionAdmin(true)
+    assertCommissionPeriodAllowed(periodKey)
 
     if (!periodKey || periodKey >= getCurrentCommissionMonthKey()) {
       throw new Error('Solo puedes cerrar meses anteriores al mes actual.')
@@ -309,13 +322,17 @@ export async function reportCommissionPaymentAction(input: PaymentInput) {
     const user = await requireCommissionAdmin()
     const admin = createServiceRoleClient()
 
+    if (!input.periodId) throw new Error('Período inválido.')
+
+    const periodKey = await getPeriodKey(admin, input.periodId)
+    assertCommissionPeriodAllowed(periodKey)
+
     const amount = Number(input.amount)
     const fxRateArs = input.fxRateArs == null ? null : Number(input.fxRateArs)
     const currency = input.currency
     const paymentMethod = input.paymentMethod?.trim()
     const paidAt = new Date(input.paidAt)
 
-    if (!input.periodId) throw new Error('Período inválido.')
     if (!paymentMethod) throw new Error('Debes indicar cómo se realizó el pago.')
     if (!Number.isFinite(amount) || amount <= 0) throw new Error('Monto inválido.')
     if (Number.isNaN(paidAt.getTime())) throw new Error('Fecha de pago inválida.')
@@ -360,7 +377,6 @@ export async function reportCommissionPaymentAction(input: PaymentInput) {
     if (isOwner) {
       await allocateConfirmedPayment(admin, insertedPayment.id)
     } else {
-      const periodKey = await getPeriodKey(admin, input.periodId)
       await sendCommissionPaymentReportedEmail({
         amount,
         amountUsd,
@@ -444,6 +460,10 @@ export async function createCommissionAdjustmentAction(input: AdjustmentInput) {
     const amountUsd = Number(input.amountUsd)
 
     if (!input.periodId) throw new Error('Período inválido.')
+
+    const periodKey = await getPeriodKey(admin, input.periodId)
+    assertCommissionPeriodAllowed(periodKey)
+
     if (!['debit', 'credit'].includes(input.direction)) throw new Error('Tipo de ajuste inválido.')
     if (!Number.isFinite(amountUsd) || amountUsd <= 0) throw new Error('Monto inválido.')
     if (!input.reason.trim()) throw new Error('Debes indicar el motivo del ajuste.')
