@@ -11,6 +11,12 @@ import Link from 'next/link'
 import PriceHistory from './PriceHistory'
 import WishlistModal from './WishlistModal'
 import { createClient } from '@/lib/supabase/client'
+import {
+  getFoilBadgeLabel,
+  getFoilImageContainerClass,
+  getFoilOverlayLayers,
+  getFoilVisualKind,
+} from '@/lib/ui/finish-visuals'
 
 type Props = {
   product: any
@@ -47,6 +53,10 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
 
   const price = currency === 'USD' ? p.priceUsd : Math.round(p.priceUsd * exchangeRate)
   const symbol = currency === 'USD' ? 'US$' : '$'
+  const foilKind = getFoilVisualKind(!!p.isFoil, p.finish)
+  const foilOverlayLayers = getFoilOverlayLayers(foilKind)
+  const imageContainerClass = getFoilImageContainerClass(foilKind)
+  const foilBadgeLabel = getFoilBadgeLabel(foilKind, p.finish)
 
   const inCart = cartItems.find((i) => i.id === p.id)
 
@@ -83,16 +93,23 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
             
             {/* Imagen Principal */}
             <div 
-                className="relative w-full max-w-sm aspect-[3/4] shadow-xl rounded-xl overflow-hidden group bg-white cursor-zoom-in"
+                className={`relative w-full max-w-sm aspect-[3/4] shadow-xl rounded-xl overflow-hidden group bg-white cursor-zoom-in ${imageContainerClass}`}
                 onClick={() => setZoomed(true)}
             >
               <img src={activeImg} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+              {foilOverlayLayers.map((layerClass) => (
+                <div key={layerClass} className={layerClass} />
+              ))}
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                   <ZoomIn className="text-white opacity-0 group-hover:opacity-100 drop-shadow-md" size={32}/>
               </div>
               
-              {p.isFoil && p.finish && (
-                <div className="absolute top-4 right-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg z-20">✨ {String(p.finish).toUpperCase()}</div>
+              {p.isFoil && foilBadgeLabel && (
+                <div className={`absolute top-4 right-4 text-xs font-bold px-3 py-1 rounded-full shadow-lg z-20 ${
+                  foilKind === 'surge'
+                    ? 'bg-gradient-to-r from-cyan-500 to-fuchsia-500 text-white'
+                    : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                }`}>✨ {foilBadgeLabel}</div>
               )}
             </div>
 

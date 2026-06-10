@@ -184,10 +184,10 @@ export default function CartDrawer() {
 
   return (
     <>
-    <div className={`fixed inset-0 z-50 transition-visibility duration-300 ${isOpen ? 'visible' : 'invisible'}`}>
-      <div onClick={closeAll} className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`} />
+    <div className={`fixed inset-0 z-50 ${isOpen ? 'visible pointer-events-auto' : 'invisible pointer-events-none'}`}>
+      <div onClick={closeAll} className={`ui-overlay-soft absolute inset-0 bg-black/40 backdrop-blur-[2px] ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} />
 
-      <div className={`absolute right-0 top-0 h-full w-full md:w-[28rem] bg-white shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`ui-drawer-right-soft absolute right-0 top-0 h-full w-full md:w-[28rem] bg-white shadow-2xl flex flex-col ${isOpen ? 'is-open' : 'is-closed'}`}>
         
         {/* HEADER */}
         <div className="flex items-center justify-between p-4 border-b border-slate-200 flex-none bg-white z-10">

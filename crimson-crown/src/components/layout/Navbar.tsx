@@ -271,7 +271,7 @@ export default function Navbar() {
                       <ChevronDown size={16} className={`transition-transform duration-300 ${isMtgOpen ? 'rotate-180' : ''}`}/>
                   </button>
                   {isMtgOpen && (
-                      <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
+                      <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300 ease-out">
                           <Link href={buildCatalogHref('Magic')} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
                               Ver todo Magic
                           </Link>
@@ -329,7 +329,7 @@ export default function Navbar() {
                         <ChevronDown size={16} className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}/>
                     </button>
                     {isOpen && (
-                      <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300">
+                      <div className="pl-12 pr-4 space-y-1 pb-2 animate-in slide-in-from-top-2 duration-300 ease-out">
                           <Link href={buildCatalogHref(entry.category)} onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
                               Ver todo {entry.category}
                           </Link>
@@ -391,7 +391,7 @@ export default function Navbar() {
                   {isMobileUserMenuOpen && (
                     <>
                         <div className="fixed inset-0 z-[65] bg-transparent" onClick={() => setIsMobileUserMenuOpen(false)}></div>
-                        <div className="absolute right-0 top-full mt-2 w-56 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-100 p-2 z-[70] animate-in zoom-in-95 origin-top-right">
+                        <div className="absolute right-0 top-full mt-2 w-56 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-100 p-2 z-[70] animate-in zoom-in-95 fade-in duration-200 origin-top-right">
                             {!user ? (
                                 <div className="space-y-2 p-1">
                                     <p className="text-xs text-center text-slate-400 mb-2">Accede para ver tus compras</p>
@@ -426,33 +426,36 @@ export default function Navbar() {
             </div>
 
             {/* DRAWER LATERAL (HAMBURGUESA) */}
-            {isMenuOpen && (
-              <>
-                  <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={closeMenus}></div>
-                  <div className="fixed inset-y-0 left-0 z-[61] w-4/5 max-w-xs bg-white shadow-2xl animate-in slide-in-from-left duration-300 ease-in-out flex flex-col">
-                      <div className="flex-1 overflow-hidden h-full">
-                          <SidebarContent />
-                      </div>
-                  </div>
-              </>
-            )}
+            <>
+                <div
+                  className={`ui-overlay-soft fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm ${isMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}
+                  onClick={closeMenus}
+                ></div>
+                <div
+                  className={`ui-drawer-left-soft fixed inset-y-0 left-0 z-[61] w-4/5 max-w-xs bg-white shadow-2xl flex flex-col border-r border-slate-200 ${isMenuOpen ? 'is-open pointer-events-auto' : 'is-closed pointer-events-none'}`}
+                >
+                    <div className="flex-1 overflow-hidden h-full">
+                        <SidebarContent />
+                    </div>
+                </div>
+            </>
           </div>
 
           {/* ======================= DESKTOP ======================= */}
-          <div className="hidden md:flex items-center justify-between gap-4 w-full">
+          <div className="hidden md:flex items-center justify-between gap-3 w-full">
             <Link href="/" className="flex items-center gap-3 shrink-0 hover:opacity-90 transition-opacity cursor-pointer">
                 <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white/20"><Image src={siteConfig.logo} alt={siteConfig.shortName} fill className="object-cover" /></div>
                 <span className="font-extrabold text-lg tracking-tight">{siteConfig.shortName.toUpperCase()}</span>
             </Link>
 
-            <div className="flex-1 flex items-center gap-2 mx-6">
+            <div className="flex-[1.35] flex items-center gap-2 mx-3 lg:mx-5 min-w-0">
                 <button onClick={() => setIsMegaMenuOpen(true)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0 border border-transparent hover:border-slate-600" title="Menú Principal">
                     <MenuIcon size={24}/>
                 </button>
                 <div className="flex-1"><SearchInput /></div>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 shrink-0">
               {/* BLOQUE COTIZACIÓN DESKTOP (CENTRALIZADO) */}
               <div className="flex flex-col items-center justify-center">
                   <span className="text-[10px] text-slate-400 font-bold uppercase leading-none mb-0.5 tracking-tight">Cotización Dólar</span>
@@ -474,11 +477,11 @@ export default function Navbar() {
                   <ClipboardList className="h-6 w-6" /> Pedido a Japón
                 </Link>
               ) : nextTripCountdown ? (
-                <div className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-3 border border-[#9D1B1B]/40 bg-[#9D1B1B]/10 text-white">
-                  <Plane className="h-5 w-5 text-[#C7A316]" />
-                  <div className="flex flex-col leading-tight">
-                    <span className="text-[10px] uppercase tracking-wide text-slate-300">Tiempo restante para el próximo viaje a Japón</span>
-                    <span className="text-sm font-extrabold text-white">{nextTripCountdown}</span>
+                <div className="px-3 py-1.5 rounded-lg flex items-center gap-2 border border-[#9D1B1B]/35 bg-[#9D1B1B]/10 text-white max-w-[240px] lg:max-w-[270px]">
+                  <Plane className="h-4 w-4 text-[#C7A316] shrink-0" />
+                  <div className="flex flex-col leading-tight min-w-0">
+                    <span className="text-[9px] uppercase tracking-wide text-slate-300 truncate">Próximo viaje a Japón</span>
+                    <span className="text-xs lg:text-sm font-extrabold text-white truncate">{nextTripCountdown}</span>
                   </div>
                 </div>
               ) : null}
@@ -488,7 +491,7 @@ export default function Navbar() {
                   <User size={24} />
                   <span className="text-sm font-medium">{user ? (userProfile?.first_name || 'Mi Cuenta') : 'Ingresar'}</span>
                 </button>
-                <div className="absolute right-0 top-full mt-0 w-64 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all p-2 z-50">
+                <div className="absolute right-0 top-full mt-0 w-64 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-100 opacity-0 invisible translate-y-2 scale-[0.98] group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 transition-all duration-200 ease-out p-2 z-50">
                   {!user ? (
                     <div className="p-2 space-y-2">
                       <p className="text-xs text-center text-slate-400 mb-2">Accede para ver tus compras</p>
@@ -523,19 +526,22 @@ export default function Navbar() {
       </div>
 
       {/* DRAWER DESKTOP (MEGA MENU) */}
-      {isMegaMenuOpen && (
-          <>
-              <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm animate-in fade-in duration-300 hidden md:block" onClick={closeMenus}></div>
-              <div className="fixed inset-y-0 left-0 z-[61] w-80 bg-white shadow-2xl animate-in slide-in-from-left duration-300 ease-in-out hidden md:block border-r border-slate-200">
-                  <SidebarContent />
-              </div>
-          </>
-      )}
+      <>
+          <div
+            className={`ui-overlay-soft fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm hidden md:block ${isMegaMenuOpen ? 'opacity-100 visible pointer-events-auto' : 'opacity-0 invisible pointer-events-none'}`}
+            onClick={closeMenus}
+          ></div>
+          <div
+            className={`ui-drawer-left-soft fixed inset-y-0 left-0 z-[61] w-80 bg-white shadow-2xl hidden md:block border-r border-slate-200 ${isMegaMenuOpen ? 'is-open pointer-events-auto' : 'is-closed pointer-events-none'}`}
+          >
+              <SidebarContent />
+          </div>
+      </>
 
       {/* FEEDBACK MODAL */}
       {showFeedback && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 duration-200">
+              <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-in zoom-in-95 fade-in duration-200">
                   <button onClick={() => setShowFeedback(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"><X size={20}/></button>
                   <h3 className="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2"><MessageSquarePlus className="text-sky-500"/> Sugerencia</h3>
                   <p className="text-sm text-slate-500 mb-4">Ayúdanos a mejorar. Cuéntanos qué te gustaría ver en la web.</p>

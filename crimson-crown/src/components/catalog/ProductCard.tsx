@@ -11,6 +11,14 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import WishlistModal from './WishlistModal'
 import { getCardImageUrl } from '@/lib/utils/images'
+import {
+  getFoilBadgeLabel,
+  getFoilContentClass,
+  getFoilFrameClass,
+  getFoilImageContainerClass,
+  getFoilOverlayLayers,
+  getFoilVisualKind,
+} from '@/lib/ui/finish-visuals'
 
 type Props = {
   id: string
@@ -65,26 +73,18 @@ export default function ProductCard(p: Props) {
   const hasMultipleImages = allImages.length > 1
 
   const showFoilBadge = (p.isImport ? wantsFoil : p.isFoil) || p.tcg === 'Secret Lair'
-  const isMagic = p.tcg === 'Magic' || p.tcg === 'Secret Lair'
   const basePriceUsd = (showFoilBadge && p.priceUsdFoil) ? p.priceUsdFoil : p.priceUsd
   const price = currency === 'USD' ? basePriceUsd : Math.round(basePriceUsd * exchangeRate)
   const symbol = currency === 'USD' ? 'US$' : '$'
 
   const langLabel = LANG_MAP[p.language || 'English'] || p.language || 'Inglés'
-  const finishLabel = (p.finish || 'Foil').toUpperCase().replace('NON-FOIL', '').trim() || 'FOIL'
+  const foilKind = getFoilVisualKind(showFoilBadge, p.finish)
+  const finishLabel = getFoilBadgeLabel(foilKind, p.finish)
+  const foilFrameClass = getFoilFrameClass(foilKind)
+  const foilContentClass = getFoilContentClass(foilKind)
+  const imageContainerClass = getFoilImageContainerClass(foilKind)
+  const foilOverlayLayers = getFoilOverlayLayers(foilKind)
   const hasImage = !!(p.image || p.image_url)
-
-  const imageFoilClass = showFoilBadge 
-    ? "after:content-[''] after:absolute after:inset-0 after:bg-[linear-gradient(115deg,transparent_25%,rgba(255,255,255,0.3)_45%,rgba(255,255,255,0.3)_55%,transparent_75%)] after:opacity-50 after:mix-blend-overlay after:pointer-events-none after:bg-[length:250%_250%] after:animate-foil-shimmer after:z-10"
-    : ""
-
-  const outerWrapperClass = showFoilBadge
-    ? "relative p-[3px] rounded-xl bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 animate-gradient-xy shadow-xl"
-    : "rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-xl transition-all duration-300"
-
-  const innerContentClass = showFoilBadge
-    ? "bg-white rounded-[9px] h-full overflow-hidden flex flex-col w-full relative z-10" 
-    : "h-full flex flex-col overflow-hidden relative"
 
   const handleAddToCart = () => {
     addItem({ ...p, imageUrl: currentImage, stock: p.stock, isFoil: showFoilBadge })
@@ -103,8 +103,8 @@ export default function ProductCard(p: Props) {
 
   return (
     <>
-    <div className={`group h-full flex flex-col hover:-translate-y-1 transition-transform duration-300 ${outerWrapperClass}`} onMouseLeave={() => setActiveImgIndex(0)}>
-      <div className={innerContentClass}>
+    <div className={`group h-full flex flex-col hover:-translate-y-1 transition-transform duration-300 ${foilFrameClass}`} onMouseLeave={() => setActiveImgIndex(0)}>
+      <div className={foilContentClass}>
         
         <div className={`absolute inset-0 z-50 bg-emerald-600/95 flex flex-col items-center justify-center text-white transition-all duration-500 ease-out backdrop-blur-sm ${showAdded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
             <div className={`transform transition-all duration-500 ${showAdded ? 'scale-100' : 'scale-50'}`}><Check size={56} className="mb-2 drop-shadow-md"/></div>
@@ -119,7 +119,7 @@ export default function ProductCard(p: Props) {
         </div>
 
         <Link href={`/product/${p.id}`} className="block relative overflow-hidden flex-1 w-full cursor-pointer">
-            <div className={`rounded-md overflow-hidden mx-4 relative aspect-[3/4] bg-slate-100 shadow-inner ${imageFoilClass}`}>
+            <div className={`rounded-md overflow-hidden mx-4 relative aspect-[3/4] bg-slate-100 shadow-inner ${imageContainerClass}`}>
                 {hasImage ? (
                     <img
                     src={currentImage}
@@ -130,6 +130,10 @@ export default function ProductCard(p: Props) {
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-slate-300 text-xs">Sin Imagen</div>
                 )}
+
+                {foilOverlayLayers.map((layerClass) => (
+                    <div key={layerClass} className={layerClass} />
+                ))}
                 
                 {hasMultipleImages && (
                     <div className="absolute bottom-10 left-0 right-0 flex justify-center gap-1.5 z-30" onClick={(e) => e.preventDefault()}>
@@ -167,7 +171,17 @@ export default function ProductCard(p: Props) {
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border max-[400px]:text-[9px] ${p.condition === 'NM' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>{p.condition}</span>
                 )}
                 {p.language && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 uppercase max-[400px]:text-[9px]">{langLabel}</span>}
-                {showFoilBadge && <span className="text-[10px] font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 bg-purple-50 px-1.5 py-0.5 rounded flex items-center gap-1 border border-purple-100 shadow-sm bg-white max-[400px]:text-[9px]"><Sparkles size={10} className="text-purple-500 max-[400px]:shrink-0"/> {finishLabel}</span>}
+                {showFoilBadge && (
+                  <span
+                    className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1 border shadow-sm max-[400px]:text-[9px] ${
+                      foilKind === 'surge'
+                        ? 'bg-cyan-50 text-cyan-700 border-cyan-100'
+                        : 'bg-purple-50 text-purple-600 border-purple-100'
+                    }`}
+                  >
+                    <Sparkles size={10} className={foilKind === 'surge' ? 'text-cyan-500 max-[400px]:shrink-0' : 'text-purple-500 max-[400px]:shrink-0'} /> {finishLabel}
+                  </span>
+                )}
             </div>
 
             {p.isImport && (

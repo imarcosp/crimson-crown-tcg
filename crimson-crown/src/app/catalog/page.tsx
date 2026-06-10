@@ -9,6 +9,51 @@ import { siteConfig } from '@/config/site'
 
 export const revalidate = 0
 
+function normalizeColorIdentity(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.map((entry) => String(entry || '').toUpperCase().trim()).filter(Boolean)
+}
+
+function matchesColorFilters(colorIdentity: unknown, selectedColors: string[]) {
+  if (selectedColors.length === 0) return true
+  const identity = normalizeColorIdentity(colorIdentity)
+  const unique = [...new Set(identity)].sort()
+  const selected = [...new Set(selectedColors.map((color) => color.toUpperCase().trim()).filter(Boolean))]
+  const wantsColorless = selected.includes('C')
+  const wantsMulticolor = selected.includes('M')
+  const explicitColors = selected.filter((color) => color !== 'C' && color !== 'M').sort()
+
+  if (wantsColorless) {
+    return unique.length === 0 && explicitColors.length === 0 && !wantsMulticolor
+  }
+
+  if (explicitColors.length === 0) {
+    return wantsMulticolor ? unique.length > 1 : true
+  }
+
+  const hasExactPalette =
+    unique.length === explicitColors.length &&
+    explicitColors.every((color, index) => unique[index] === color)
+
+  if (wantsMulticolor) {
+    return unique.length > 1 && hasExactPalette
+  }
+
+  return hasExactPalette
+}
+
+function matchesBasicLandFilter(typeLine: unknown, basicLandOnly: boolean) {
+  if (!basicLandOnly) return true
+  const value = String(typeLine || '').toLowerCase()
+  return value.includes('basic') && value.includes('land')
+}
+
+function shouldUseSpecialFoilLabel(currentFinish: string | undefined, foilVariant: string | undefined) {
+  if (!foilVariant) return false
+  const current = String(currentFinish || '').toLowerCase().trim()
+  return !current || current === 'foil' || current === 'etched' || current === 'etched foil'
+}
+
 // DICCIONARIO INTELIGENTE (Alias -> Categoría/TCG)
 const SMART_ALIASES: Record<string, string> = {
     'mtg': 'Magic',
@@ -37,18 +82,28 @@ async function getExternalPrices(supabase: any, products: any[]) {
     const scryfallIds = products.map((p: any) => p.scryfall_id || p.id).filter(Boolean)
     if (scryfallIds.length === 0) return new Map()
 
-    const { data: externalPrices } = await supabase
-      .from('external_prices')
-      .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil')
-      .in('scryfall_id', scryfallIds)
-    
+    const uniqueIds = [...new Set(scryfallIds.map((id: any) => String(id)))]
     const map = new Map()
-    externalPrices?.forEach((row: any) => {
+    const chunkSize = 100
+
+    for (let index = 0; index < uniqueIds.length; index += chunkSize) {
+      const batch = uniqueIds.slice(index, index + chunkSize)
+      const { data: externalPrices } = await supabase
+        .from('external_prices')
+        .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil, active_price_normal, active_price_foil, foil_variant, type_line, color_identity')
+        .in('scryfall_id', batch)
+
+      externalPrices?.forEach((row: any) => {
       map.set(String(row.scryfall_id), {
-        n: Number(row.cardkingdom_retail_normal || 0),
-        f: Number(row.cardkingdom_retail_foil || 0),
+        n: Number(row.active_price_normal || row.cardkingdom_retail_normal || 0),
+        f: Number(row.active_price_foil || row.cardkingdom_retail_foil || 0),
+        foil_variant: row.foil_variant || null,
+        type_line: row.type_line || null,
+        color_identity: normalizeColorIdentity(row.color_identity),
       })
-    })
+      })
+    }
+
     return map
 }
 
@@ -59,6 +114,12 @@ export default async function CatalogPage({
     page?: string
     set?: string
     q?: string
+    adv_name?: string
+    adv_set?: string
+    adv_collector?: string
+    adv_tcg?: string
+    colors?: string
+    basicLand?: string
     tcg?: string
     subcategory?: string
     blocked?: string
@@ -75,13 +136,24 @@ export default async function CatalogPage({
   const pageSize = 25
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
+  const advName = (params.adv_name || '').trim()
+  const advSet = (params.adv_set || '').trim()
+  const advCollector = (params.adv_collector || '').trim()
+  const advTcg = (params.adv_tcg || '').trim()
+  const selectedColors = String(params.colors || '')
+    .split(',')
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean)
+  const basicLandOnly = params.basicLand === 'true'
+  const hasAdvancedSearchFilters = !!(advName || advSet || advCollector || advTcg)
 
   // 1. DETECCIÓN DE BÚSQUEDA INTELIGENTE
   let currentQ = (params.q || '').trim()
+  if (currentQ.toLowerCase() === 'advanced-search') currentQ = ''
   let smartFilterTcg = params.tcg
   let isSmartSearch = false
 
-  if (currentQ) {
+  if (currentQ && !hasAdvancedSearchFilters) {
       const lowerQ = currentQ.toLowerCase()
       // Detectar accesorios específicos del menú
       if (['folios', 'toploaders', 'top loaders', 'perfect fit', 'deck box', 'deck boxes', 'dados', 'carpetas', 'playmats'].some(k => lowerQ.includes(k))) {
@@ -93,6 +165,11 @@ export default async function CatalogPage({
           isSmartSearch = true
       }
   }
+
+  const activeCategory = advTcg || smartFilterTcg || params.tcg || ''
+  const isMagicCategory = activeCategory === 'Magic'
+  const effectiveColors = isMagicCategory ? selectedColors : []
+  const effectiveBasicLandOnly = isMagicCategory ? basicLandOnly : false
 
   // Guard de acceso: oculta categorías deshabilitadas
   // Para revertir, basta con poner los flags en true en siteConfig.features
@@ -112,21 +189,23 @@ export default async function CatalogPage({
 
   // ---------------------------------------------------------
   // LÓGICA 1: CATÁLOGO PURO (Navegación / Filtros)
-  // Regla: SOLO mostrar productos con STOCK > 0
+  // Regla: el catálogo navegable muestra solo stock disponible.
+  // Las cartas sin stock quedan reservadas para resultados del buscador
+  // y búsqueda avanzada, donde sí sirven para exploración y wishlist.
   // Se activa si NO hay texto en el buscador (q)
   // ---------------------------------------------------------
-  if (!currentQ) {
+  if (!currentQ && !hasAdvancedSearchFilters) {
       let q = supabase
         .from('products')
         .select('*', { count: 'exact' })
         .gt('stock', 0)
         .not('name', 'ilike', '%(ARCHIVADO)%') // <-- FILTRO DE ARCHIVADOS
 
-      if (params.set) q = q.ilike('set_name', `%${params.set}%`)
-      if (smartFilterTcg) q = q.eq('tcg', smartFilterTcg)
+      if (isMagicCategory && params.set) q = q.ilike('set_name', `%${params.set}%`)
+      if (activeCategory) q = q.eq('tcg', activeCategory)
       if (params.subcategory) q = q.contains('metadata', { subcategory: params.subcategory })
-      if (params.condition) q = q.in('condition', params.condition.split(','))
-      if (params.rarity) q = q.in('rarity', params.rarity.split(','))
+      if (isMagicCategory && params.condition) q = q.in('condition', params.condition.split(','))
+      if (isMagicCategory && params.rarity) q = q.in('rarity', params.rarity.split(','))
       if (params.finish === 'foil') q = q.neq('finish', 'Non-Foil')
       else if (params.finish === 'nonfoil') q = q.eq('finish', 'Non-Foil')
 
@@ -135,15 +214,34 @@ export default async function CatalogPage({
           price_asc: { col: 'price_usd', asc: true },
           price_desc: { col: 'price_usd', asc: false },
           newest: { col: 'restocked_at', asc: false }, // <--- CAMBIO CLAVE
+          alpha: { col: 'name', asc: true },
       }
       const sortConfig = sortMap[params.sort || 'price_desc']
       
-      // Manejo de nulos en restocked_at (fallback a created_at si fuera necesario, pero SQL update lo cubrió)
-      q = q.order(sortConfig.col, { ascending: sortConfig.asc, nullsFirst: false }).range(from, to)
+      const needsIdentityFilter = effectiveColors.length > 0 || effectiveBasicLandOnly
+      q = q.order(sortConfig.col, { ascending: sortConfig.asc, nullsFirst: false })
+      if (!needsIdentityFilter) {
+        q = q.range(from, to)
+      }
 
       const res = await q
-      products = res.data || []
-      count = res.count || 0
+      const fetchedProducts = res.data || []
+
+      if (needsIdentityFilter) {
+        const extMap = await getExternalPrices(supabase, fetchedProducts)
+        const filtered = fetchedProducts.filter((product: any) => {
+          const ext = extMap.get(String(product.scryfall_id || product.id))
+          return (
+            matchesColorFilters(ext?.color_identity, effectiveColors) &&
+            matchesBasicLandFilter(ext?.type_line, effectiveBasicLandOnly)
+          )
+        })
+        count = filtered.length
+        products = filtered.slice(from, to + 1)
+      } else {
+        products = fetchedProducts
+        count = res.count || 0
+      }
   } 
   // ---------------------------------------------------------
   // LÓGICA 2: BÚSQUEDA REAL (Buscador Global)
@@ -154,7 +252,15 @@ export default async function CatalogPage({
         const host = hdrs.get('host') || 'localhost:3000'
         const proto = hdrs.get('x-forwarded-proto') || 'http'
         const origin = `${proto}://${host}`
-        const res = await fetch(`${origin}/api/search?q=${encodeURIComponent(currentQ)}`, { cache: 'no-store' })
+        const apiParams = new URLSearchParams()
+        apiParams.set('q', currentQ || 'advanced-search')
+        if (advName) apiParams.set('adv_name', advName)
+        if (advSet) apiParams.set('adv_set', advSet)
+        if (advCollector) apiParams.set('adv_collector', advCollector)
+        if (advTcg) apiParams.set('adv_tcg', advTcg)
+        if (effectiveColors.length > 0) apiParams.set('colors', effectiveColors.join(','))
+        if (effectiveBasicLandOnly) apiParams.set('basicLand', 'true')
+        const res = await fetch(`${origin}/api/search?${apiParams.toString()}`, { cache: 'no-store' })
         if (res.ok) {
           const data = await res.json()
           const arr = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : [])
@@ -176,14 +282,15 @@ export default async function CatalogPage({
   const priceMap = await getExternalPrices(supabase, products)
 
   const mappedProducts = products.map((p: any) => {
-    const finish = String(p.finish || '').toLowerCase()
+    const extPrice = priceMap.get(String(p.scryfall_id || p.id))
+    const effectiveFinish = shouldUseSpecialFoilLabel(p.finish, extPrice?.foil_variant) ? extPrice?.foil_variant : p.finish
+    const finish = String(effectiveFinish || '').toLowerCase()
     const isFoil = (finish.includes('foil') && !finish.includes('non')) || finish.includes('etched')
     
     const basePrice = isFoil ? Number(p.price_usd_foil || p.price_usd || 0) : Number(p.price_usd || 0)
     let finalPrice = basePrice
     
     if (p.isImport) {
-        const extPrice = priceMap.get(String(p.scryfall_id || p.id))
         if (extPrice) {
             const suggested = isFoil ? extPrice.f : extPrice.n
             if (suggested > 0) finalPrice = suggested
@@ -204,7 +311,7 @@ export default async function CatalogPage({
       stock: variantStock,
       condition: String(p.condition || 'NM'),
       isFoil,
-      finish: p.finish,
+      finish: effectiveFinish,
       rarity: String(p.rarity || ''),
       image: p.image_url,
       setName: p.set_name,
@@ -222,7 +329,7 @@ export default async function CatalogPage({
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col lg:flex-row gap-8">
-        <aside className="w-full lg:w-64 shrink-0"><FilterSidebar /></aside>
+        <aside className="w-full lg:w-64 shrink-0"><FilterSidebar activeCategory={activeCategory} /></aside>
         <div className="flex-1">
           <div className="flex items-center justify-between mb-6">
             <div className="flex flex-col">
@@ -232,7 +339,7 @@ export default async function CatalogPage({
                     {params.subcategory && <span className="text-slate-400 font-normal">/ {params.subcategory}</span>}
                     {isSmartSearch && <Sparkles size={18} className="text-[#9D1B1B]" />}
                 </h1>
-                {params.set && <span className="text-xs font-bold text-[#9D1B1B] bg-red-50 px-2 py-1 rounded w-fit mt-1">Set: {params.set}</span>}
+                {isMagicCategory && params.set && <span className="text-xs font-bold text-[#9D1B1B] bg-red-50 px-2 py-1 rounded w-fit mt-1">Set: {params.set}</span>}
                 {params.subcategory && <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded w-fit mt-1">Subcategoría: {params.subcategory}</span>}
             </div>
             <span className="text-sm text-slate-500 font-bold">{count} resultados</span>

@@ -2,26 +2,50 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Filter as FilterIcon, ChevronDown, ChevronUp, X, Search, Loader2 } from 'lucide-react'
-import Image from 'next/image'
 
-// TCGs Limpios
-const TCGS = ['Magic']
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Mythic']
 const CONDITIONS = ['NM', 'PL', 'HP', 'DMG']
+const COLOR_OPTIONS = [
+  { code: 'W', label: 'Blanco', chip: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-100 text-amber-700' },
+  { code: 'U', label: 'Azul', chip: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-100 text-blue-700' },
+  { code: 'B', label: 'Negro', chip: 'bg-slate-100 text-slate-700 border-slate-300', dot: 'bg-slate-700 text-white' },
+  { code: 'R', label: 'Rojo', chip: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-100 text-rose-700' },
+  { code: 'G', label: 'Verde', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-100 text-emerald-700' },
+  { code: 'C', label: 'Incoloro', chip: 'bg-zinc-100 text-zinc-700 border-zinc-300', dot: 'bg-zinc-100 text-zinc-700' },
+  { code: 'M', label: 'Multicolor', chip: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200', dot: 'bg-fuchsia-100 text-fuchsia-700' },
+]
 
-export default function FilterSidebar() {
+type ScryfallSetOption = {
+  code: string
+  name: string
+  icon_svg_uri?: string
+}
+
+type FilterSidebarProps = {
+  activeCategory?: string
+}
+
+export default function FilterSidebar({ activeCategory = '' }: FilterSidebarProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isOpen, setIsOpen] = useState(false) // Mobile toggle
   
   // Lógica de Sets
-  const [sets, setSets] = useState<any[]>([])
+  const [sets, setSets] = useState<ScryfallSetOption[]>([])
   const [setSearch, setSetSearch] = useState('')
   const [loadingSets, setLoadingSets] = useState(false)
   const [showSetDropdown, setShowSetDropdown] = useState(false)
+  const showMagicCardFilters = activeCategory === 'Magic'
 
   // Cargar Sets al iniciar (solo una vez)
   useEffect(() => {
+      if (!showMagicCardFilters) {
+          setSets([])
+          setSetSearch('')
+          setShowSetDropdown(false)
+          return
+      }
+
       const fetchSets = async () => {
           setLoadingSets(true)
           try {
@@ -38,25 +62,25 @@ export default function FilterSidebar() {
           }
       }
       fetchSets()
-  }, [])
+  }, [showMagicCardFilters])
 
   const updateFilter = (key: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString())
     if (value === null) params.delete(key)
     else {
-        if (key === 'finish' || key === 'set') { // Set y Finish son únicos
-            params.set(key, value)
-        } else { // Los demás son acumulativos
-            const current = params.get(key)?.split(',') || []
-            if (current.includes(value)) {
-                const next = current.filter(c => c !== value)
-                if (next.length > 0) params.set(key, next.join(','))
-                else params.delete(key)
-            } else {
-                current.push(value)
-                params.set(key, current.join(','))
-            }
+      if (key === 'finish' || key === 'set' || key === 'sort' || key === 'basicLand') {
+        params.set(key, value)
+      } else {
+        const current = params.get(key)?.split(',') || []
+        if (current.includes(value)) {
+          const next = current.filter(c => c !== value)
+          if (next.length > 0) params.set(key, next.join(','))
+          else params.delete(key)
+        } else {
+          current.push(value)
+          params.set(key, current.join(','))
         }
+      }
     }
     params.delete('page')
     router.push(`/catalog?${params.toString()}`, { scroll: false })
@@ -95,69 +119,121 @@ export default function FilterSidebar() {
           </button>
         </div>
 
-        {/* TCG */}
         <div>
-          <h4 className="font-bold text-slate-900 mb-3 text-sm">Juego (TCG)</h4>
-          <div className="space-y-2">
-            {TCGS.map((t) => (
-              <label key={t} className="flex items-center gap-2 text-sm text-slate-600 hover:text-[#9D1B1B] cursor-pointer transition-colors group">
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${hasFilter('tcg', t) ? 'bg-[#9D1B1B] border-[#9D1B1B]' : 'border-slate-300 group-hover:border-[#9D1B1B]'}`}>
-                    {hasFilter('tcg', t) && <div className="w-2 h-2 bg-white rounded-full"/>}
-                </div>
-                <input type="checkbox" className="hidden" checked={hasFilter('tcg', t)} onChange={() => updateFilter('tcg', t)} />
-                {t}
-              </label>
-            ))}
+          <h4 className="font-bold text-slate-900 mb-3 text-sm">Ordenar por</h4>
+          <div className="relative">
+            <select
+              value={searchParams.get('sort') || 'price_desc'}
+              onChange={(e) => updateFilter('sort', e.target.value)}
+              className="w-full border border-slate-200 rounded-lg p-2.5 text-sm text-slate-700 bg-slate-50 focus:ring-2 focus:ring-[#E91E63] focus:border-transparent outline-none appearance-none cursor-pointer"
+            >
+              <option value="price_desc">Mayor a menor precio</option>
+              <option value="price_asc">Menor a mayor precio</option>
+              <option value="newest">Más recientes</option>
+              <option value="alpha">Orden alfabético</option>
+            </select>
+            <div className="absolute right-3 top-3 pointer-events-none text-slate-400">
+              <ChevronDown size={16} />
+            </div>
           </div>
         </div>
 
-        <hr className="border-slate-100"/>
+        {showMagicCardFilters && (
+          <>
+            <hr className="border-slate-100"/>
 
-        {/* SETS (NUEVO) */}
-        <div className="relative">
-            <h4 className="font-bold text-slate-900 mb-3 text-sm">Set / Expansión</h4>
-            <div className="relative">
-                <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
-                <input 
-                    value={setSearch} 
-                    onChange={(e) => { setSetSearch(e.target.value); setShowSetDropdown(true) }}
-                    onFocus={() => setShowSetDropdown(true)}
-                    placeholder="Buscar set..." 
-                    className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C1B22]" 
-                />
-                {searchParams.get('set') && (
-                    <button onClick={() => { updateFilter('set', null); setSetSearch('') }} className="absolute right-2 top-2 text-slate-400 hover:text-red-500">
-                        <X size={14}/>
+            <div>
+              <h4 className="font-bold text-slate-900 mb-3 text-sm">Colores</h4>
+              <div className="flex flex-wrap gap-2">
+                {COLOR_OPTIONS.map((color) => {
+                  const active = hasFilter('colors', color.code)
+                  return (
+                    <button
+                      key={color.code}
+                      type="button"
+                      onClick={() => updateFilter('colors', active ? null : color.code)}
+                      className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
+                        active ? color.chip : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <span className={`relative flex h-5 w-5 items-center justify-center rounded-full overflow-hidden border border-black/5 shadow-sm ${color.dot}`}>
+                          <img
+                            src={`/icons/mana/${color.code}.svg`}
+                            alt={color.code}
+                            className="absolute inset-0 h-full w-full object-contain"
+                            onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = 'none' }}
+                          />
+                          <span className="text-[10px] font-extrabold">{color.code}</span>
+                        </span>
+                        <span>{color.label}</span>
+                      </span>
                     </button>
-                )}
+                  )
+                })}
+              </div>
             </div>
-            
-            {showSetDropdown && (setSearch.length > 0 || loadingSets) && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-20 max-h-48 overflow-y-auto">
-                    {loadingSets ? (
-                        <div className="p-3 text-center"><Loader2 className="animate-spin mx-auto w-4 h-4 text-[#9D1B1B]"/></div>
-                    ) : filteredSets.length > 0 ? (
-                        filteredSets.map((s) => (
-                            <button 
-                                key={s.code} 
-                                onClick={() => { updateFilter('set', s.name); setSetSearch(s.name); setShowSetDropdown(false) }}
-                                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2 truncate"
-                            >
-                                <img src={s.icon_svg_uri} alt="" className="w-4 h-4 opacity-70" />
-                                <span className="truncate">{s.name}</span>
-                            </button>
-                        ))
-                    ) : (
-                        <div className="p-2 text-xs text-center text-slate-400">No se encontraron sets</div>
+
+            <div>
+              <button
+                type="button"
+                onClick={() => updateFilter('basicLand', searchParams.get('basicLand') === 'true' ? null : 'true')}
+                className={`w-full text-sm py-2 font-bold rounded-lg border transition-colors flex items-center justify-center gap-2 cursor-pointer ${
+                  searchParams.get('basicLand') === 'true'
+                    ? 'bg-[#E91E63] text-white border-[#E91E63] shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                Solo tierras básicas
+              </button>
+            </div>
+
+            <hr className="border-slate-100"/>
+
+            <div className="relative">
+                <h4 className="font-bold text-slate-900 mb-3 text-sm">Set / Expansión</h4>
+                <div className="relative">
+                    <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                    <input 
+                        value={setSearch} 
+                        onChange={(e) => { setSetSearch(e.target.value); setShowSetDropdown(true) }}
+                        onFocus={() => setShowSetDropdown(true)}
+                        placeholder="Buscar set..." 
+                        className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C1B22]" 
+                    />
+                    {searchParams.get('set') && (
+                        <button onClick={() => { updateFilter('set', null); setSetSearch('') }} className="absolute right-2 top-2 text-slate-400 hover:text-red-500 cursor-pointer">
+                            <X size={14}/>
+                        </button>
                     )}
                 </div>
-            )}
-            
-            {/* Click outside closer overlay */}
-            {showSetDropdown && <div className="fixed inset-0 z-10" onClick={() => setShowSetDropdown(false)} />}
-        </div>
+                
+                {showSetDropdown && (setSearch.length > 0 || loadingSets) && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-20 max-h-48 overflow-y-auto">
+                        {loadingSets ? (
+                            <div className="p-3 text-center"><Loader2 className="animate-spin mx-auto w-4 h-4 text-[#9D1B1B]"/></div>
+                        ) : filteredSets.length > 0 ? (
+                            filteredSets.map((s) => (
+                                <button 
+                                    key={s.code} 
+                                    onClick={() => { updateFilter('set', s.name); setSetSearch(s.name); setShowSetDropdown(false) }}
+                                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2 truncate cursor-pointer"
+                                >
+                                    {s.icon_svg_uri ? <img src={s.icon_svg_uri} alt="" className="w-4 h-4 opacity-70" /> : null}
+                                    <span className="truncate">{s.name}</span>
+                                </button>
+                            ))
+                        ) : (
+                            <div className="p-2 text-xs text-center text-slate-400">No se encontraron sets</div>
+                        )}
+                    </div>
+                )}
+                
+                {showSetDropdown && <div className="fixed inset-0 z-10" onClick={() => setShowSetDropdown(false)} />}
+            </div>
+          </>
+        )}
 
-        {/* Acabado (Foil) */}
         <div>
           <h4 className="font-bold text-slate-900 mb-3 text-sm">Acabado</h4>
           <div className="flex p-1 bg-slate-100 rounded-lg">
@@ -171,7 +247,7 @@ export default function FilterSidebar() {
                     <button
                         key={opt.label}
                         onClick={() => updateFilter('finish', opt.val)}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${isActive ? 'bg-white text-[#9D1B1B] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${isActive ? 'bg-white text-[#9D1B1B] shadow-sm' : 'text-slate-500 hover:text-slate-700'} cursor-pointer`}
                     >
                         {opt.label}
                     </button>
@@ -180,35 +256,36 @@ export default function FilterSidebar() {
           </div>
         </div>
 
-        {/* Rareza */}
-        <div>
-          <h4 className="font-bold text-slate-900 mb-3 text-sm">Rareza</h4>
-          <div className="space-y-2">
-            {RARITIES.map((r) => (
-              <label key={r} className="flex items-center gap-2 text-sm text-slate-600 hover:text-[#9D1B1B] cursor-pointer group">
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${hasFilter('rarity', r) ? 'bg-[#9D1B1B] border-[#9D1B1B]' : 'border-slate-300 group-hover:border-[#9D1B1B]'}`}>
-                    {hasFilter('rarity', r) && <div className="w-2 h-2 bg-white rounded-full"/>}
-                </div>
-                <input type="checkbox" className="hidden" checked={hasFilter('rarity', r)} onChange={() => updateFilter('rarity', r)} />
-                {r}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Estado */}
-        <div>
-            <h4 className="font-bold text-slate-900 mb-3 text-sm">Estado</h4>
-            <div className="flex flex-wrap gap-2">
-                {CONDITIONS.map((c) => (
-                <label key={c} className={`px-2.5 py-1 rounded text-xs font-bold border cursor-pointer transition-all ${hasFilter('condition', c) ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
-                    <input type="checkbox" className="hidden" checked={hasFilter('condition', c)} onChange={() => updateFilter('condition', c)} />
-                    {c}
-                </label>
+        {showMagicCardFilters && (
+          <>
+            <div>
+              <h4 className="font-bold text-slate-900 mb-3 text-sm">Rareza</h4>
+              <div className="space-y-2">
+                {RARITIES.map((r) => (
+                  <label key={r} className="flex items-center gap-2 text-sm text-slate-600 hover:text-[#9D1B1B] cursor-pointer group">
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${hasFilter('rarity', r) ? 'bg-[#9D1B1B] border-[#9D1B1B]' : 'border-slate-300 group-hover:border-[#9D1B1B]'}`}>
+                        {hasFilter('rarity', r) && <div className="w-2 h-2 bg-white rounded-full"/>}
+                    </div>
+                    <input type="checkbox" className="hidden" checked={hasFilter('rarity', r)} onChange={() => updateFilter('rarity', r)} />
+                    {r}
+                  </label>
                 ))}
+              </div>
             </div>
-        </div>
 
+            <div>
+                <h4 className="font-bold text-slate-900 mb-3 text-sm">Estado</h4>
+                <div className="flex flex-wrap gap-2">
+                    {CONDITIONS.map((c) => (
+                    <label key={c} className={`px-2.5 py-1 rounded text-xs font-bold border cursor-pointer transition-all ${hasFilter('condition', c) ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                        <input type="checkbox" className="hidden" checked={hasFilter('condition', c)} onChange={() => updateFilter('condition', c)} />
+                        {c}
+                    </label>
+                    ))}
+                </div>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   )

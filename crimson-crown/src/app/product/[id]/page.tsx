@@ -8,6 +8,12 @@ import { siteConfig } from '@/config/site'
 
 export const revalidate = 60
 
+function shouldUseSpecialFoilLabel(currentFinish: string | undefined, foilVariant: string | undefined) {
+  if (!foilVariant) return false
+  const current = String(currentFinish || '').toLowerCase().trim()
+  return !current || current === 'foil' || current === 'etched' || current === 'etched foil'
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params
   const supabase = await createClient()
@@ -89,6 +95,24 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   // 3. Precios y Normalización (Principal)
   let finalPrice = Number(product.price_usd || 0)
   let finalPriceFoil = Number(product.price_usd_foil || 0)
+  let productExternal: any = null
+
+  if (product.scryfall_id) {
+    const { data: ext } = await supabase
+      .from('external_prices')
+      .select('active_price_normal, active_price_foil, foil_variant')
+      .eq('scryfall_id', product.scryfall_id)
+      .maybeSingle()
+    productExternal = ext
+  }
+
+  if (isImport && productExternal) {
+    if (Number(productExternal.active_price_normal || 0) > 0) finalPrice = Number(productExternal.active_price_normal)
+    if (Number(productExternal.active_price_foil || 0) > 0) finalPriceFoil = Number(productExternal.active_price_foil)
+  }
+  if (shouldUseSpecialFoilLabel(product.finish, productExternal?.foil_variant)) {
+    product.finish = productExternal.foil_variant
+  }
 
   const finish = (product.finish || '').toLowerCase()
   const isFoil = (finish.includes('foil') && !finish.includes('non')) || finish.includes('etched') || finish.includes('holo')
@@ -174,23 +198,44 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
         if (scryIds.length > 0) {
           const { data: extPrices } = await supabase
             .from('external_prices')
-            .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil')
+            .select('scryfall_id, active_price_normal, active_price_foil, cardkingdom_retail_normal, cardkingdom_retail_foil, foil_variant')
             .in('scryfall_id', scryIds)
           const pm = new Map<string, any>()
           ;(extPrices || []).forEach((row: any) => pm.set(String(row.scryfall_id), row))
           imports.forEach((v: any) => {
             const row = pm.get(String(v.id))
             if (row) {
-              const ckN = Number(row.cardkingdom_retail_normal || 0)
-              const ckF = Number(row.cardkingdom_retail_foil || 0)
+              const ckN = Number(row.active_price_normal || row.cardkingdom_retail_normal || 0)
+              const ckF = Number(row.active_price_foil || row.cardkingdom_retail_foil || 0)
               if (ckN > 0) v.price_usd = ckN
               if (ckF > 0) v.price_usd_foil = ckF
+              if (shouldUseSpecialFoilLabel(v.finish, row.foil_variant)) v.finish = row.foil_variant
             }
           })
         }
 
         alternatives = alternatives.concat(imports)
       } catch {}
+  }
+
+  const altScryIds = alternatives
+    .map((alt: any) => alt.scryfall_id || alt.id)
+    .filter(Boolean)
+
+  if (altScryIds.length > 0) {
+    const { data: altExternal } = await supabase
+      .from('external_prices')
+      .select('scryfall_id, foil_variant')
+      .in('scryfall_id', altScryIds)
+    const altMap = new Map<string, any>()
+    ;(altExternal || []).forEach((row: any) => altMap.set(String(row.scryfall_id), row))
+    alternatives = alternatives.map((alt: any) => {
+      const row = altMap.get(String(alt.scryfall_id || alt.id))
+      if (row && shouldUseSpecialFoilLabel(alt.finish, row.foil_variant)) {
+        return { ...alt, finish: row.foil_variant }
+      }
+      return alt
+    })
   }
 
   return (

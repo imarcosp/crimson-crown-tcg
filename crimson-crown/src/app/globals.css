@@ -3,6 +3,8 @@
 :root {
   --background: #F8FAFC;
   --foreground: #0F172A;
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-soft: 340ms;
 }
 
 @theme inline {
@@ -17,4 +19,143 @@
 body {
   @apply bg-[#F8FAFC] text-slate-900;
   font-family: Arial, Helvetica, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+.ui-overlay-soft {
+  transition:
+    opacity var(--duration-soft) var(--ease-soft),
+    backdrop-filter var(--duration-soft) var(--ease-soft),
+    visibility var(--duration-soft) linear;
+}
+
+.ui-drawer-left-soft,
+.ui-drawer-right-soft {
+  will-change: transform, opacity;
+  transition:
+    transform calc(var(--duration-soft) + 40ms) var(--ease-soft),
+    opacity var(--duration-soft) var(--ease-soft),
+    box-shadow var(--duration-soft) var(--ease-soft);
+}
+
+.ui-drawer-left-soft.is-closed {
+  transform: translate3d(-24px, 0, 0);
+  opacity: 0;
+}
+
+.ui-drawer-right-soft.is-closed {
+  transform: translate3d(24px, 0, 0);
+  opacity: 0;
+}
+
+.ui-drawer-left-soft.is-open,
+.ui-drawer-right-soft.is-open {
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+}
+
+.foil-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  background-size: 200% 200%;
+}
+
+.foil-surge-container {
+  filter: saturate(1.5) contrast(1.08) brightness(1.03);
+}
+
+@keyframes foilShimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes surgeFlow {
+  0% {
+    background-position: 0% 50%, 100% 50%, 50% 0%;
+  }
+  50% {
+    background-position: 100% 50%, 0% 50%, 50% 100%;
+  }
+  100% {
+    background-position: 0% 50%, 100% 50%, 50% 0%;
+  }
+}
+
+@keyframes foilPan {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-foil-pan {
+  animation: foilPan 6s linear infinite;
+}
+
+.foil-layer-1 {
+  opacity: 0.72;
+  mix-blend-mode: color-dodge;
+  background-image: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(255, 0, 128, 0.24) 25%,
+    rgba(0, 255, 128, 0.24) 50%,
+    rgba(0, 128, 255, 0.24) 75%,
+    transparent 100%
+  );
+  animation: foilShimmer 4s ease-in-out infinite;
+}
+
+.foil-layer-2 {
+  opacity: 0.52;
+  mix-blend-mode: screen;
+  background-image: linear-gradient(
+    118deg,
+    transparent 0%,
+    rgba(255, 0, 128, 0.20) 22%,
+    rgba(0, 255, 128, 0.20) 44%,
+    rgba(0, 128, 255, 0.20) 70%,
+    transparent 100%
+  );
+  animation: foilShimmer 3.5s ease-in-out infinite;
+}
+
+.foil-layer-3 {
+  opacity: 0.30;
+  mix-blend-mode: screen;
+  background-image: linear-gradient(
+    122deg,
+    transparent 8%,
+    rgba(255, 255, 255, 0.82) 34%,
+    rgba(255, 255, 255, 0.22) 52%,
+    rgba(255, 255, 255, 0.70) 68%,
+    transparent 92%
+  );
+  animation: foilShimmer 5s ease-in-out infinite;
+}
+
+.surge-texture-layer {
+  opacity: 0.72;
+  mix-blend-mode: color-dodge;
+  background-image: url('/effects/surge.png');
+  background-size: cover;
+  background-position: center;
+  will-change: background-position;
 }

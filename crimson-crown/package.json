@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "update-prices": "node scripts/update-prices.mjs",
+    "sync:master-healer": "node scripts/sync-master-healer-v2-compatible.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {
