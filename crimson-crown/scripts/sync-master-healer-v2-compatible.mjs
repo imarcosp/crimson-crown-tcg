@@ -38,6 +38,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 
 const TEMP_SCRYFALL_FILE = './temp_scryfall_bulk.json'
 const CK_API_URL = 'https://api.cardkingdom.com/api/v2/pricelist'
+const SCRYFALL_HEADERS = {
+    'User-Agent': 'CrimsonCrownTCG/1.0 (sync-master-healer-v2-compatible; contact: mjperchezabala@gmail.com)',
+    'Accept': 'application/json'
+}
 
 // --- UTILIDADES ---
 const sanitize = (str) => {
@@ -101,7 +105,9 @@ async function main() {
     console.log('\n⬇️  [1/8] Obteniendo URI de Scryfall Bulk Data...')
     let downloadUri = ''
     try {
-        const metaRes = await fetch('https://api.scryfall.com/bulk-data/default-cards')
+        const metaRes = await fetch('https://api.scryfall.com/bulk-data/default-cards', {
+            headers: SCRYFALL_HEADERS
+        })
         if (!metaRes.ok) throw new Error(`API Error ${metaRes.status}`)
         const meta = await metaRes.json()
         downloadUri = meta.download_uri
@@ -428,7 +434,9 @@ async function main() {
         // Hacemos una llamada directa a Scryfall
         try {
             const scryUrl = `https://api.scryfall.com/cards/search?q=${encodeURIComponent(item.name)}+cn:${cn}&unique=prints`
-            const res = await fetch(scryUrl)
+            const res = await fetch(scryUrl, {
+                headers: SCRYFALL_HEADERS
+            })
             
             if (res.ok) {
                 const data = await res.json()
@@ -558,6 +566,7 @@ async function main() {
     let productsUpdated = 0
     let productsSkippedManual = 0
     let productsSkippedNoPrice = 0
+    const productsNoReferenceDetails = []
     const productUpdates = []
     const productUpdateById = new Map()
 
@@ -568,11 +577,32 @@ async function main() {
         }
 
         const scryId = p.scryfall_id
-        if (!scryId) continue
+        if (!scryId) {
+            productsSkippedNoPrice++
+            productsNoReferenceDetails.push({
+                id: p.id,
+                name: p.name,
+                finish: p.finish || '',
+                condition: p.condition || '',
+                language: p.language || '',
+                scryfall_id: '',
+                reason: 'Producto sin scryfall_id'
+            })
+            continue
+        }
 
         const extData = upsertMap.get(scryId)
         if (!extData) {
             productsSkippedNoPrice++
+            productsNoReferenceDetails.push({
+                id: p.id,
+                name: p.name,
+                finish: p.finish || '',
+                condition: p.condition || '',
+                language: p.language || '',
+                scryfall_id: scryId,
+                reason: 'No existe external_prices para este scryfall_id'
+            })
             continue
         }
 
@@ -607,6 +637,20 @@ async function main() {
 
         if (basePrice <= 0) {
             productsSkippedNoPrice++
+            productsNoReferenceDetails.push({
+                id: p.id,
+                name: p.name,
+                finish: p.finish || '',
+                condition: p.condition || '',
+                language: p.language || '',
+                scryfall_id: scryId,
+                reason: isFoil
+                    ? 'external_prices existe pero foil/active_price_foil sin valor usable'
+                    : 'external_prices existe pero normal/active_price_normal sin valor usable',
+                ckPrice,
+                tcgPrice,
+                activePrice
+            })
             continue
         }
 
@@ -695,6 +739,28 @@ async function main() {
     console.log(`   - Manuales (Intactos): ${productsSkippedManual}`)
     console.log(`   - Sin Precio Referencia: ${productsSkippedNoPrice}`)
     console.log(`   - Reconciliados por condición: ${productsReconciledByCondition}`)
+    if (productsNoReferenceDetails.length > 0) {
+        console.log('\n📋 PRODUCTS SIN PRECIO REFERENCIA:')
+        for (const item of productsNoReferenceDetails) {
+            const parts = [
+                `   - ${item.name}`,
+                `ID=${item.id}`,
+                `Finish=${item.finish || '-'}`,
+                `Cond=${item.condition || '-'}`,
+                `Lang=${item.language || '-'}`,
+                `Scryfall=${item.scryfall_id || '-'}`,
+                `Motivo=${item.reason}`
+            ]
+
+            if (typeof item.ckPrice === 'number' || typeof item.tcgPrice === 'number' || typeof item.activePrice === 'number') {
+                parts.push(`CK=${Number(item.ckPrice || 0).toFixed(2)}`)
+                parts.push(`TCG=${Number(item.tcgPrice || 0).toFixed(2)}`)
+                parts.push(`Active=${Number(item.activePrice || 0).toFixed(2)}`)
+            }
+
+            console.log(parts.join(' | '))
+        }
+    }
     console.log('\nℹ️  CONSIGNACIÓN OMITIDA: este proyecto no usa seller_inventory.')
 
     console.log('\n\n🧹 Limpiando archivos temporales...')

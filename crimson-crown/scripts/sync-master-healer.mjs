@@ -37,6 +37,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 
 const TEMP_SCRYFALL_FILE = './temp_scryfall_bulk.json'
 const CK_API_URL = 'https://api.cardkingdom.com/api/v2/pricelist'
+const SCRYFALL_HEADERS = {
+    'User-Agent': 'CrimsonCrownTCG/1.0 (sync-master-healer; contact: mjperchezabala@gmail.com)',
+    'Accept': 'application/json'
+}
 
 // --- UTILIDADES ---
 const sanitize = (str) => {
@@ -63,7 +67,9 @@ async function main() {
     console.log('\n⬇️  [1/8] Obteniendo URI de Scryfall Bulk Data...')
     let downloadUri = ''
     try {
-        const metaRes = await fetch('https://api.scryfall.com/bulk-data/default-cards')
+        const metaRes = await fetch('https://api.scryfall.com/bulk-data/default-cards', {
+            headers: SCRYFALL_HEADERS
+        })
         if (!metaRes.ok) throw new Error(`API Error ${metaRes.status}`)
         const meta = await metaRes.json()
         downloadUri = meta.download_uri
