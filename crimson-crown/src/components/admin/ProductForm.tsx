@@ -3,39 +3,18 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { X, Search, Loader2, Image as ImageIcon, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { processWishlistNotifications } from '@/app/actions/wishlist'
+import {
+  finishKeyToLabel,
+  finishKeyToValue,
+  finishValueToKey,
+  getReferencePriceForFinish,
+  resolveMagicFinishSelection,
+} from '@/lib/cards/finish-normalization'
 
 type Props = {
   initial?: any | null
   onClose: () => void
   onSaved: (product: any) => void
-}
-
-function finishKeyToValue(key: string) {
-  const k = String(key || '').toLowerCase()
-  if (k === 'nonfoil') return 'Non-Foil'
-  if (k === 'foil') return 'Foil'
-  if (k === 'etched') return 'Etched'
-  const label = k.replace(/[^a-z0-9]+/g, ' ').trim()
-  const titled = label.split(' ').filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-  if (!titled) return 'Foil'
-  if (titled.toLowerCase().includes('foil')) return titled
-  return `${titled} Foil`
-}
-
-function finishKeyToLabel(key: string) {
-  const k = String(key || '').toLowerCase()
-  if (k === 'nonfoil') return 'Normal / Non-Foil'
-  if (k === 'foil') return 'Foil'
-  if (k === 'etched') return 'Etched Foil'
-  return finishKeyToValue(k)
-}
-
-function finishValueToKey(value: string) {
-  const v = String(value || '').toLowerCase()
-  if (v.includes('etched')) return 'etched'
-  if (v.includes('non') && v.includes('foil')) return 'nonfoil'
-  if (v.includes('foil') || v.includes('holo') || v.includes('surge') || v.includes('raised') || v.includes('gilded') || v.includes('glossy')) return 'foil'
-  return 'nonfoil'
 }
 
 export default function ProductForm({ initial, onClose, onSaved }: Props) {
@@ -89,6 +68,15 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
     })
     return ordered.map((k) => ({ key: k, value: finishKeyToValue(k), label: finishKeyToLabel(k) }))
   }, [availableFinishes, mode])
+
+  const fetchExternalFinishContext = async (scryfallId: string) => {
+    const { data } = await supabase
+      .from('external_prices')
+      .select('foil_variant, active_price_normal, active_price_foil, cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, tcgplayer_market_normal, tcgplayer_market_foil')
+      .eq('scryfall_id', scryfallId)
+      .maybeSingle()
+    return data
+  }
 
   useEffect(() => {
     let mounted = true
@@ -262,7 +250,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
       let initialFinish = 'Non-Foil'
       if (!hasNonFoil && uniqueNext.length === 1) initialFinish = finishKeyToValue(uniqueNext[0])
       else if (!hasNonFoil && otherFoils.length > 0) initialFinish = finishKeyToValue(otherFoils[0])
-      else if (!hasNonFoil && hasEtched) initialFinish = 'Etched'
+      else if (!hasNonFoil && hasEtched) initialFinish = 'Etched Foil'
       else if (!hasNonFoil && hasFoil) initialFinish = 'Foil'
 
       let initialPrice = pNormal
@@ -270,7 +258,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
       if (initialKey === 'etched') initialPrice = Number(card.price_usd_etched || card.priceUsdEtched || pFoil || pNormal || 0)
       else if (initialKey === 'foil') initialPrice = pFoil || pNormal
       
-      if (!hasNonFoil && hasFoil) {
+      if (!hasNonFoil && hasFoil && !hasEtched && otherFoils.length === 0) {
         initialFinish = 'Foil'
         initialPrice = pFoil
       }
@@ -309,23 +297,8 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
     setFormData(prev => ({ ...prev, finish: newFinish }))
     if (formData.is_manual_price || !formData.scryfall_id) return
     setFetchingPrice(true)
-    const { data: prices } = await supabase.from('external_prices').select('cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, tcgplayer_market_normal, tcgplayer_market_foil').eq('scryfall_id', formData.scryfall_id).maybeSingle() 
-    let finalPrice = 0
-    if (prices) {
-       const isEtched = wantKey === 'etched'
-       const isFoil = !isEtched && wantKey !== 'nonfoil'
-       const ckN = Number(prices.cardkingdom_retail_normal || 0)
-       const ckF = Number(prices.cardkingdom_retail_foil || 0)
-       const ckE = Number(prices.cardkingdom_retail_etched || ckF || 0) // Fallback a Foil si no hay Etched explícito
-       const tcgN = Number(prices.tcgplayer_market_normal || 0)
-       const tcgF = Number(prices.tcgplayer_market_foil || 0)
-       const tcgE = tcgF // TCG Market suele unificar o usar el precio Foil para Etched si no hay columna
-       
-       // PRIORIDAD CK > TCG (Alineado con el backend)
-       if (isEtched) finalPrice = ckE > 0 ? ckE : tcgE
-       else if (isFoil) finalPrice = ckF > 0 ? ckF : tcgF
-       else finalPrice = ckN > 0 ? ckN : tcgN
-    }
+    const prices = await fetchExternalFinishContext(formData.scryfall_id)
+    let finalPrice = getReferencePriceForFinish(prices, finishKeyToValue(wantKey))
     setFetchingPrice(false)
     if (finalPrice > 0) {
         if (finalPrice < 0.35) finalPrice = 0.35
@@ -389,6 +362,20 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
     if (mode === 'Other') {
       payload.scryfall_id = undefined
       payload.collector_number = undefined
+    } else if (payload.scryfall_id) {
+      const externalContext = await fetchExternalFinishContext(payload.scryfall_id)
+      const resolvedFinish = resolveMagicFinishSelection(payload.finish, availableFinishes, externalContext)
+      if (resolvedFinish !== payload.finish) {
+        payload.finish = resolvedFinish
+        setFormData((prev) => ({ ...prev, finish: resolvedFinish }))
+      }
+      if (!payload.is_manual_price) {
+        const resolvedPrice = getReferencePriceForFinish(externalContext, payload.finish)
+        if (resolvedPrice > 0) {
+          payload.price_usd = resolvedPrice < 0.35 ? 0.35 : resolvedPrice
+          setFormData((prev) => ({ ...prev, finish: payload.finish, price_usd: payload.price_usd }))
+        }
+      }
     }
     let shouldNotify = false
     let productId = ''
@@ -558,7 +545,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
                   <>
                     <option value="Non-Foil">Normal / Non-Foil</option>
                     <option value="Foil">Foil</option>
-                    <option value="Etched">Etched Foil</option>
+                    <option value="Etched Foil">Etched Foil</option>
                   </>
                 )}
               </select>

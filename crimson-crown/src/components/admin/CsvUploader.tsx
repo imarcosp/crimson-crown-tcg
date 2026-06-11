@@ -4,6 +4,11 @@ import { supabase } from '@/lib/supabase'
 import Papa from 'papaparse'
 import { Upload, Loader2, FileSpreadsheet, CheckCircle } from 'lucide-react'
 import { processWishlistNotifications } from '@/app/actions/wishlist' // <--- IMPORTAR
+import {
+  canonicalizeMagicFinishLabel,
+  getReferencePriceForFinish,
+  resolveMagicFinishSelection,
+} from '@/lib/cards/finish-normalization'
 
 export default function CsvUploader() {
   const [step, setStep] = useState<'upload' | 'preview' | 'processing' | 'done'>('upload')
@@ -71,39 +76,27 @@ export default function CsvUploader() {
 
   const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+  const fetchExternalFinishContext = async (scryfallId: string | null) => {
+    if (!scryfallId) return null
+    const { data, error } = await supabase
+      .from('external_prices')
+      .select('foil_variant, active_price_normal, active_price_foil, cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, tcgplayer_market_normal, tcgplayer_market_foil')
+      .eq('scryfall_id', scryfallId)
+      .maybeSingle()
+
+    if (error) return null
+    return data
+  }
+
   const getInitialPriceFromExternal = async (
-    scryfallId: string | null,
+    externalContext: any,
     finish: string,
     condition: string
   ) => {
     const fallbackPrice = 0.5
-    if (!scryfallId) return fallbackPrice
+    if (!externalContext) return fallbackPrice
 
-    const { data, error } = await supabase
-      .from('external_prices')
-      .select('cardkingdom_retail_normal, cardkingdom_retail_foil, tcgplayer_market_normal, tcgplayer_market_foil')
-      .eq('scryfall_id', scryfallId)
-      .maybeSingle()
-
-    if (error || !data) return fallbackPrice
-
-    const normalizedFinish = String(finish || '').toLowerCase()
-    const isFoil =
-      (normalizedFinish.includes('foil') && !normalizedFinish.includes('non')) ||
-      normalizedFinish.includes('etched') ||
-      normalizedFinish.includes('halo') ||
-      normalizedFinish.includes('surge') ||
-      normalizedFinish.includes('confetti') ||
-      normalizedFinish.includes('galaxy')
-
-    const ckPrice = isFoil
-      ? Number(data.cardkingdom_retail_foil || 0)
-      : Number(data.cardkingdom_retail_normal || 0)
-    const tcgPrice = isFoil
-      ? Number(data.tcgplayer_market_foil || 0)
-      : Number(data.tcgplayer_market_normal || 0)
-
-    const basePrice = ckPrice > 0 ? ckPrice : tcgPrice
+    const basePrice = getReferencePriceForFinish(externalContext, finish)
     if (basePrice <= 0) return fallbackPrice
 
     const normalizedCondition = String(condition || 'NM').toUpperCase()
@@ -162,11 +155,13 @@ export default function CsvUploader() {
             const foilVal = String(getCol(row, 'Foil') || '').toLowerCase()
             const etchedVal = String(getCol(row, 'Etched') || '').toLowerCase()
             if (foilVal.includes('foil') || foilVal === 'true' || foilVal === 'yes') finish = 'Foil'
-            if (etchedVal === 'true' || name.toLowerCase().includes('etched')) finish = 'Etched'
+            if (etchedVal === 'true' || name.toLowerCase().includes('etched')) finish = 'Etched Foil'
             
             const condition = mapCondition(getCol(row, 'Condition') || '')
             const language = mapLanguage(getCol(row, 'Language') || '')
             const scryfallId = getCol(row, 'Scryfall ID', 'scryfall_id', 'scryfall id') || null
+            const externalContext = await fetchExternalFinishContext(scryfallId)
+            finish = resolveMagicFinishSelection(canonicalizeMagicFinishLabel(finish), null, externalContext)
             const stockToAdd = Number(getCol(row, 'Quantity', 'quantity') || 1)
             const setName = getCol(row, 'Set name', 'set_name') || getCol(row, 'Set code', 'code')
             const collectorNumber = String(getCol(row, 'Collector number', 'number') || '').trim()
@@ -205,7 +200,7 @@ export default function CsvUploader() {
             } else {
               await delay(100)
               const fetchedImage = await fetchScryfallImage(scryfallId, name, setName)
-              const initialPrice = await getInitialPriceFromExternal(scryfallId, finish, condition)
+              const initialPrice = await getInitialPriceFromExternal(externalContext, finish, condition)
               const rpcPayload = {
                 p_name: normName,
                 p_set_name: normSet,
