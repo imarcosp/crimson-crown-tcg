@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useRef, Suspense } from 'react'
-import { ArrowRight, Search, ShoppingCart, Loader2, CheckCircle, Plane, Copy, Sparkles, Plus, X, ZoomIn, RefreshCw, ChevronDown, Image as ImageIcon } from 'lucide-react'
+import { ArrowRight, Search, ShoppingCart, Loader2, CheckCircle, Plane, Copy, Sparkles, Plus, X, ZoomIn, RefreshCw, ChevronDown, Image as ImageIcon, AlertTriangle, ExternalLink } from 'lucide-react'
 import { useCartStore } from '@/store/cartStore'
 import { useUIStore } from '@/store/uiStore'
 import { useQuoteStore } from '@/store/quoteStore'
@@ -14,6 +14,8 @@ function MoxfieldToolContent() {
   const [input, setInput] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
   const [results, setResults] = useState<any>(null)
+  const [inlineError, setInlineError] = useState<string | null>(null)
+  const [fallbackGuide, setFallbackGuide] = useState<{ title: string; steps: string[]; requestId?: string | null } | null>(null)
   
   // Estados UI
   const [zoomedImage, setZoomedImage] = useState<string | null>(null)
@@ -44,12 +46,15 @@ function MoxfieldToolContent() {
       if (!textToProcess.trim()) return
       setAnalyzing(true)
       setResults(null)
+      setInlineError(null)
+      setFallbackGuide(null)
       
       try {
           let payload: any = {}
+          const isMoxfieldUrl = textToProcess.includes('moxfield.com/decks/')
 
           // Detectamos si es URL o Texto
-          if (textToProcess.includes('moxfield.com/decks/')) {
+          if (isMoxfieldUrl) {
               payload = { moxfieldUrl: textToProcess }
           } else {
               payload = { deckList: textToProcess }
@@ -61,11 +66,35 @@ function MoxfieldToolContent() {
           })
           const data = await res.json()
           
-          if (data.error) alert(data.error)
-          else setResults(data)
+          if (data.error) {
+            const lowerError = String(data.error || '').toLowerCase()
+            const shouldShowFallback =
+              isMoxfieldUrl &&
+              (lowerError.includes('moxfield') ||
+                lowerError.includes('mazo') ||
+                lowerError.includes('público') ||
+                lowerError.includes('publico'))
+
+            if (shouldShowFallback) {
+              setInlineError('Parece que en este momento no podemos conectarnos con Moxfield para importar el mazo automáticamente.')
+              setFallbackGuide({
+                title: 'Puedes continuar igualmente pegando la lista en texto plano.',
+                requestId: data.requestId || null,
+                steps: [
+                  'Ingresa a tu mazo en Moxfield.',
+                  'Haz clic en "More" o en el menú de más opciones.',
+                  'Selecciona "Export".',
+                  'Elige "Copy plain text" o la opción de copiar la lista en texto plano.',
+                  'Pega ese texto en el cuadro de abajo y haz clic en "Analizar".',
+                ],
+              })
+            } else {
+              setInlineError(data.error)
+            }
+          } else setResults(data)
 
       } catch (e) {
-          alert('Error de conexión con el servidor.')
+          setInlineError('Error de conexión con el servidor.')
       } finally {
           setAnalyzing(false)
       }
@@ -320,7 +349,7 @@ const enriched = rawVersions.map((v: any) => {
     if (!results || !Array.isArray(results.missing) || results.missing.length === 0) return
     const need = results.missing
       .map((c: any, i: number) => ({ c, i }))
-      .filter(({ c }) => !(Number(c.price_usd) > 0 || Number(c.price_usd_foil) > 0))
+      .filter(({ c }: { c: any; i: number }) => !(Number(c.price_usd) > 0 || Number(c.price_usd_foil) > 0))
     if (need.length === 0) return
     let cancelled = false
     ;(async () => {
@@ -454,11 +483,65 @@ const enriched = rawVersions.map((v: any) => {
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm h-full flex flex-col">
                     <div className="flex justify-between items-center mb-2">
                         <label className="text-xs font-bold text-slate-500 uppercase">Lista / Enlace</label>
-                        <button onClick={() => setInput('')} className="text-xs text-red-500 hover:text-red-700 font-bold cursor-pointer">Limpiar</button>
+                        <button
+                          onClick={() => {
+                            setInput('')
+                            setInlineError(null)
+                            setFallbackGuide(null)
+                            setResults(null)
+                          }}
+                          className="text-xs text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                        >
+                          Limpiar
+                        </button>
                     </div>
+                    {inlineError && (
+                      <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4 text-left">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 shrink-0 rounded-full bg-amber-100 p-2 text-amber-700">
+                            <AlertTriangle size={16} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-amber-900">{inlineError}</p>
+                            {fallbackGuide?.title && (
+                              <p className="mt-1 text-xs sm:text-sm text-amber-800">{fallbackGuide.title}</p>
+                            )}
+                            {fallbackGuide?.requestId && (
+                              <p className="mt-1 text-[11px] text-amber-700/90 break-all">
+                                ID de referencia: {fallbackGuide.requestId}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {fallbackGuide && (
+                          <div className="mt-3 rounded-lg border border-amber-200 bg-white/70 p-3">
+                            <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Pasos a seguir</p>
+                            <ol className="mt-2 space-y-2 text-sm text-slate-700">
+                              {fallbackGuide.steps.map((step, index) => (
+                                <li key={index} className="flex items-start gap-2">
+                                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold text-amber-800">
+                                    {index + 1}
+                                  </span>
+                                  <span>{step}</span>
+                                </li>
+                              ))}
+                            </ol>
+                            <a
+                              href={input && input.includes('moxfield.com/decks/') ? input : 'https://www.moxfield.com/'}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900 transition-colors hover:bg-amber-200 cursor-pointer"
+                            >
+                              Abrir Moxfield
+                              <ExternalLink size={14} />
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <textarea 
                         className="flex-1 w-full min-h-[300px] bg-slate-50 border border-slate-200 rounded-lg p-4 font-mono text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none"
-                        placeholder={`https://moxfield.com/decks/...\nO:\n4 Mental Misstep\n1 Sol Ring`}
+                        placeholder={`https://moxfield.com/decks/...\n\nSi no funciona el enlace, pega aquí el texto exportado desde Moxfield.\n\nEjemplo:\n4 Mental Misstep\n1 Sol Ring`}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                     />
