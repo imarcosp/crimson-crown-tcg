@@ -4,10 +4,18 @@ import { render } from '@react-email/render'
 import OrderTemplate from '@/components/emails/OrderTemplate'
 import { createClient } from '@supabase/supabase-js'
 import { siteConfig } from '@/config/site'
+import {
+  generateBuylistQuotePdfBuffer,
+  getBuylistQuotePdfFileName,
+  getBuylistQuotePdfSummary,
+} from '@/lib/buylist-quote-pdf'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const ADMIN_EMAIL = siteConfig.socialLinks.email || 'crimsoncrownimports@gmail.com'
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || siteConfig.url
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
+const FROM_HEADER = `${siteConfig.shortName} <${FROM_EMAIL}>`
+const REPLY_TO = siteConfig.socialLinks.email || undefined
 
 // Cliente Supabase para leer la cotización
 const supabase = createClient(
@@ -89,7 +97,8 @@ export async function sendOrderEmails(orderId: string, userEmail: string, items:
 
   try {
     await resend.emails.send({
-      from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
+      from: FROM_HEADER,
+      replyTo: REPLY_TO,
       to: userEmail,
       subject: `Confirmación de Orden #${orderId.slice(0, 8)}`,
       html: customerHtml
@@ -101,7 +110,8 @@ export async function sendOrderEmails(orderId: string, userEmail: string, items:
 
   try {
     await resend.emails.send({
-      from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
+      from: FROM_HEADER,
+      replyTo: REPLY_TO,
       to: ADMIN_EMAIL,
       subject: `💰 Nueva Venta: #${orderId.slice(0, 8)}`,
       html: adminHtml
@@ -223,7 +233,8 @@ export async function sendImportNotification(
     }
 
     await resend.emails.send({
-      from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
+      from: FROM_HEADER,
+      replyTo: REPLY_TO,
       to: email,
       subject,
       html,
@@ -236,7 +247,7 @@ export async function sendImportNotification(
 
 // --- EMAILS DE BUYLIST ---
 export async function sendBuylistNotification(params: {
-    type: 'submitted' | 'counter_offer' | 'approved' | 'rejected',
+    type: 'submitted' | 'counter_offer' | 'approved' | 'rejected' | 'manual_quote_ready',
     buylistId: string,
     userEmail: string,
     userName?: string,
@@ -280,14 +291,38 @@ export async function sendBuylistNotification(params: {
                 <p>Tu venta ha sido completada exitosamente. Se han acreditado <strong>US$ ${total?.toFixed(2)}</strong> en tu cuenta.</p>
                 <a href="${safeLink}" style="${btnStyle}">Ver Mi Saldo</a>
             `
+        } else if (type === 'manual_quote_ready') {
+            subject = `📄 Tu cotización de compra #${shortId} está lista`
+            htmlBody = `
+                <h2>Tu cotización ya está disponible</h2>
+                <p>Hola ${userName || 'Usuario'},</p>
+                <p>El staff preparó tu cotización manual y ya puedes revisarla en tu perfil.</p>
+                <h3 style="color:#059669;font-size:24px;">US$ ${total?.toFixed(2)}</h3>
+                <p>Si aceptas la propuesta, el monto se acreditará como créditos de tienda y podrás usarlos enseguida en la web.</p>
+                <a href="${safeLink}" style="${btnStyle}">Ver Cotización</a>
+            `
         }
 
-        await resend.emails.send({
-            from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
+        const payload: any = {
+            from: FROM_HEADER,
+            replyTo: REPLY_TO,
             to: recipient,
             subject,
             html: `<div style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;text-align:center;">${htmlBody}</div>`
-        })
+        }
+
+        if (type === 'manual_quote_ready') {
+            const summary = await getBuylistQuotePdfSummary(buylistId)
+            const pdfBuffer = await generateBuylistQuotePdfBuffer(summary)
+            payload.attachments = [
+                {
+                    filename: getBuylistQuotePdfFileName(summary),
+                    content: pdfBuffer.toString('base64'),
+                },
+            ]
+        }
+
+        await resend.emails.send(payload)
 
         return { success: true }
     } catch (e: any) {
@@ -305,7 +340,8 @@ export async function notifyAdminOrderUpdated(params: {
 }) {
     try {
         await resend.emails.send({
-            from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
+            from: FROM_HEADER,
+            replyTo: REPLY_TO,
             to: ADMIN_EMAIL,
             subject: `📦 Orden Actualizada #${params.orderNumber} (Items Agregados)`,
             html: `

@@ -17,7 +17,7 @@ function ProfileContent() {
   const [wishlist, setWishlist] = useState<any[]>([])
   const [creditTxs, setCreditTxs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [expandedBuylist, setExpandedBuylist] = useState<number | null>(null)
+  const [expandedBuylist, setExpandedBuylist] = useState<string | null>(null)
   
   // Estado para Zoom
   const [zoomedImage, setZoomedImage] = useState<string | null>(null)
@@ -58,8 +58,39 @@ function ProfileContent() {
     const { data: importsData } = await supabase.from('import_orders').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
     setImportOrders(importsData || [])
 
-    const { data: buyData } = await supabase.from('buylist_orders').select('id, created_at, status, total_offered, buylist_items(*)').eq('user_id', user.id).order('created_at', { ascending: false })
-    setBuylists(buyData || [])
+    const { data: buyData } = await supabase
+      .from('buylist_orders')
+      .select('id, created_at, status, total_offered, sent_at, created_by_admin_id, buylist_items(*)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+    const buylistProductIds = (buyData || [])
+      .flatMap((buylist: any) => Array.isArray(buylist?.buylist_items) ? buylist.buylist_items : [])
+      .map((item: any) => String(item?.product_id || '').trim())
+      .filter(Boolean)
+
+    const { data: buyProducts } = buylistProductIds.length
+      ? await supabase
+          .from('products')
+          .select('id, price_usd, price_usd_foil, finish, image_url, language')
+          .in('id', buylistProductIds)
+      : { data: [] as any[] }
+
+    const buyProductMap = new Map((buyProducts || []).map((product: any) => [String(product.id), product]))
+    const buyDataWithProducts = (buyData || []).map((buylist: any) => ({
+      ...buylist,
+      buylist_items: (Array.isArray(buylist?.buylist_items) ? buylist.buylist_items : []).map((item: any) => ({
+        ...item,
+        products: buyProductMap.get(String(item?.product_id || '')) || null,
+      })),
+    }))
+
+    const visibleBuylists = (buyDataWithProducts || []).filter((buylist: any) => {
+      if (String(buylist?.status || '').toLowerCase() === 'draft') return false
+      if (buylist?.created_by_admin_id && !buylist?.sent_at) return false
+      return true
+    })
+    setBuylists(visibleBuylists)
     
     const { data: txData } = await supabase.from('credit_transactions').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
     setCreditTxs(txData || [])
@@ -147,6 +178,24 @@ function ProfileContent() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(amountUsd))
   }
 
+  const getQuoteItemProduct = (item: any) => {
+    if (Array.isArray(item?.products)) return item.products[0] || null
+    return item?.products || null
+  }
+
+  const getQuoteItemImage = (item: any) => {
+    const product = getQuoteItemProduct(item)
+    return item?.image_url || product?.image_url || null
+  }
+
+  const getQuoteItemMarketUnitPrice = (item: any) => {
+    const product = getQuoteItemProduct(item)
+    const normal = Number(product?.price_usd || 0)
+    const foil = Number(product?.price_usd_foil || 0)
+    if (Boolean(item?.is_foil)) return foil > 0 ? foil : normal
+    return normal > 0 ? normal : foil
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending_payment': return <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><Clock size={12}/> Pendiente Pago</span>
@@ -174,6 +223,7 @@ function ProfileContent() {
 
   const getBuylistBadge = (status: string) => {
     if (status === 'pending_review') return <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold">En Revisión</span>
+    if (status === 'draft') return <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-xs font-bold">Borrador</span>
     if (status === 'waiting_user_approval') return <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-bold">Requiere tu Acción</span>
     if (status === 'completed') return <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-xs font-bold">Acreditado</span>
     if (status === 'cancelled') return <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-bold">Cancelada</span>
@@ -182,10 +232,10 @@ function ProfileContent() {
   }
 
   const handleAcceptOffer = async (buylistId: string) => {
-      if(!confirm('¿Aceptar oferta? Los créditos se acreditarán luego de la revisión física.')) return
+      if(!confirm('¿Aceptar oferta? Si la recepción se valida, el monto se acreditará como créditos de tienda y podrás usarlos enseguida.')) return
       const { error } = await supabase.rpc('user_accept_buylist_offer', { buylist_id_input: buylistId })
       if (error) alert(error.message)
-      else { alert('¡Oferta aceptada! Prepara tus cartas.'); await fetchData() }
+      else { alert('¡Oferta aceptada! Si la recepción se valida, el crédito quedará disponible en tu cuenta.'); await fetchData() }
   }
 
   const handleRejectOffer = async (buylistId: string) => {
@@ -477,7 +527,7 @@ function ProfileContent() {
               <div key={b.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                 <div className="bg-slate-50 p-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100">
                   <div className="flex items-center gap-4">
-                    <div><p className="text-xs text-slate-500 uppercase">Solicitud #</p><p className="font-mono font-bold text-slate-700">{String(b.id).slice(0, 8)}</p></div>
+                    <div><p className="text-xs text-slate-500 uppercase">{b.created_by_admin_id ? 'Cotización #' : 'Solicitud #'}</p><p className="font-mono font-bold text-slate-700">{String(b.id).slice(0, 8)}</p></div>
                     <div><p className="text-xs text-slate-500 uppercase">Fecha</p><p className="text-sm text-slate-700">{new Date(b.created_at).toLocaleDateString()}</p></div>
                   </div>
                   <div className="flex items-center gap-4">
@@ -485,9 +535,35 @@ function ProfileContent() {
                     {getBuylistBadge(b.status)}
                   </div>
                 </div>
+                {b.created_by_admin_id && (
+                  <div className="flex flex-col gap-3 border-b border-purple-100 bg-purple-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-purple-900">Cotización cargada por el staff</p>
+                      <p className="text-xs text-purple-800">
+                        Puedes revisar el detalle, descargar el PDF y decidir si aceptas o rechazas la propuesta.
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-purple-900">
+                        Si aceptas la cotización y se valida la recepción, el dinero se acredita como créditos de tienda para usar enseguida.
+                      </p>
+                    </div>
+                    {b.sent_at && (
+                      <a
+                        href={`/api/buylists/${b.id}/pdf`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center rounded-lg border border-purple-200 bg-white px-3 py-2 text-xs font-bold text-purple-700 transition hover:bg-purple-100 cursor-pointer"
+                      >
+                        Descargar PDF
+                      </a>
+                    )}
+                  </div>
+                )}
                 {b.status === 'waiting_user_approval' && (
                   <div className="p-4 bg-blue-50 border-y border-blue-100">
-                    <p className="text-sm text-blue-900 mb-3">Contraoferta recibida: <span className="font-bold">{formatMoney(b.total_offered)}</span></p>
+                    <p className="text-sm text-blue-900 mb-3">Cotización recibida: <span className="font-bold">{formatMoney(b.total_offered)}</span></p>
+                    <p className="text-xs text-blue-800 mb-3">
+                      Al aceptar, este monto se acreditará como créditos de tienda y quedará listo para usar enseguida en la web.
+                    </p>
                     <div className="flex flex-wrap gap-2">
                       <button onClick={() => handleAcceptOffer(b.id)} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold cursor-pointer hover:bg-emerald-700">Aceptar Oferta</button>
                       <button onClick={() => handleRejectOffer(b.id)} className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-bold cursor-pointer hover:bg-red-700">Rechazar</button>
@@ -495,25 +571,71 @@ function ProfileContent() {
                   </div>
                 )}
                 <div className="border-t border-slate-100">
-                  <button onClick={() => setExpandedBuylist(expandedBuylist === b.id ? null : b.id)} className="w-full px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 flex items-center justify-between cursor-pointer">
-                    <span>{b.buylist_items?.length || 0} Cartas enviadas</span>
-                    {expandedBuylist === b.id ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
-                  </button>
-                  {expandedBuylist === b.id && (
+                  {!b.created_by_admin_id && (
+                    <button onClick={() => setExpandedBuylist(expandedBuylist === b.id ? null : b.id)} className="w-full px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 flex items-center justify-between cursor-pointer">
+                      <span>{b.buylist_items?.length || 0} Cartas enviadas</span>
+                      {expandedBuylist === b.id ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+                    </button>
+                  )}
+                  {(b.created_by_admin_id || expandedBuylist === b.id) && (
                     <div className="px-4 pb-4 bg-slate-50/50 border-t border-slate-100">
+                       {b.created_by_admin_id && (
+                         <div className="pt-3">
+                           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Resumen de la cotización</p>
+                           <p className="mt-1 text-xs text-slate-600">
+                             Aquí puedes revisar cada carta, su valor de mercado y el valor de compra ofrecido, sin necesidad de descargar el PDF.
+                           </p>
+                         </div>
+                       )}
                        {b.buylist_items?.map((item: any) => (
                          <div key={item.id} className="flex items-center gap-3 py-3 border-b border-slate-200 last:border-0">
-                            <div className="w-10 h-14 bg-slate-200 rounded shrink-0 relative overflow-hidden border border-slate-200 shadow-sm">{item.image_url && <img src={item.image_url} alt="" className="w-full h-full object-cover" />}</div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const imageUrl = getQuoteItemImage(item)
+                                if (imageUrl) setZoomedImage(imageUrl)
+                              }}
+                              className="w-10 h-14 bg-slate-200 rounded shrink-0 relative overflow-hidden border border-slate-200 shadow-sm cursor-zoom-in"
+                              title="Ampliar imagen"
+                            >
+                              {getQuoteItemImage(item) ? (
+                                <>
+                                  <img src={getQuoteItemImage(item) || ''} alt={item.card_name || 'Carta'} className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center">
+                                    <ZoomIn size={14} className="text-white opacity-0 hover:opacity-100 transition-opacity" />
+                                  </div>
+                                </>
+                              ) : null}
+                            </button>
                             <div className="flex-1 min-w-0">
                                 <span className="font-bold text-slate-800 text-sm truncate block">{item.card_name}</span>
-                                <div className="flex gap-2 text-xs text-slate-500">
+                                <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                                     <span>{item.set_name}</span>
                                     <span className={`px-1 rounded border text-[10px] ${item.condition === 'NM' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>{item.condition}</span>
+                                    {item.is_foil && <span className="px-1 rounded border text-[10px] bg-purple-50 text-purple-700 border-purple-200">Foil</span>}
+                                    {getQuoteItemProduct(item)?.language && <span className="bg-blue-50 text-blue-700 px-1.5 rounded uppercase font-bold border border-blue-100 text-[10px]">{String(getQuoteItemProduct(item)?.language).substring(0,3)}</span>}
+                                    <span className="px-1 rounded border text-[10px] bg-slate-100 text-slate-700 border-slate-200">x{Math.max(1, Number(item.quantity || 1))}</span>
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-600">
+                                  <span>
+                                    Mercado: <span className="font-bold text-slate-800">{formatMoney(getQuoteItemMarketUnitPrice(item) || 0)}</span>
+                                  </span>
+                                  <span>
+                                    Compra: <span className="font-bold text-emerald-700">{formatMoney(Number(item.offered_price_unit || 0))}</span>
+                                  </span>
                                 </div>
                             </div>
-                            <div className="text-right font-mono text-emerald-600 font-bold text-sm">{formatMoney(item.offered_price_unit || 0)}</div>
+                            <div className="text-right">
+                              <div className="text-[11px] text-slate-500">Subtotal compra</div>
+                              <div className="font-mono text-emerald-600 font-bold text-sm">
+                                {formatMoney((Number(item.offered_price_unit || 0) || 0) * Math.max(1, Number(item.quantity || 1)))}
+                              </div>
+                            </div>
                          </div>
                        ))}
+                       <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+                         Si aceptas esta cotización, el total se acreditará como créditos de tienda y quedará disponible para usar inmediatamente una vez validada la recepción.
+                       </div>
                     </div>
                   )}
                 </div>

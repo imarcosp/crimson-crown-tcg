@@ -1,6 +1,6 @@
 "use client"
 import Link from 'next/link'
-import { Package, Plane, Banknote, Users, Settings, ClipboardList, TrendingUp, Calendar, DollarSign, Search, Bell, Receipt } from 'lucide-react'
+import { Package, Plane, Banknote, Users, Settings, ClipboardList, TrendingUp, Calendar, DollarSign, Search, Bell, Receipt, PlusCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -124,6 +124,15 @@ export default function AdminPage() {
             <div>
               <div className="text-lg font-bold text-slate-900">Solicitudes de Compra</div>
               <p className="text-sm text-slate-600">Revisar cartas que los usuarios quieren vender.</p>
+            </div>
+          </div>
+        </Link>
+        <Link href="/admin/buylists/new" className="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition-shadow">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-purple-50 text-purple-600"><PlusCircle size={32} /></div>
+            <div>
+              <div className="text-lg font-bold text-slate-900">Nueva Cotización</div>
+              <p className="text-sm text-slate-600">Crear una cotización manual para un usuario existente.</p>
             </div>
           </div>
         </Link>

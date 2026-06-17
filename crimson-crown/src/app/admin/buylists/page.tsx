@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Eye, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react'
+import { Loader2, Eye, CheckCircle, XCircle, Clock, Trash2, PlusCircle } from 'lucide-react'
+import { getAdminBuylistList } from '@/app/actions/admin-buylists'
 
 export default function AdminBuylists() {
   const [orders, setOrders] = useState<any[]>([])
@@ -17,16 +18,9 @@ export default function AdminBuylists() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const { data, error } = await supabase
-          .from('buylist_orders')
-          .select(`
-            id, created_at, user_id, status, total_offered,
-            profiles ( email, first_name, last_name ),
-            buylist_items ( id )
-          `)
-          .order('created_at', { ascending: false })
-        if (error) throw error
-        setOrders(data || [])
+        const result = await getAdminBuylistList()
+        if (!result?.success) throw new Error(result?.error || 'No se pudieron cargar las solicitudes.')
+        setOrders(result.orders || [])
       } catch (e) {
         alert('Error cargando solicitudes: ' + (e as any).message)
       } finally {
@@ -38,6 +32,7 @@ export default function AdminBuylists() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'draft': return <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><Clock size={12}/> Borrador</span>
       case 'pending_review': return <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><Clock size={12}/> Revisión</span>
       case 'waiting_user_approval': return <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><Clock size={12}/> Esperando Usuario</span>
       case 'completed': return <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><CheckCircle size={12}/> Completada</span>
@@ -114,6 +109,12 @@ export default function AdminBuylists() {
         <h1 className="text-2xl font-bold text-slate-800">Solicitudes de Venta (Buylist)</h1>
         
         <div className="flex items-center gap-4">
+          <Link
+            href="/admin/buylists/new"
+            className="bg-[#0F172A] hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
+          >
+            <PlusCircle size={16} /> Nueva cotización manual
+          </Link>
           {selectedIds.length > 0 && (
             <button 
               onClick={handleBulkDelete}
@@ -148,6 +149,7 @@ export default function AdminBuylists() {
               </th>
               <th className="p-4">ID</th>
               <th className="p-4">Usuario</th>
+              <th className="p-4">Origen</th>
               <th className="p-4">Fecha</th>
               <th className="p-4">Items</th>
               <th className="p-4">Total Ofertado</th>
@@ -157,7 +159,7 @@ export default function AdminBuylists() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredOrders.map((o) => {
-              const user = getUserInfo(o.profiles)
+              const user = getUserInfo(o.profile)
               const isSelected = selectedIds.includes(o.id)
               return (
               <tr key={o.id} className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-purple-50/50' : ''}`}>
@@ -173,6 +175,20 @@ export default function AdminBuylists() {
                 <td className="p-4">
                   <div className="text-slate-900 font-bold">{user.name}</div>
                   <div className="text-slate-500 text-xs">{user.email}</div>
+                </td>
+                <td className="p-4">
+                  {o.created_by_admin_id ? (
+                    <div className="flex flex-col gap-1">
+                      <span className="inline-flex w-fit items-center rounded-full border border-purple-200 bg-purple-50 px-2 py-1 text-[11px] font-bold text-purple-700">Cotización manual</span>
+                      {o.sent_at ? (
+                        <span className="text-[11px] text-slate-500">Enviada: {new Date(o.sent_at).toLocaleDateString()}</span>
+                      ) : (
+                        <span className="text-[11px] text-slate-500">Aún no enviada</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="inline-flex w-fit items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-600">Solicitud usuario</span>
+                  )}
                 </td>
                 <td className="p-4 text-slate-500">{new Date(o.created_at).toLocaleDateString()}</td>
                 <td className="p-4 text-slate-600">{o.buylist_items?.length || 0} cartas</td>
