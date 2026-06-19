@@ -1,8 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { siteConfig } from '@/config/site'
 
 // 🔐 CLAVE DE SEGURIDAD
 const API_SECRET = process.env.ALTO_BUSCADOR_KEY
+const SITE_URL = siteConfig.url.replace(/\/$/, '')
+const SCRYFALL_HEADERS = {
+  'User-Agent': 'CrimsonCrownTCG/1.0 (https://www.crimsoncrownimports.com)',
+  'Accept': 'application/json',
+}
 
 // 🌍 CONFIGURACIÓN CORS
 const corsHeaders = {
@@ -48,7 +54,9 @@ export async function GET(request: NextRequest) {
       .limit(50),
     
     // B) Búsqueda Externa (Scryfall)
-    fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}&unique=prints`)
+    fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}&unique=prints`, {
+      headers: SCRYFALL_HEADERS,
+    })
       .then(res => res.ok ? res.json() : { data: [] })
       .catch(() => ({ data: [] }))
   ])
@@ -91,7 +99,7 @@ export async function GET(request: NextRequest) {
       lenguaje: p.language || 'English',
       stock: hasStock ? p.stock : 0,
       availability_message: displayMessage,
-      link: `https://www.elpercherotcg.com/product/${linkId}`, 
+      link: `${SITE_URL}/product/${linkId}`,
       game: p.tcg || 'Magic'
     })
   })
@@ -127,7 +135,7 @@ export async function GET(request: NextRequest) {
       lenguaje: 'English',
       stock: 0,
       availability_message: "🇯🇵 Podés pedirlas desde Japón. Sumalo a tu cotización para saber el precio y tiempo de entrega.",
-      link: `https://www.elpercherotcg.com/product/${card.id}`, 
+      link: `${SITE_URL}/product/${card.id}`,
       game: 'Magic'
     })
   })
