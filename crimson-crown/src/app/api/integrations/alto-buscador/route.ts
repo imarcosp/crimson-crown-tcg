@@ -42,6 +42,18 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createClient()
+  let enableImports = true
+
+  const { data: settings } = await supabase
+    .from('system_settings')
+    .select('value')
+    .eq('key', 'enable_imports')
+    .maybeSingle()
+
+  if (settings) {
+    const rawValue = settings.value
+    enableImports = rawValue === true || rawValue === 'true'
+  }
 
   // 2. BÚSQUEDA HÍBRIDA
   const [localResults, scryfallResults] = await Promise.all([
@@ -72,6 +84,7 @@ export async function GET(request: NextRequest) {
     const finish = (p.finish || 'Normal').trim()
     const isFoil = finish.toLowerCase().includes('foil') && !finish.toLowerCase().includes('non') || finish.toLowerCase().includes('etched')
     const hasStock = p.stock > 0
+    if (!enableImports && !hasStock) return
     const linkId = p.scryfall_id || p.id
 
     // LÓGICA DE FORMATO VISUAL
@@ -86,7 +99,7 @@ export async function GET(request: NextRequest) {
     // 3. Mensaje "Verde" con Emoji
     const displayMessage = hasStock 
       ? "✅ En Stock (Envío Inmediato)"  // Emoji verde para simular el color
-      : "🇯🇵 Podés pedirlas desde Japón. Sumalo a tu cotización para saber el precio y tiempo de entrega."
+      : "Disponible para traer desde Japon bajo pedido"
 
     formattedResults.push({
       id: linkId,
@@ -105,6 +118,15 @@ export async function GET(request: NextRequest) {
   })
 
   // B) Procesar Scryfall (Importación)
+  if (!enableImports) {
+    return NextResponse.json({
+      meta: { count: formattedResults.length, query: query },
+      results: formattedResults.slice(0, 50)
+    }, {
+      headers: corsHeaders
+    })
+  }
+
   externalCards.forEach((card: any) => {
     if (localIds.has(card.id)) return 
     if (card.games && !card.games.includes('paper')) return
@@ -134,7 +156,7 @@ export async function GET(request: NextRequest) {
       foil: isFoilPrice,
       lenguaje: 'English',
       stock: 0,
-      availability_message: "🇯🇵 Podés pedirlas desde Japón. Sumalo a tu cotización para saber el precio y tiempo de entrega.",
+      availability_message: "Disponible para traer desde Japon bajo pedido",
       link: `${SITE_URL}/product/${card.id}`,
       game: 'Magic'
     })

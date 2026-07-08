@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import WishlistModal from './WishlistModal'
 import { getCardImageUrl } from '@/lib/utils/images'
+import { getLanguageBadge } from '@/lib/language-badges'
 import {
   getFoilBadgeLabel,
   getFoilContentClass,
@@ -39,12 +40,6 @@ type Props = {
   language?: string
   isImport?: boolean
   metadata?: any
-}
-
-const LANG_MAP: Record<string, string> = {
-    'English': 'Inglés', 'Spanish': 'Español', 'Japanese': 'Japonés',
-    'Portuguese': 'Portugués', 'Italian': 'Italiano', 'German': 'Alemán',
-    'French': 'Francés', 'Chinese': 'Chino', 'Russian': 'Ruso', 'Korean': 'Coreano'
 }
 
 export default function ProductCard(p: Props) {
@@ -77,7 +72,7 @@ export default function ProductCard(p: Props) {
   const price = currency === 'USD' ? basePriceUsd : Math.round(basePriceUsd * exchangeRate)
   const symbol = currency === 'USD' ? 'US$' : '$'
 
-  const langLabel = LANG_MAP[p.language || 'English'] || p.language || 'Inglés'
+  const languageBadge = getLanguageBadge(p.language || 'English')
   const foilKind = getFoilVisualKind(showFoilBadge, p.finish)
   const finishLabel = getFoilBadgeLabel(foilKind, p.finish)
   const foilFrameClass = getFoilFrameClass(foilKind)
@@ -170,7 +165,19 @@ export default function ProductCard(p: Props) {
                 {!p.isImport && (
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border max-[400px]:text-[9px] ${p.condition === 'NM' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>{p.condition}</span>
                 )}
-                {p.language && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 uppercase max-[400px]:text-[9px]">{langLabel}</span>}
+                {p.language && languageBadge && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 max-[400px]:text-[9px] flex items-center gap-1">
+                    {languageBadge.flagSrc ? (
+                      <img
+                        src={languageBadge.flagSrc}
+                        alt={`Bandera ${languageBadge.label}`}
+                        className="w-3.5 h-3.5 rounded-[2px] object-cover shrink-0"
+                        loading="lazy"
+                      />
+                    ) : null}
+                    <span>{languageBadge.label}</span>
+                  </span>
+                )}
                 {showFoilBadge && (
                   <span
                     className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1 border shadow-sm max-[400px]:text-[9px] ${
