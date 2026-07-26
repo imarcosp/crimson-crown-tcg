@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { buildCardsToProcessFromMoxfieldData, extractMoxfieldDeckId, fetchMoxfieldDeckWithDiagnostics, mapMoxfieldAttemptsToError } from '@/lib/moxfield'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
+  const requestId = `mox-${crypto.randomUUID().slice(0, 8)}`
   const body = await req.json()
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -16,49 +19,17 @@ export async function POST(req: Request) {
   let cardsToProcess: any[] = []
 
   if (body.moxfieldUrl && typeof body.moxfieldUrl === 'string') {
-      const match = body.moxfieldUrl.match(/moxfield\.com\/decks\/([a-zA-Z0-9\-_]+)/)
-      if (match) {
-          const deckId = match[1]
-          try {
-              const moxRes = await fetch(`https://api2.moxfield.com/v2/decks/all/${deckId}`, {
-                  headers: { 'User-Agent': 'MoxfieldParserApp/1.0' }
-              })
-              
-              if (!moxRes.ok) return NextResponse.json({ error: 'No se pudo acceder al mazo.' }, { status: 400 })
-
-              const data = await moxRes.json()
-              const zones = ['mainboard', 'sideboard', 'commander']
-
-              zones.forEach(zone => {
-                  if (data[zone]) {
-                      Object.values(data[zone]).forEach((entry: any) => {
-                          const c = entry.card
-                          let finish = 'nonfoil'
-                          if (entry.printingData?.[0]?.finish === 'etched' || c.finish === 'etched' || entry.finish === 'etched') finish = 'etched'
-                          else if (entry.printingData?.[0]?.finish === 'foil' || c.finish === 'foil' || entry.finish === 'foil') finish = 'foil'
-
-                          const pNormal = parseFloat(c.prices?.usd || '0')
-                          const pFoil = parseFloat(c.prices?.usd_foil || '0')
-
-                          cardsToProcess.push({
-                              quantity: entry.quantity,
-                              name: c.name,
-                              set: c.set,
-                              set_name: c.set_name,
-                              cn: c.cn,
-                              finish: finish,
-                              image_url: c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
-                              price_usd: pNormal,
-                              price_usd_foil: pFoil,
-                              scryfall_id: c.id 
-                          })
-                      })
-                  }
-              })
-          } catch (e) {
-              return NextResponse.json({ error: 'Error Moxfield.' }, { status: 500 })
-          }
+      const deckId = extractMoxfieldDeckId(body.moxfieldUrl)
+      if (!deckId) {
+          return NextResponse.json({ error: 'Enlace de Moxfield inválido.', requestId }, { status: 400 })
       }
+
+      const moxfield = await fetchMoxfieldDeckWithDiagnostics(deckId, requestId)
+      if (!moxfield.ok) {
+          return NextResponse.json({ error: mapMoxfieldAttemptsToError(moxfield.attempts), requestId }, { status: 400 })
+      }
+
+      cardsToProcess = buildCardsToProcessFromMoxfieldData(moxfield.data)
   }
   else if (body.cards && Array.isArray(body.cards)) cardsToProcess = body.cards
   else if (body.deckList && typeof body.deckList === 'string') {

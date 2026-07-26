@@ -62,6 +62,8 @@ function MoxfieldToolContent() {
 
           const res = await fetch('/api/deck-parser', {
               method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              cache: 'no-store',
               body: JSON.stringify(payload)
           })
           const data = await res.json()
@@ -241,7 +243,12 @@ const enriched = rawVersions.map((v: any) => {
         scryfall_id: v.id
       }
       try {
-        const res = await fetch('/api/deck-parser', { method: 'POST', body: JSON.stringify({ cards: [selected] }) })
+        const res = await fetch('/api/deck-parser', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({ cards: [selected] })
+        })
         const data = await res.json()
         const priced = (data?.missing?.[0]) || selected
         const newMissing = [...results.missing]

@@ -40,6 +40,8 @@ export default function SellImportPage() {
 
           const res = await fetch('/api/buylist-parser', {
               method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              cache: 'no-store',
               body: JSON.stringify(payload)
           })
           const data = await res.json()
@@ -150,7 +152,12 @@ export default function SellImportPage() {
         scryfall_id: v.id
       }
       try {
-        const res = await fetch('/api/buylist-parser', { method: 'POST', body: JSON.stringify({ cards: [selected] }) })
+        const res = await fetch('/api/buylist-parser', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({ cards: [selected] })
+        })
         const data = await res.json()
         const priced = (data?.[0]) || selected
         

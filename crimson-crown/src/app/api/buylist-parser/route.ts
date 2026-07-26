@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { buildCardsToProcessFromMoxfieldData, extractMoxfieldDeckId, fetchMoxfieldDeckWithDiagnostics, mapMoxfieldAttemptsToError } from '@/lib/moxfield'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
+  const requestId = `mox-${crypto.randomUUID().slice(0, 8)}`
   const body = await req.json()
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -17,57 +20,17 @@ export async function POST(req: Request) {
 
   // --- MODO 1: Importación URL Moxfield (NUEVO: Server-Side Fetch) ---
   if (body.moxfieldUrl && typeof body.moxfieldUrl === 'string') {
-      const match = body.moxfieldUrl.match(/moxfield\.com\/decks\/([a-zA-Z0-9\-_]+)/)
-      if (match) {
-          const deckId = match[1]
-          try {
-              // Fetch directo a la API de Moxfield (Sin CORS, funciona en Vercel)
-              const moxRes = await fetch(`https://api2.moxfield.com/v2/decks/all/${deckId}`, {
-                  headers: { 'User-Agent': 'MoxfieldParserApp/1.0' }
-              })
-              
-              if (!moxRes.ok) {
-                  return NextResponse.json({ error: 'No se pudo acceder al mazo. Verifica que sea PÚBLICO.' }, { status: 400 })
-              }
-
-              const data = await moxRes.json()
-              const zones = ['mainboard', 'sideboard', 'commander']
-
-              zones.forEach(zone => {
-                  if (data[zone]) {
-                      Object.values(data[zone]).forEach((entry: any) => {
-                          const c = entry.card
-                          
-                          // Misma lógica de detección de acabados que tenías en el front
-                          let finish = 'nonfoil'
-                          if (entry.printingData?.[0]?.finish === 'etched' || c.finish === 'etched' || entry.finish === 'etched') finish = 'etched'
-                          else if (entry.printingData?.[0]?.finish === 'foil' || c.finish === 'foil' || entry.finish === 'foil') finish = 'foil'
-
-                          const pNormal = parseFloat(c.prices?.usd || '0')
-                          const pFoil = parseFloat(c.prices?.usd_foil || '0')
-
-                          cardsToProcess.push({
-                              quantity: entry.quantity,
-                              name: c.name,
-                              set: c.set,
-                              set_name: c.set_name,
-                              cn: c.cn,
-                              finish: finish,
-                              image_url: c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
-                              price_usd: pNormal,
-                              price_usd_foil: pFoil,
-                              scryfall_id: c.id
-                          })
-                      })
-                  }
-              })
-          } catch (e) {
-              console.error(e)
-              return NextResponse.json({ error: 'Error de conexión con Moxfield.' }, { status: 500 })
-          }
-      } else {
-          return NextResponse.json({ error: 'Enlace de Moxfield inválido.' }, { status: 400 })
+      const deckId = extractMoxfieldDeckId(body.moxfieldUrl)
+      if (!deckId) {
+          return NextResponse.json({ error: 'Enlace de Moxfield inválido.', requestId }, { status: 400 })
       }
+
+      const moxfield = await fetchMoxfieldDeckWithDiagnostics(deckId, requestId)
+      if (!moxfield.ok) {
+          return NextResponse.json({ error: mapMoxfieldAttemptsToError(moxfield.attempts), requestId }, { status: 400 })
+      }
+
+      cardsToProcess = buildCardsToProcessFromMoxfieldData(moxfield.data)
   }
   // --- MODO 2: Objetos ricos (Moxfield) ---
   else if (body.cards && Array.isArray(body.cards)) {
@@ -97,7 +60,7 @@ export async function POST(req: Request) {
           return null
       }).filter(Boolean)
   } else {
-      return NextResponse.json({ error: 'Formato inválido' }, { status: 400 })
+      return NextResponse.json({ error: 'Formato inválido', requestId }, { status: 400 })
   }
 
   const results = []
