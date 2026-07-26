@@ -1,6 +1,7 @@
 import { siteConfig } from '@/config/site'
 
 const siteOrigin = new URL(siteConfig.url).origin
+const JINA_MIRROR_PREFIX = 'https://r.jina.ai/http://'
 
 export const MOXFIELD_HEADER_PROFILES = [
   {
@@ -119,6 +120,55 @@ export async function fetchMoxfieldDeckWithDiagnostics(deckId: string, requestId
           statusText: error?.message || 'fetch exception',
         })
       }
+    }
+  }
+
+  for (const url of endpoints) {
+    const mirrorUrl = `${JINA_MIRROR_PREFIX}${url}`
+
+    try {
+      const res = await fetch(mirrorUrl, {
+        headers: {
+          'User-Agent': `CrimsonCrownTCG/1.0 (${siteOrigin})`,
+          'Accept': 'text/plain, application/json, */*',
+        },
+        cache: 'no-store',
+      })
+
+      const body = await res.text()
+
+      if (res.ok) {
+        const start = body.indexOf('{')
+        const end = body.lastIndexOf('}')
+
+        if (start >= 0 && end > start) {
+          const parsed = JSON.parse(body.slice(start, end + 1))
+
+          console.info('[moxfield] Jina mirror fetch success', {
+            requestId,
+            deckId,
+            url,
+            mirrorUrl,
+          })
+
+          return { ok: true as const, data: parsed, url: mirrorUrl }
+        }
+      }
+
+      attempts.push({
+        url: mirrorUrl,
+        headerProfile: 'jina-mirror',
+        status: res.status,
+        statusText: res.statusText,
+        body: body.slice(0, 500),
+        responseHeaders: pickMoxfieldDebugHeaders(res),
+      })
+    } catch (error: any) {
+      attempts.push({
+        url: mirrorUrl,
+        headerProfile: 'jina-mirror',
+        statusText: error?.message || 'fetch exception',
+      })
     }
   }
 
