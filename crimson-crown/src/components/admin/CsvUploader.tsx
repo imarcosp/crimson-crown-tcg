@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import Papa from 'papaparse'
 import { Upload, Loader2, FileSpreadsheet, CheckCircle } from 'lucide-react'
 import { processWishlistNotifications } from '@/app/actions/wishlist' // <--- IMPORTAR
+import { MIN_PRODUCT_PRICE_USD } from '@/lib/pricing/constants'
 import {
   canonicalizeMagicFinishLabel,
   getReferencePriceForFinish,
@@ -93,7 +94,7 @@ export default function CsvUploader() {
     finish: string,
     condition: string
   ) => {
-    const fallbackPrice = 0.5
+    const fallbackPrice = MIN_PRODUCT_PRICE_USD
     if (!externalContext) return fallbackPrice
 
     const basePrice = getReferencePriceForFinish(externalContext, finish)
@@ -106,7 +107,7 @@ export default function CsvUploader() {
     if (normalizedCondition === 'DMG') multiplier = 0.5
 
     let finalPrice = basePrice * multiplier
-    if (finalPrice < 0.35) finalPrice = 0.35
+    if (finalPrice < MIN_PRODUCT_PRICE_USD) finalPrice = MIN_PRODUCT_PRICE_USD
 
     return Math.round(finalPrice * 100) / 100
   }

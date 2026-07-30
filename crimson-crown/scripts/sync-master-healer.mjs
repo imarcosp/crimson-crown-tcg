@@ -4,6 +4,8 @@ import fs from 'fs'
 import path from 'path'
 import { pipeline } from 'stream/promises'
 import { Readable } from 'stream'
+import { createGunzip } from 'zlib'
+import readline from 'readline'
 import StreamChainPkg from 'stream-chain'
 const { chain } = StreamChainPkg
 import StreamArrayPkg from 'stream-json/streamers/StreamArray.js'
@@ -35,7 +37,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: false }
 })
 
-const TEMP_SCRYFALL_FILE = './temp_scryfall_bulk.json'
+const TEMP_SCRYFALL_FILE = './temp_scryfall_bulk.tmp'
 const CK_API_URL = 'https://api.cardkingdom.com/api/v2/pricelist'
 const SCRYFALL_HEADERS = {
     'User-Agent': 'CrimsonCrownTCG/1.0 (sync-master-healer; contact: mjperchezabala@gmail.com)',
@@ -66,13 +68,16 @@ async function main() {
     // PASO 1: DESCARGA SCRYFALL BULK DATA
     console.log('\n⬇️  [1/8] Obteniendo URI de Scryfall Bulk Data...')
     let downloadUri = ''
+    let bulkIsJsonlGz = false
     try {
         const metaRes = await fetch('https://api.scryfall.com/bulk-data/default-cards', {
             headers: SCRYFALL_HEADERS
         })
         if (!metaRes.ok) throw new Error(`API Error ${metaRes.status}`)
         const meta = await metaRes.json()
-        downloadUri = meta.download_uri
+        downloadUri = meta.download_uri || meta.jsonl_download_uri || ''
+        bulkIsJsonlGz = Boolean(meta.jsonl_download_uri && !meta.download_uri)
+        if (!downloadUri) throw new Error('Scryfall no devolvió una URI de descarga válida')
         console.log(`   URI detectada: ${downloadUri}`)
     } catch (e) {
         console.error('❌ Error obteniendo meta de Scryfall:', e)
@@ -110,15 +115,9 @@ async function main() {
 
     let scryfallCount = 0
     
-    const pipelineStream = chain([
-        fs.createReadStream(TEMP_SCRYFALL_FILE),
-        parser(),
-        streamArray(),
-    ])
-
-    for await (const { value: card } of pipelineStream) {
+    const handleCard = (card) => {
         // Filtros básicos: Solo papel, no digital
-        if (card.digital) continue 
+        if (card.digital) return
 
         // Minificar objeto para ahorrar RAM
         const miniCard = {
@@ -145,6 +144,29 @@ async function main() {
         
         scryfallCount++
         if (scryfallCount % 50000 === 0) process.stdout.write(`   Procesadas: ${scryfallCount}...\r`)
+    }
+
+    if (bulkIsJsonlGz) {
+        const lineReader = readline.createInterface({
+            input: fs.createReadStream(TEMP_SCRYFALL_FILE).pipe(createGunzip()),
+            crlfDelay: Infinity,
+        })
+
+        for await (const line of lineReader) {
+            const trimmed = String(line || '').trim()
+            if (!trimmed) continue
+            handleCard(JSON.parse(trimmed))
+        }
+    } else {
+        const pipelineStream = chain([
+            fs.createReadStream(TEMP_SCRYFALL_FILE),
+            parser(),
+            streamArray(),
+        ])
+
+        for await (const { value: card } of pipelineStream) {
+            handleCard(card)
+        }
     }
     console.log(`\n✅ Índices construidos. Total cartas Scryfall: ${scryfallCount}`)
 

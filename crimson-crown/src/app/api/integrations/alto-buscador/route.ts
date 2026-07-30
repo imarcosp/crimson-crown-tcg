@@ -85,7 +85,9 @@ export async function GET(request: NextRequest) {
     const isFoil = finish.toLowerCase().includes('foil') && !finish.toLowerCase().includes('non') || finish.toLowerCase().includes('etched')
     const hasStock = p.stock > 0
     if (!enableImports && !hasStock) return
-    const linkId = p.scryfall_id || p.id
+    // Para inventario local siempre enlazamos al product.id real.
+    // El scryfall_id queda solo para cartas externas/importadas.
+    const linkId = p.id
 
     // LÓGICA DE FORMATO VISUAL
     // 1. Título con Finish para diferenciar Foil/Etched/Non-Foil

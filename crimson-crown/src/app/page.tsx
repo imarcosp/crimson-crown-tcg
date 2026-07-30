@@ -63,16 +63,12 @@ export default async function Home() {
   const mapProduct = (p: any) => {
     const finish = String(p.finish || '').toLowerCase()
     const isFoil = (finish.includes('foil') && !finish.includes('non')) || finish.includes('etched') || finish.includes('holo')
-    
-    // Usamos precio directo de DB
-    let finalPrice = Number(p.price_usd || 0)
-    if (finalPrice < 0.5) finalPrice = 0.5
 
     return {
       id: String(p.id),
       name: String(p.name || ''),
       tcg: String(p.tcg || 'Magic'),
-      priceUsd: finalPrice,
+      priceUsd: Number(p.price_usd || 0),
       stock: Number(p.stock || 0),
       condition: String(p.condition || 'NM'),
       isFoil,

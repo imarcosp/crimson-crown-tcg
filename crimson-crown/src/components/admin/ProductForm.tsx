@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { MIN_PRODUCT_PRICE_USD } from '@/lib/pricing/constants'
 import { X, Search, Loader2, Image as ImageIcon, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { processWishlistNotifications } from '@/app/actions/wishlist'
 import {
@@ -262,7 +263,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
         initialFinish = 'Foil'
         initialPrice = pFoil
       }
-      if (initialPrice > 0 && initialPrice < 0.5) initialPrice = 0.5
+      if (initialPrice > 0 && initialPrice < MIN_PRODUCT_PRICE_USD) initialPrice = MIN_PRODUCT_PRICE_USD
       
       const realScryfallId = card.scryfall_id || card.id || ''
       setFormData((prev) => ({
@@ -301,7 +302,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
     let finalPrice = getReferencePriceForFinish(prices, finishKeyToValue(wantKey))
     setFetchingPrice(false)
     if (finalPrice > 0) {
-        if (finalPrice < 0.35) finalPrice = 0.35
+        if (finalPrice < MIN_PRODUCT_PRICE_USD) finalPrice = MIN_PRODUCT_PRICE_USD
         setFormData(prev => ({ ...prev, price_usd: finalPrice }))
     } else {
         alert('No se encontró precio para esta variante. Se mantiene el precio actual.')
@@ -372,7 +373,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
       if (!payload.is_manual_price) {
         const resolvedPrice = getReferencePriceForFinish(externalContext, payload.finish)
         if (resolvedPrice > 0) {
-          payload.price_usd = resolvedPrice < 0.35 ? 0.35 : resolvedPrice
+          payload.price_usd = resolvedPrice < MIN_PRODUCT_PRICE_USD ? MIN_PRODUCT_PRICE_USD : resolvedPrice
           setFormData((prev) => ({ ...prev, finish: payload.finish, price_usd: payload.price_usd }))
         }
       }

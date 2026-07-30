@@ -358,16 +358,18 @@ export async function GET(req: Request) {
           const lookupId = r.scryfall_id || r.id
           const dbPrice = priceMap.get(lookupId)
           
-          if (dbPrice) { // Eliminamos la restricción && r.isImport para que enriquezca también los locales
-             const activeNormal = Number(dbPrice.active_price_normal || dbPrice.cardkingdom_retail_normal || 0)
-             const activeFoil = Number(dbPrice.active_price_foil || dbPrice.cardkingdom_retail_foil || dbPrice.cardkingdom_retail_etched || 0)
-             if (activeNormal > 0) { r.price_usd = activeNormal; r.priceUsd = activeNormal }
-             if (activeFoil > 0) { r.price_usd_foil = activeFoil; r.priceUsdFoil = activeFoil }
-             r.type_line = dbPrice.type_line || r.type_line || null
-             r.color_identity = normalizeColorIdentity(dbPrice.color_identity || r.color_identity)
-             if (shouldUseSpecialFoilLabel(r.finish, dbPrice.foil_variant)) {
-               r.finish = dbPrice.foil_variant
-             }
+          if (dbPrice) {
+            const activeNormal = Number(dbPrice.active_price_normal || dbPrice.cardkingdom_retail_normal || 0)
+            const activeFoil = Number(dbPrice.active_price_foil || dbPrice.cardkingdom_retail_foil || dbPrice.cardkingdom_retail_etched || 0)
+            if (r.isImport) {
+              if (activeNormal > 0) { r.price_usd = activeNormal; r.priceUsd = activeNormal }
+              if (activeFoil > 0) { r.price_usd_foil = activeFoil; r.priceUsdFoil = activeFoil }
+            }
+            r.type_line = dbPrice.type_line || r.type_line || null
+            r.color_identity = normalizeColorIdentity(dbPrice.color_identity || r.color_identity)
+            if (shouldUseSpecialFoilLabel(r.finish, dbPrice.foil_variant)) {
+              r.finish = dbPrice.foil_variant
+            }
           }
         })
     }

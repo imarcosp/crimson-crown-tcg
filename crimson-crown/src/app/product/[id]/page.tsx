@@ -8,6 +8,27 @@ import { siteConfig } from '@/config/site'
 
 export const revalidate = 60
 
+async function findLocalProductByRouteId(supabase: any, id: string) {
+  const byId = await supabase
+    .from('products')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (byId.data) return byId.data
+
+  const byScryfall = await supabase
+    .from('products')
+    .select('*')
+    .eq('scryfall_id', id)
+    .order('stock', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return byScryfall.data || null
+}
+
 function shouldUseSpecialFoilLabel(currentFinish: string | undefined, foilVariant: string | undefined) {
   if (!foilVariant) return false
   const current = String(currentFinish || '').toLowerCase().trim()
@@ -22,7 +43,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   let image = ''
   let description = `Compra esta carta en ${siteConfig.name}`
 
-  let { data: product } = await supabase.from('products').select('name, set_name, image_url').eq('id', id).single()
+  let product = await findLocalProductByRouteId(supabase, id)
 
   if (product) {
     name = product.name
@@ -56,11 +77,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   const supabase = await createClient()
 
   // 1. Obtener Producto Principal
-  let { data: product } = await supabase
-    .from('products')
-    .select('*')
-    .eq('id', id)
-    .single()
+  let product = await findLocalProductByRouteId(supabase, id)
 
   let isImport = false
   
@@ -253,8 +270,6 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                         // Mapeo rápido para ProductCard
                         const f = String(alt.finish || '').toLowerCase()
                         const isF = (f.includes('foil') && !f.includes('non')) || f.includes('etched')
-                        let price = Number(alt.price_usd || 0)
-                        if (price < 0.5) price = 0.5
                         
                         // Determinamos disponibilidad
                         const hasStock = Number(alt.stock || 0) > 0
@@ -265,7 +280,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                                 id={alt.id}
                                 name={alt.name}
                                 tcg={alt.tcg || 'Magic'}
-                                priceUsd={price}
+                                priceUsd={Number(alt.price_usd || 0)}
                                 priceUsdFoil={Number(alt.price_usd_foil || 0)}
                                 stock={alt.stock}
                                 condition={alt.condition || 'NM'}

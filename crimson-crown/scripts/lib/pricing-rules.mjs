@@ -1,4 +1,4 @@
-export const MIN_STORE_PRICE = 0.35
+export const MIN_STORE_PRICE = 0.49
 
 export function applyConditionMultiplier(basePrice, condition) {
   const base = Number(basePrice || 0)
