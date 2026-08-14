@@ -7,7 +7,7 @@ export const siteConfig = {
   socialImage: "/opengraph-image.png?v=crimson1",
   socialLinks: {
     instagram: "https://www.instagram.com/elpercherotcg/",
-    whatsapp: "5491134739690",
+    whatsapp: "5491123510593",
     email: "crimsoncrownimports@gmail.com",
   },
   payment: {

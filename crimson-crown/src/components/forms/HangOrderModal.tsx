@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { notifyAdminOrderUpdated } from '@/app/actions/email'
 import { siteConfig } from '@/config/site'
+import { useContactWhatsapp } from '@/hooks/useContactWhatsapp'
 
 const getImageUrl = (item: any) => {
     if (!item) return ''
@@ -58,6 +59,7 @@ export default function HangOrderModal() {
   const [uploadingCustom, setUploadingCustom] = useState(false)
   const supabase = createClient()
   const router = useRouter()
+  const whatsapp = useContactWhatsapp()
 
   const [existingOrderId, setExistingOrderId] = useState<string | null>(null)
 
@@ -406,7 +408,6 @@ export default function HangOrderModal() {
         } else {
             // Generar Link WhatsApp solo para nueva orden
             const displayId = targetOrderNumber || targetOrderId
-            const phoneNumber = siteConfig.socialLinks.whatsapp
             let finalMessage = `Hola ${siteConfig.shortName}! Acabo de cargar el Pedido #${displayId} de importación.\n`
             
             if (quoteItems.length > 0) {
@@ -421,7 +422,7 @@ export default function HangOrderModal() {
             if (message.trim()) finalMessage += `\n\n*Nota:* ${message.trim()}`
             finalMessage += `\n\nQuedo a la espera de la confirmación, gracias!`
             
-            setWaLink(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(finalMessage)}`)
+            setWaLink(`https://wa.me/${whatsapp}?text=${encodeURIComponent(finalMessage)}`)
             setNewOrderId(targetOrderId)
             setStep('success')
         }

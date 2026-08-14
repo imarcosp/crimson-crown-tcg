@@ -10,6 +10,8 @@ import { useUIStore } from '@/store/uiStore'
 import HangOrderModal from '@/components/forms/HangOrderModal'
 import { deleteImportItemAction, approveImportQuoteAction, rejectImportQuoteAction } from '@/app/actions/imports'
 import { siteConfig } from '@/config/site'
+import { useContactWhatsapp } from '@/hooks/useContactWhatsapp'
+import { buildWhatsAppUrl } from '@/lib/contact-whatsapp'
 
 // Componente visual para la barra de progreso
 function OrderTimeline({ status }: { status: string }) {
@@ -173,6 +175,7 @@ export default function UserOrderDetailPage() {
   const router = useRouter()
   const rate = useStore((s) => s.usdToArsRate) || 1200
   const toggleHangModal = useUIStore((s) => s.toggleHangModal)
+  const whatsapp = useContactWhatsapp()
 
   const [order, setOrder] = useState<any>(null)
   const [items, setItems] = useState<any[]>([])
@@ -402,7 +405,7 @@ export default function UserOrderDetailPage() {
             </div>
           </div>
           <a 
-            href={`https://wa.me/${siteConfig.socialLinks.whatsapp}?text=${encodeURIComponent(`Hola ${siteConfig.shortName}, me gustaría información sobre la orden de importación #${order.order_number}`)}`}
+            href={buildWhatsAppUrl(whatsapp, `Hola ${siteConfig.shortName}, me gustaría información sobre la orden de importación #${order.order_number}`)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-lg shadow-sm transition-colors text-sm"

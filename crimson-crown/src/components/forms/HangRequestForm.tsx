@@ -1,15 +1,16 @@
 "use client"
 import { useForm } from 'react-hook-form'
+import { useContactWhatsapp } from '@/hooks/useContactWhatsapp'
+import { buildWhatsAppUrl } from '@/lib/contact-whatsapp'
 
 type FormValues = { message: string }
 
 export default function HangRequestForm() {
   const { register, handleSubmit, reset } = useForm<FormValues>({ defaultValues: { message: '' } })
+  const whatsapp = useContactWhatsapp()
 
   const onSubmit = (data: FormValues) => {
-    const base = 'https://wa.me/5491130951844?text='
-    const text = encodeURIComponent(data.message.trim())
-    const url = `${base}${text}`
+    const url = buildWhatsAppUrl(whatsapp, data.message.trim())
     window.open(url, '_blank')
     reset()
   }

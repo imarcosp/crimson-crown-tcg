@@ -5,6 +5,7 @@ import { DollarSign, Images, Ticket, Save, Plus, Trash2, Loader2, FileText } fro
 import AdminBanners from '@/app/admin/banners/page'
 import AdminCoupons from '@/app/admin/coupons/page'
 import { DEFAULT_HOW_TO_CONTENT, parseHowToContent, type HowToContent, type HowToSection } from '@/lib/howToContent'
+import { cleanSystemSettingValue, normalizeWhatsAppNumber } from '@/lib/contact-whatsapp'
 
 export default function AdminPricesMasterPage() {
   const supabase = createClient()
@@ -37,25 +38,14 @@ export default function AdminPricesMasterPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const cleanValue = (val: any) => {
-          if (typeof val === 'string') {
-            // First check if it's a JSON string
-            if (val.startsWith('"') && val.endsWith('"')) {
-                try { return JSON.parse(val) } catch { return val.slice(1, -1) }
-            }
-            // If it's a string representation of an object/array, try to parse it
-            if ((val.startsWith('{') && val.endsWith('}')) || (val.startsWith('[') && val.endsWith(']'))) {
-                try { return JSON.parse(val) } catch { return val }
-            }
-          }
-          return val
-        }
         const { data: settings } = await supabase.from('system_settings').select('*')
         if (settings) {
           const nextInfo: any = { ...info }
           let rate = ''
           settings.forEach((item: any) => {
-            const val = cleanValue(item.value)
+            const val = item.key === 'contact_whatsapp'
+              ? normalizeWhatsAppNumber(item.value)
+              : cleanSystemSettingValue(item.value)
             if (item.key === 'exchange_rate') rate = String(val || '')
             if (item.key === 'exchange_rate_auto_enabled') setExchangeRateAutoEnabled(val === true || val === 'true')
             if (item.key === 'enable_imports') setEnableImports(val === true || val === 'true')
@@ -101,9 +91,14 @@ export default function AdminPricesMasterPage() {
   const handleSaveInfo = async () => {
     setSaving(true)
     try {
-      const updates = Object.entries(info).map(([key, value]) => ({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }))
+      const normalizedInfo = {
+        ...info,
+        contact_whatsapp: normalizeWhatsAppNumber(info.contact_whatsapp),
+      }
+      const updates = Object.entries(normalizedInfo).map(([key, value]) => ({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() }))
       const { error } = await supabase.from('system_settings').upsert(updates)
       if (error) throw error
+      setInfo(normalizedInfo)
       alert('¡Información guardada correctamente!')
     } catch (e: any) {
       alert('Error al guardar: ' + e.message)

@@ -4,6 +4,7 @@ import { Instagram, MessageCircle, Mail, MapPin } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { siteConfig } from '@/config/site'
+import { cleanSystemSettingValue, normalizeWhatsAppNumber } from '@/lib/contact-whatsapp'
 
 export default function Footer() {
   const supabase = createClient()
@@ -18,18 +19,14 @@ export default function Footer() {
   })
 
   useEffect(() => {
-    const cleanValue = (val: any) => {
-      if (typeof val === 'string' && val.startsWith('"') && val.endsWith('"')) {
-        try { return JSON.parse(val) } catch { return val.slice(1, -1) }
-      }
-      return val
-    }
     const load = async () => {
       const { data } = await supabase.from('system_settings').select('*')
       if (data && Array.isArray(data)) {
         const next: any = { ...info }
         for (const row of data) {
-          const v = cleanValue(row.value)
+          const v = row.key === 'contact_whatsapp'
+            ? normalizeWhatsAppNumber(row.value)
+            : cleanSystemSettingValue(row.value)
           if (Object.prototype.hasOwnProperty.call(next, row.key)) next[row.key] = v
         }
         setInfo(next)

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Save, Plus, Trash2, Loader2 } from 'lucide-react'
+import { cleanSystemSettingValue, normalizeWhatsAppNumber } from '@/lib/contact-whatsapp'
 
 export default function AdminSettings() {
   const supabase = createClient()
@@ -24,17 +25,13 @@ export default function AdminSettings() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const cleanValue = (val: any) => {
-          if (typeof val === 'string' && val.startsWith('"') && val.endsWith('"')) {
-            try { return JSON.parse(val) } catch { return val.slice(1, -1) }
-          }
-          return val
-        }
         const { data: settings } = await supabase.from('system_settings').select('*')
         if (settings) {
           const next: any = { ...info }
           settings.forEach((item: any) => {
-            const val = cleanValue(item.value)
+            const val = item.key === 'contact_whatsapp'
+              ? normalizeWhatsAppNumber(item.value)
+              : cleanSystemSettingValue(item.value)
             if (Object.prototype.hasOwnProperty.call(next, item.key)) next[item.key] = val
           })
           setInfo(next)
@@ -53,13 +50,18 @@ export default function AdminSettings() {
   const handleSaveInfo = async () => {
     setSaving(true)
     try {
-      const updates = Object.entries(info).map(([key, value]) => ({
+      const normalizedInfo = {
+        ...info,
+        contact_whatsapp: normalizeWhatsAppNumber(info.contact_whatsapp),
+      }
+      const updates = Object.entries(normalizedInfo).map(([key, value]) => ({
         key,
         value: JSON.stringify(value),
         updated_at: new Date().toISOString()
       }))
       const { error } = await supabase.from('system_settings').upsert(updates)
       if (error) throw error
+      setInfo(normalizedInfo)
       alert('¡Información guardada correctamente!')
     } catch (e: any) {
       alert('Error al guardar: ' + e.message)

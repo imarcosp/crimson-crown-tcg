@@ -7,6 +7,8 @@ import { useUIStore } from '@/store/uiStore'
 import Link from 'next/link'
 import { Package, Banknote, Clock, CheckCircle, AlertCircle, Truck, ExternalLink, UserCog, Plane, ChevronDown, ChevronUp, Send, X, Calendar, ChevronRight, Bell, Trash2, ZoomIn, CreditCard, Copy, MessageCircle, Loader2 } from 'lucide-react'
 import ProfileSettings from '@/components/profile/ProfileSettings'
+import { useContactWhatsapp } from '@/hooks/useContactWhatsapp'
+import { buildWhatsAppUrl } from '@/lib/contact-whatsapp'
 
 function ProfileContent() {
   const [user, setUser] = useState<any>(null)
@@ -39,6 +41,7 @@ function ProfileContent() {
   const currency = useStore((s) => s.currency)
   const rate = useStore((s) => s.usdToArsRate)
   const toggleHangModal = useUIStore((s) => s.toggleHangModal)
+  const whatsapp = useContactWhatsapp()
 
   const fetchData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -414,8 +417,8 @@ function ProfileContent() {
                                     <p className="text-xs text-amber-700 italic">
                                         Una vez realizado el pago, envía el comprobante o notifícanos.
                                     </p>
-                                    <a 
-                                        href={`https://wa.me/5491130951844?text=${encodeURIComponent(`Hola! Envío comprobante de pago para la Orden #${String(order.id).slice(0, 8)}`)}`}
+                                    <a
+                                        href={buildWhatsAppUrl(whatsapp, `Hola! Envío comprobante de pago para la Orden #${String(order.id).slice(0, 8)}`)}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="w-full sm:w-auto px-4 py-2 bg-[#25D366] hover:bg-[#128C7E] text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer"
