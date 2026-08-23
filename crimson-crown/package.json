@@ -9,7 +9,7 @@
     "lint": "eslint",
     "update-prices": "node scripts/update-prices.mjs",
     "sync:master-healer": "node scripts/sync-master-healer-v2-compatible.mjs",
-    "test:environment-safety": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types src/lib/environment/production-guards.test.ts scripts/assert-safe-test-environment.test.mjs scripts/write-local-test-environment.test.mjs scripts/local-db/verify-artifact-location.test.mjs scripts/local-db/assert-local-network-isolation.test.mjs scripts/local-db/install-local-firewall-rules.test.mjs",
+    "test:environment-safety": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types src/lib/environment/production-guards.test.ts scripts/assert-safe-test-environment.test.mjs scripts/write-local-test-environment.test.mjs scripts/local-db/verify-artifact-location.test.mjs scripts/local-db/assert-local-network-isolation.test.mjs scripts/local-db/install-local-firewall-rules.test.mjs scripts/local-db/sanitize-public.test.mjs",
     "local-db:prepare-artifacts": "node scripts/local-db/prepare-artifact-location.mjs",
     "local-db:assert-network": "node scripts/local-db/assert-local-network-isolation.mjs",
     "local-db:install-firewall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/local-db/install-local-firewall-rules.ps1",
