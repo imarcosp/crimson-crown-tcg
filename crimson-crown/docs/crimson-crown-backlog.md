@@ -26,14 +26,14 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 - Wishlist específica: ya no intenta crear productos desde el navegador; si la variante no está catalogada, muestra una salida explícita y conserva la alerta por nombre como alternativa.
 - `/api/dolar` lee con la clave pública y persiste el tipo de cambio sólo con service role; `/api/fix-images` exige sesión admin y `/api/cron/release-stock` falla cerrado fuera de loopback si falta `CRON_SECRET`.
 - Storage local preparado con buckets sintéticos `payment_proofs`, `products` y `banners`; `scripts/local-db/prepare-storage-fixtures.ps1`, `storage-fixtures.sql` y `storage-matrix.mjs` son sólo de pruebas locales y no deben entrar al push de producción sin auditar las políticas remotas.
-- Matriz automatizada `npm run test:local-security`: anon no ve tablas privadas; usuario estándar sólo ve sus recursos y no puede mutar productos/créditos/precios; admin conserva acceso operativo; `supabase db lint` sin errores.
+- Matriz automatizada `npm run test:local-security`: anon no ve tablas privadas; usuario estándar sólo ve sus recursos, carrito, guardados, órdenes/importaciones/buylists propios y no puede mutar productos, créditos, precios ni tablas administrativas; admin conserva acceso operativo; `supabase db lint` sin errores.
 - Pruebas de seguridad local integradas al script `test:environment-safety`.
 - Advertencia de `next/image` del logo corregida.
 
 ## P0 — bloquear cualquier promoción a producción
 
 1. **RLS y autorización.** Lote local aplicado y verificado. Antes de producción falta revisar el diff SQL contra el esquema remoto y validar las mismas políticas en una rama/entorno de staging.
-2. **Pruebas de autorización negativas.** La matriz ahora cubre notas de importación, wishlist por nombre, creación de productos y escritura de configuración; falta completar inserción/actualización/borrado de cada tabla con fixtures aislados y pruebas de Storage.
+2. **Pruebas de autorización negativas.** La matriz cubre tablas administrativas, carrito/guardados, órdenes, items, importaciones, buylists, wishlist, notas, Storage y las escrituras públicas intencionales (`feedback`, `search_logs`, `analytics_visits`) con limpieza de fixtures.
 3. **Funciones administrativas.** RPCs críticas y endpoints de service role auditados para este lote; falta verificar contra el esquema remoto que las políticas de Storage productivas coincidan con el comportamiento esperado.
 4. **Integridad SQL.** Resuelto localmente; lint local en verde.
 5. **Flujos financieros.** Falta probar checkout, webhooks, reserva/liberación de stock y estados de pago con proveedores deshabilitados; nunca confirmar una compra desde pruebas automatizadas.

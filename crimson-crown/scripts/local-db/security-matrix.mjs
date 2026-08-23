@@ -7,9 +7,10 @@ dotenv.config({ path: '.env.test.local', override: true })
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 const loopbackHosts = new Set(['127.0.0.1', 'localhost', '::1'])
 
-if (!url || !anonKey) throw new Error('Faltan las credenciales de Supabase local.')
+if (!url || !anonKey || !serviceKey) throw new Error('Faltan las credenciales de Supabase local.')
 if (!loopbackHosts.has(new URL(url).hostname)) {
   throw new Error('La matriz de seguridad sólo puede ejecutarse contra Supabase local.')
 }
@@ -21,6 +22,10 @@ const identities = {
 
 function client() {
   return createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } })
+}
+
+function serviceClient() {
+  return createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
 }
 
 async function signedIn(identity) {
@@ -36,10 +41,16 @@ async function countRows(supabase, table) {
   return count ?? 0
 }
 
+async function expectBlocked(label, operation) {
+  const { data, error } = await operation()
+  assert.ok(error || (data?.length ?? 0) === 0, `${label} debe estar bloqueado`)
+}
+
 async function main() {
   const anon = client()
   const standard = await signedIn('standard')
   const admin = await signedIn('admin')
+  const service = serviceClient()
 
   const privateTables = ['profiles', 'orders', 'buylist_orders', 'wishlists', 'credit_transactions']
   const anonPrivate = Object.fromEntries(await Promise.all(privateTables.map(async (table) => [table, await countRows(anon, table)])))
@@ -115,6 +126,37 @@ async function main() {
   }).select('id')
   assert.ok(productInsert.error || (productInsert.data?.length ?? 0) === 0, 'standard no debe crear productos')
 
+  await expectBlocked('standard no debe crear banners', () => standard.from('banners').insert({
+    image_url: 'https://example.test/local-security.png',
+    title: 'local security probe',
+  }).select('id'))
+  await expectBlocked('standard no debe crear FAQs', () => standard.from('faqs').insert({
+    question: 'local security probe',
+    answer: 'local security probe',
+  }).select('id'))
+  await expectBlocked('standard no debe crear cupones', () => standard.from('coupons').insert({
+    code: `LOCAL-SECURITY-${Date.now()}`,
+    discount_type: 'percentage',
+    value: 1,
+  }).select('id'))
+  await expectBlocked('standard no debe crear notificaciones', () => standard.from('notifications').insert({
+    user_id: profile.id,
+    type: 'security_probe',
+    title: 'local security probe',
+  }).select('id'))
+  await expectBlocked('standard no debe crear oportunidades', () => standard.from('price_opportunities').insert({
+    card_name: 'local security probe',
+  }).select('id'))
+  await expectBlocked('standard no debe crear movimientos de crédito', () => standard.from('credit_transactions').insert({
+    user_id: profile.id,
+    amount: 1,
+    type: 'security_probe',
+  }).select('id'))
+  await expectBlocked('standard no debe crear historial de precios', () => standard.from('price_history').insert({
+    product_id: product.id,
+    price: 1,
+  }).select('id'))
+
   const { data: wishlistProbe, error: wishlistProbeError } = await standard.from('wishlists').insert({
     user_id: profile.id,
     card_name: `Local security probe ${Date.now()}`,
@@ -126,11 +168,115 @@ async function main() {
   const { error: wishlistCleanupError } = await standard.from('wishlists').delete().eq('id', wishlistProbe.id)
   if (wishlistCleanupError) throw new Error(`no se pudo limpiar wishlist de prueba: ${wishlistCleanupError.message}`)
 
+  const { data: savedProbe, error: savedProbeError } = await standard.from('saved_items').insert({
+    user_id: profile.id,
+    product_id: product.id,
+  }).select('id').single()
+  if (savedProbeError) throw new Error(`standard debe poder guardar un producto propio: ${savedProbeError.message}`)
+  const { error: savedCleanupError } = await standard.from('saved_items').delete().eq('id', savedProbe.id)
+  if (savedCleanupError) throw new Error(`no se pudo limpiar saved_items de prueba: ${savedCleanupError.message}`)
+
+  const { data: cartProbe, error: cartProbeError } = await standard.from('cart_items').insert({
+    user_id: profile.id,
+    product_id: String(product.id),
+    quantity: 1,
+  }).select('id').single()
+  if (cartProbeError) throw new Error(`standard debe poder crear su item de carrito: ${cartProbeError.message}`)
+  const { error: cartCleanupError } = await standard.from('cart_items').delete().eq('id', cartProbe.id)
+  if (cartCleanupError) throw new Error(`no se pudo limpiar cart_items de prueba: ${cartCleanupError.message}`)
+
+  const { data: orderProbe, error: orderProbeError } = await standard.from('orders').insert({
+    user_id: profile.id,
+    status: 'pending_payment',
+    total_amount: 1,
+    payment_method: 'local-security-probe',
+  }).select('id').single()
+  if (orderProbeError) throw new Error(`standard debe poder crear su propia orden: ${orderProbeError.message}`)
+  try {
+    const { data: orderItemProbe, error: orderItemProbeError } = await standard.from('order_items').insert({
+      order_id: orderProbe.id,
+      product_id: product.id,
+      quantity: 1,
+      price_at_purchase: 1,
+    }).select('id').single()
+    if (orderItemProbeError) throw new Error(`standard debe poder crear items de su orden: ${orderItemProbeError.message}`)
+
+    await expectBlocked('standard no debe editar su orden directamente', () => standard
+      .from('orders')
+      .update({ delivery_notes: 'blocked' })
+      .eq('id', orderProbe.id)
+      .select('id'))
+    await expectBlocked('standard no debe borrar su orden directamente', () => standard
+      .from('orders')
+      .delete()
+      .eq('id', orderProbe.id)
+      .select('id'))
+
+    const { error: itemCleanupError } = await admin.from('order_items').delete().eq('id', orderItemProbe.id)
+    if (itemCleanupError) throw new Error(`no se pudo limpiar order_items de prueba: ${itemCleanupError.message}`)
+  } finally {
+    const { error: orderCleanupError } = await admin.from('orders').delete().eq('id', orderProbe.id)
+    if (orderCleanupError) throw new Error(`no se pudo limpiar orden de prueba: ${orderCleanupError.message}`)
+  }
+
+  const { data: buylistProbe, error: buylistProbeError } = await standard.from('buylist_orders').insert({
+    user_id: profile.id,
+    status: 'pending_review',
+    total_offered: 1,
+  }).select('id').single()
+  if (buylistProbeError) throw new Error(`standard debe poder crear su propio buylist: ${buylistProbeError.message}`)
+  try {
+    const { data: buylistItemProbe, error: buylistItemProbeError } = await standard.from('buylist_items').insert({
+      buylist_id: buylistProbe.id,
+      product_id: product.id,
+      quantity: 1,
+      offered_price_unit: 1,
+    }).select('id').single()
+    if (buylistItemProbeError) throw new Error(`standard debe poder crear items de su buylist: ${buylistItemProbeError.message}`)
+    await expectBlocked('standard no debe editar buylist_items', () => standard
+      .from('buylist_items')
+      .update({ offered_price_unit: 2 })
+      .eq('id', buylistItemProbe.id)
+      .select('id'))
+    const { error: buylistItemCleanupError } = await admin.from('buylist_items').delete().eq('id', buylistItemProbe.id)
+    if (buylistItemCleanupError) throw new Error(`no se pudo limpiar buylist_items de prueba: ${buylistItemCleanupError.message}`)
+  } finally {
+    const { error: buylistCleanupError } = await admin.from('buylist_orders').delete().eq('id', buylistProbe.id)
+    if (buylistCleanupError) throw new Error(`no se pudo limpiar buylist de prueba: ${buylistCleanupError.message}`)
+  }
+
   const settingsWrite = await standard.from('system_settings').upsert({
     key: `local-security-probe-${Date.now()}`,
     value: true,
   }).select('key')
   assert.ok(settingsWrite.error || (settingsWrite.data?.length ?? 0) === 0, 'standard no debe escribir system_settings')
+
+  const analyticsMarker = `local-security-analytics-${Date.now()}`
+  try {
+    const analyticsProbe = await anon.from('analytics_visits').insert({ source: analyticsMarker })
+    assert.ifError(analyticsProbe.error)
+  } finally {
+    const { error } = await service.from('analytics_visits').delete().eq('source', analyticsMarker)
+    if (error) throw new Error(`no se pudo limpiar analytics_visits de prueba: ${error.message}`)
+  }
+
+  const searchMarker = `local-security-search-${Date.now()}`
+  try {
+    const searchProbe = await anon.from('search_logs').insert({ query: searchMarker })
+    assert.ifError(searchProbe.error)
+  } finally {
+    const { error } = await service.from('search_logs').delete().eq('query', searchMarker)
+    if (error) throw new Error(`no se pudo limpiar search_logs de prueba: ${error.message}`)
+  }
+
+  const feedbackMarker = `local-security-feedback-${Date.now()}`
+  try {
+    const feedbackProbe = await anon.from('feedback').insert({ comment: feedbackMarker })
+    assert.ifError(feedbackProbe.error)
+  } finally {
+    const { error } = await service.from('feedback').delete().eq('comment', feedbackMarker)
+    if (error) throw new Error(`no se pudo limpiar feedback de prueba: ${error.message}`)
+  }
 
   const creditProbe = await standard.rpc('manage_credits', {
     target_user_id: profile.id,
