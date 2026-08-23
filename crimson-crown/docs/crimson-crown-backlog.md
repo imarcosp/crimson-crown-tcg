@@ -23,6 +23,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 - Migración local `20260823140924_append_import_order_user_note.sql`: la nota de una orden de importación propia se agrega mediante una RPC que sólo acepta órdenes en estado `Iniciada`.
 - Migración local `20260823142117_normalize_import_admin_policies.sql`: las políticas admin de importaciones usan `is_admin()` y no un chequeo duplicado de `profiles.role`.
 - Migración local `20260823173257_create_place_order_atomic.sql`: checkout transaccional con locks de productos/perfil, precios resueltos en base, créditos y orden/items en una única transacción; aplicada y registrada sólo en Supabase local.
+- Migración local `20260823183638_create_release_expired_orders_atomic.sql`: liberación idempotente de órdenes vencidas con locks de orden/producto; el cron ya no restaura stock con escrituras directas.
 - RPCs acotados para editar datos propios (`update_profile_details`, `submit_order_payment_proof`), descuento de stock atómico sólo server-side y créditos sin autoacreditación/saldo negativo.
 - Wishlist específica: ya no intenta crear productos desde el navegador; si la variante no está catalogada, muestra una salida explícita y conserva la alerta por nombre como alternativa.
 - `/api/dolar` lee con la clave pública y persiste el tipo de cambio sólo con service role; `/api/fix-images` exige sesión admin y `/api/cron/release-stock` falla cerrado fuera de loopback si falta `CRON_SECRET`.
@@ -38,7 +39,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 2. **Pruebas de autorización negativas.** La matriz cubre tablas administrativas, carrito/guardados, órdenes, items, importaciones, buylists, wishlist, notas, Storage y las escrituras públicas intencionales (`feedback`, `search_logs`, `analytics_visits`) con limpieza de fixtures.
 3. **Funciones administrativas.** RPCs críticas y endpoints de service role auditados para este lote; falta verificar contra el esquema remoto que las políticas de Storage productivas coincidan con el comportamiento esperado.
 4. **Integridad SQL.** Resuelto localmente; lint local en verde.
-5. **Flujos financieros.** Lote local parcial completado: checkout E2E de efectivo con orden sintética, descuento atómico de stock, rechazo de sobre-reserva, cron de liberación/restauración y `place_order_atomic` con rollback de stock/créditos ante un producto inválido. La validación de `moto`/`shipping` ahora interpreta el método decorado por la UI y exige dirección. Sigue pendiente diseñar/verificar webhook y estados de pago reales con proveedores deshabilitados; nunca confirmar una compra desde pruebas automatizadas.
+5. **Flujos financieros.** Lote local parcial completado: checkout E2E de efectivo con orden sintética, descuento atómico de stock, rechazo de sobre-reserva, liberación idempotente del cron y `place_order_atomic` con rollback de stock/créditos ante un producto inválido. La validación de `moto`/`shipping` ahora interpreta el método decorado por la UI y exige dirección. Sigue pendiente diseñar/verificar webhook y estados de pago reales con proveedores deshabilitados; nunca confirmar una compra desde pruebas automatizadas.
 
 ## P1 — estabilización funcional
 
