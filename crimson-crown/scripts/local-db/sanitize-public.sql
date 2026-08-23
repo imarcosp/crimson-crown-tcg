@@ -110,4 +110,21 @@ WHERE key IN (
 UPDATE public.banners
 SET link_url = CASE WHEN link_url IS NULL THEN NULL ELSE '/local-test' END;
 
+-- Never let local tests fetch images or metadata from a production Supabase project.
+UPDATE public.banners
+SET image_url = CASE WHEN image_url IS NULL THEN NULL ELSE '/local-test/banner-image' END
+WHERE image_url ILIKE '%.supabase.co%';
+
+UPDATE public.import_items
+SET image_url = CASE WHEN image_url IS NULL THEN NULL ELSE '/local-test/import-image' END
+WHERE image_url ILIKE '%.supabase.co%';
+
+UPDATE public.products
+SET image_url = CASE WHEN image_url IS NULL THEN NULL ELSE '/local-test/product-image' END
+WHERE image_url ILIKE '%.supabase.co%';
+
+UPDATE public.products
+SET metadata = jsonb_build_object('source', 'local-test-fixture')
+WHERE metadata::text ILIKE '%.supabase.co%';
+
 COMMIT;
