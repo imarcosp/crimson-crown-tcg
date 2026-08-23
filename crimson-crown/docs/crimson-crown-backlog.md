@@ -41,6 +41,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 ## P1 — estabilización funcional
 
 - E2E de Pedido completado: `/hang` abre WhatsApp, el modal "Pedido a Japón" calcula el total y `/api/search` devuelve precios.
+- E2E autenticado completado con fixtures sintéticos locales: la cuenta estándar ve una compra con su producto, abre el detalle de una importación y expande el detalle de una solicitud de buylist; los fixtures se limpian al finalizar.
 - Completar pruebas de detalle de órdenes, importaciones y buylists con fixtures sintéticos.
 - Verificar que los formularios administrativos no puedan mutar datos sin una política RLS equivalente.
 - Revisar el warning de múltiples clientes GoTrue en el mismo contexto y centralizar el cliente Supabase en el navegador.
