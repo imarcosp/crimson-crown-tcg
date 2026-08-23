@@ -29,6 +29,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 - Matriz automatizada `npm run test:local-security`: anon no ve tablas privadas; usuario estándar sólo ve sus recursos, carrito, guardados, órdenes/importaciones/buylists propios y no puede mutar productos, créditos, precios ni tablas administrativas; admin conserva acceso operativo; `supabase db lint` sin errores.
 - Pruebas de seguridad local integradas al script `test:environment-safety`.
 - Advertencia de `next/image` del logo corregida.
+- Host local alternativo normalizado en desarrollo a `127.0.0.1` mediante un redirect de navegador, con prueba E2E de regresión; esto evita separar cookies de Supabase entre `localhost` y `127.0.0.1`.
 
 ## P0 — bloquear cualquier promoción a producción
 
@@ -46,7 +47,6 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 - Auditoría inicial de formularios administrativos completada: el usuario estándar es redirigido fuera del panel y el admin local puede cargar Inventario, Pedidos, Importaciones, Buylists y Configuración Maestra sin escrituras de prueba.
 - Warning de múltiples clientes GoTrue resuelto en este lote: `CsvUploader` e Inventario usan el singleton browser compartido; se eliminó el cliente legacy directo.
 - Añadir pruebas de regresión para la configuración de contacto que se carga desde `system_settings` en cliente.
-- Resolver el desvío de host local en redirects (`127.0.0.1`/`localhost`) para que la sesión admin sea consistente.
 
 ## P2 — calidad y operación
 

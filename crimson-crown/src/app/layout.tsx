@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/layout/Navbar";
@@ -62,6 +63,16 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#F8FAFC] text-slate-900`}
       >
+        {process.env.NODE_ENV === "development" && (
+          <Script id="local-host-canonicalizer" strategy="beforeInteractive">
+            {`(() => {
+  if (window.location.hostname !== 'localhost') return;
+  const canonicalUrl = new URL(window.location.href);
+  canonicalUrl.hostname = '127.0.0.1';
+  window.location.replace(canonicalUrl.href);
+})()`}
+          </Script>
+        )}
         <div className="flex flex-col min-h-screen">
           <CurrencySync />
           <CartSync />

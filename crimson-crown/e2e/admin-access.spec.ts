@@ -14,11 +14,13 @@ async function loginAsAdmin(page: Page) {
 async function unlockAdminPanel(page: Page) {
   await page.goto('/admin')
   const restricted = page.getByRole('heading', { name: 'Acceso Restringido' })
+  const panel = page.getByRole('heading', { name: 'Panel de Administración' })
+  await expect(restricted.or(panel)).toBeVisible()
   if (await restricted.isVisible()) {
     await page.locator('input[type="password"]').fill('1234')
     await page.getByRole('button', { name: 'Desbloquear Panel' }).click()
   }
-  await expect(page.getByRole('heading', { name: 'Panel de Administración' })).toBeVisible()
+  await expect(panel).toBeVisible()
 }
 
 test('usuario estándar no puede abrir el panel administrativo', async ({ page }) => {
@@ -30,6 +32,11 @@ test('usuario estándar no puede abrir el panel administrativo', async ({ page }
 
   await page.goto('/admin/inventory')
   await expect(page).toHaveURL(/\/$/)
+})
+
+test('el host local alternativo se normaliza a 127.0.0.1', async ({ page }) => {
+  await page.goto('http://localhost:3000/login?view=signup')
+  await expect(page).toHaveURL('http://127.0.0.1:3000/login?view=signup')
 })
 
 test('admin puede abrir los formularios operativos sin warnings GoTrue', async ({ page }) => {
