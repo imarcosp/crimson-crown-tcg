@@ -1,6 +1,33 @@
 import { expect, test } from '@playwright/test'
 
-test('modal Hang Order calcula total con precios', async ({ page }) => {
+test('pagina Colgar Pedido abre WhatsApp con el mensaje', async ({ page }) => {
+  await page.goto('/hang')
+  await expect(page.getByRole('heading', { name: 'Colgar Pedido' })).toBeVisible()
+
+  await page.getByPlaceholder('Pega acá tu lista o links').fill('4x Sol Ring\nhttps://example.test/card')
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: 'Enviar por WhatsApp' }).click()
+
+  const popup = await popupPromise
+  await expect.poll(() => popup.url()).toMatch(/https:\/\/(?:wa\.me|api\.whatsapp\.com)\//)
+  await expect.poll(() => new URL(popup.url()).searchParams.get('text') || '').toContain('Sol Ring')
+})
+
+test('modal Pedido a Japón calcula total con precios', async ({ page }) => {
+  await page.route('**/api/dolar*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        exchangeRate: 1400,
+        enableImports: true,
+        importWarningText: '',
+        nextJapanTripDate: null,
+        exchangeRateAutoEnabled: false,
+      }),
+    })
+  })
+
   await page.route('**/api/search?*', async (route) => {
     const url = new URL(route.request().url())
     const q = url.searchParams.get('q') || ''
@@ -30,8 +57,8 @@ test('modal Hang Order calcula total con precios', async ({ page }) => {
   })
 
   await page.goto('/')
-  await page.getByRole('link', { name: 'Colgar Pedido' }).click()
-  await expect(page.getByRole('heading', { name: 'Colgar Pedido' })).toBeVisible()
+  await page.getByRole('link', { name: 'Pedido a Japón' }).click()
+  await expect(page.getByRole('heading', { name: 'Pedido a Japón' })).toBeVisible()
 
   await page.getByPlaceholder('Buscar carta...').fill('Sol Ring')
   await page.getByRole('button', { name: /Sol Ring/i }).first().click()
