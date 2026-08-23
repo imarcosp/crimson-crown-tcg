@@ -6,7 +6,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 
 - La réplica local usa Supabase en loopback y datos públicos sanitizados. Los dumps crudos permanecen fuera del worktree.
 - Existe una cuenta admin sintética local y un usuario estándar sintético para pruebas de autorización.
-- No se ejecutaron escrituras contra producción, despliegues, commits ni pushes durante esta fase.
+- No se ejecutaron escrituras contra producción ni despliegues. Los checkpoints están publicados únicamente en la rama de trabajo `codex/crimson-crown-safety-foundation`.
 - El servidor local se mantiene disponible en `http://127.0.0.1:3000` / `http://localhost:3000`.
 
 ## Lote actual — listo para revisión manual
@@ -40,7 +40,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 
 ## P1 — estabilización funcional
 
-- Actualizar `e2e/hang-order.spec.ts` para la UI actual de `/hang`.
+- E2E de Pedido completado: `/hang` abre WhatsApp, el modal "Pedido a Japón" calcula el total y `/api/search` devuelve precios.
 - Completar pruebas de detalle de órdenes, importaciones y buylists con fixtures sintéticos.
 - Verificar que los formularios administrativos no puedan mutar datos sin una política RLS equivalente.
 - Revisar el warning de múltiples clientes GoTrue en el mismo contexto y centralizar el cliente Supabase en el navegador.
