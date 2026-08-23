@@ -5,6 +5,7 @@ import {
   assertNonProductionUrl,
   assertSafeTestEnvironment,
   assertSafeDevelopmentSupabaseUrl,
+  assertSafeRuntimeSupabaseUrl,
 } from './production-guards.ts'
 
 test('rejects every known Crimson Crown production URL', () => {
@@ -34,6 +35,29 @@ test('blocks production Supabase URLs when running the development server', () =
     (error: unknown) => error instanceof Error && error.name === 'UnsafeEnvironmentError',
   )
   assert.doesNotThrow(() => assertSafeDevelopmentSupabaseUrl('http://127.0.0.1:54621'))
+})
+
+test('allows the production Supabase URL only in the Vercel production environment', () => {
+  assert.doesNotThrow(() =>
+    assertSafeRuntimeSupabaseUrl('https://djfqozfaqkqdoqeoqbzt.supabase.co', {
+      VERCEL_ENV: 'production',
+    }),
+  )
+})
+
+test('blocks the production Supabase URL in Preview, Development, or unknown runtimes', () => {
+  for (const env of [{ VERCEL_ENV: 'preview' }, { VERCEL_ENV: 'development' }, {}]) {
+    assert.throws(
+      () => assertSafeRuntimeSupabaseUrl('https://djfqozfaqkqdoqeoqbzt.supabase.co', env),
+      (error: unknown) => error instanceof Error && error.name === 'UnsafeEnvironmentError',
+    )
+  }
+})
+
+test('keeps loopback Supabase valid in non-production Vercel environments', () => {
+  assert.doesNotThrow(() =>
+    assertSafeRuntimeSupabaseUrl('http://127.0.0.1:54621', { VERCEL_ENV: 'preview' }),
+  )
 })
 
 test('accepts an isolated loopback environment without external side effects', () => {

@@ -1,6 +1,10 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { ADMIN_EMAILS } from '@/lib/constants'
+import {
+  assertSafeRuntimeSupabaseUrl,
+  UnsafeEnvironmentError,
+} from '@/lib/environment/production-guards'
 
 export async function proxy(request: NextRequest) {
   // Ignorar rutas estáticas y de auth
@@ -12,8 +16,21 @@ export async function proxy(request: NextRequest) {
     request: { headers: request.headers },
   })
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  try {
+    assertSafeRuntimeSupabaseUrl(supabaseUrl)
+  } catch (error) {
+    if (error instanceof UnsafeEnvironmentError) {
+      console.error('[Proxy] Entorno Supabase bloqueado:', error.name)
+    }
+    return NextResponse.json(
+      { error: 'Entorno no disponible para este deployment.' },
+      { status: 503 },
+    )
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseUrl,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {

@@ -47,6 +47,23 @@ export function assertSafeDevelopmentSupabaseUrl(rawUrl: string): URL {
   return assertNonProductionUrl(rawUrl, 'Supabase de desarrollo')
 }
 
+export function assertSafeRuntimeSupabaseUrl(
+  rawUrl: string,
+  env: Environment = process.env,
+): URL {
+  if (env.VERCEL_ENV?.trim().toLowerCase() === 'production') {
+    try {
+      return new URL(rawUrl)
+    } catch {
+      throw new UnsafeEnvironmentError(
+        'Entorno inseguro: la URL de Supabase del despliegue no es válida.',
+      )
+    }
+  }
+
+  return assertNonProductionUrl(rawUrl, 'Supabase del despliegue no productivo')
+}
+
 function requireEnvironmentValue(env: Environment, name: string): string {
   const value = env[name]?.trim()
 

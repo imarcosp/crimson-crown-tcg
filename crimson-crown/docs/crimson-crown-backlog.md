@@ -8,6 +8,8 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 - Existe una cuenta admin sintética local y un usuario estándar sintético para pruebas de autorización.
 - No se ejecutaron escrituras contra producción ni despliegues. Los checkpoints están publicados únicamente en la rama de trabajo `codex/crimson-crown-safety-foundation`.
 - El servidor local se mantiene disponible en `http://127.0.0.1:3000` / `http://localhost:3000`.
+- Preflight Vercel read-only: el proyecto exacto es `prj_wHaQDSKDKuTP4rPoS1SeCFulls8g` (`crimson-crown-tcg`), raíz `crimson-crown`, con producción en `https://www.crimsoncrownimports.com`; el deployment productivo observado es `dpl_AvPpKMKMhJdBgFY48UjJyDxZs7mu`, commit de `main` `ab2c980c644fa36db07aa1972c60133213be4a7e`.
+- Vercel actualmente comparte `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` entre Production, Preview y Development, sin un proyecto staging separado. El proxy ahora bloquea Preview/Development si apuntan al Supabase productivo; no se deben probar esos previews hasta configurar un Supabase no productivo.
 
 ## Lote actual — listo para revisión manual
 
