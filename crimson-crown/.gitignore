@@ -32,6 +32,15 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.test.local.example
+
+# Local Supabase safety
+# Production-derived artifacts are forbidden inside this worktree even when ignored.
+supabase/.temp/
+local-artifacts/
+*.backup
+*.dump
+*.sql.gz
 
 # vercel
 .vercel
