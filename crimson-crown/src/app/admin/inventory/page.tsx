@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useState, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import ProductForm from '@/components/admin/ProductForm'
 import CsvUploader from '@/components/admin/CsvUploader'
 import { Search, Package, DollarSign, Trash2, Edit, ChevronLeft, ChevronRight, Filter, Tag, EyeOff, Eye } from 'lucide-react'
@@ -8,6 +8,7 @@ import { Search, Package, DollarSign, Trash2, Edit, ChevronLeft, ChevronRight, F
 const ITEMS_PER_PAGE = 25
 
 export default function InventoryPage() {
+  const supabase = createClient()
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<any | null>(null)

@@ -1,6 +1,6 @@
 "use client"
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/client'
 import Papa from 'papaparse'
 import { Upload, Loader2, FileSpreadsheet, CheckCircle } from 'lucide-react'
 import { processWishlistNotifications } from '@/app/actions/wishlist' // <--- IMPORTAR
@@ -12,6 +12,7 @@ import {
 } from '@/lib/cards/finish-normalization'
 
 export default function CsvUploader() {
+  const supabase = createClient()
   const [step, setStep] = useState<'upload' | 'preview' | 'processing' | 'done'>('upload')
   const [file, setFile] = useState<File | null>(null)
   const [parsedRows, setParsedRows] = useState<any[]>([])

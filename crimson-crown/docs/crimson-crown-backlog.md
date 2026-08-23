@@ -42,9 +42,9 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 
 - E2E de Pedido completado: `/hang` abre WhatsApp, el modal "Pedido a Japón" calcula el total y `/api/search` devuelve precios.
 - E2E autenticado completado con fixtures sintéticos locales: la cuenta estándar ve una compra con su producto, abre el detalle de una importación y expande el detalle de una solicitud de buylist; los fixtures se limpian al finalizar.
-- Completar pruebas de detalle de órdenes, importaciones y buylists con fixtures sintéticos.
-- Verificar que los formularios administrativos no puedan mutar datos sin una política RLS equivalente.
-- Revisar el warning de múltiples clientes GoTrue en el mismo contexto y centralizar el cliente Supabase en el navegador.
+- Pruebas de detalle de órdenes, importaciones y buylists completadas con fixtures sintéticos locales.
+- Auditoría inicial de formularios administrativos completada: el usuario estándar es redirigido fuera del panel y el admin local puede cargar Inventario, Pedidos, Importaciones, Buylists y Configuración Maestra sin escrituras de prueba.
+- Warning de múltiples clientes GoTrue resuelto en este lote: `CsvUploader` e Inventario usan el singleton browser compartido; se eliminó el cliente legacy directo.
 - Añadir pruebas de regresión para la configuración de contacto que se carga desde `system_settings` en cliente.
 - Resolver el desvío de host local en redirects (`127.0.0.1`/`localhost`) para que la sesión admin sea consistente.
 
