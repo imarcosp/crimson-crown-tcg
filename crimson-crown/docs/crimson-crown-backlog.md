@@ -46,7 +46,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 - Pruebas de detalle de órdenes, importaciones y buylists completadas con fixtures sintéticos locales.
 - Auditoría inicial de formularios administrativos completada: el usuario estándar es redirigido fuera del panel y el admin local puede cargar Inventario, Pedidos, Importaciones, Buylists y Configuración Maestra sin escrituras de prueba.
 - Warning de múltiples clientes GoTrue resuelto en este lote: `CsvUploader` e Inventario usan el singleton browser compartido; se eliminó el cliente legacy directo.
-- Añadir pruebas de regresión para la configuración de contacto que se carga desde `system_settings` en cliente.
+- Prueba E2E de contacto completada: un fixture REST aislado verifica que `system_settings` actualiza el Footer y el enlace de WhatsApp sin modificar la base local compartida.
 
 ## P2 — calidad y operación
 
