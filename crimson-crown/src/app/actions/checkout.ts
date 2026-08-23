@@ -1,6 +1,7 @@
 "use server"
 
 import { createServerClient } from '@supabase/ssr'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { sendOrderEmails } from '@/app/actions/email'
 import { cookies } from 'next/headers'
 
@@ -34,6 +35,10 @@ export async function placeOrder(items: any[], couponCode?: string, shippingDeta
         },
       }
     )
+    const serviceSupabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -42,10 +47,12 @@ export async function placeOrder(items: any[], couponCode?: string, shippingDeta
     }
     console.log('👤 [Server] Usuario autenticado:', (user as any).email)
 
-    await supabase
-      .from('profiles')
-      .update({ first_name: contactDetails.name, last_name: contactDetails.lastname, phone: contactDetails.phone })
-      .eq('id', user.id)
+    const { error: profileError } = await supabase.rpc('update_profile_details', {
+      first_name_input: contactDetails.name,
+      last_name_input: contactDetails.lastname,
+      phone_input: contactDetails.phone,
+    })
+    if (profileError) throw profileError
 
     if (['moto', 'shipping'].includes(shippingDetails?.method)) {
       const a = shippingDetails?.address || {}
@@ -149,19 +156,17 @@ export async function placeOrder(items: any[], couponCode?: string, shippingDeta
     for (const item of items) {
       // Usamos el RPC que descuenta SOLO SI HAY STOCK SUFICIENTE
       // Asumiendo que tu RPC decrement_stock hace: UPDATE products SET stock = stock - qty WHERE id = row_id AND stock >= qty
-      const { data: decrementResult, error: stockError } = await supabase.rpc('decrement_stock', { qty: item.quantity, row_id: item.id })
+      const { data: decrementResult, error: stockError } = await serviceSupabase.rpc('decrement_stock', { qty: item.quantity, row_id: item.id })
       
       if (stockError || decrementResult === false) {
-        // Si no usas un RPC que devuelve boolean, hacemos un check estricto:
+        // La función local devuelve false cuando otro checkout tomó el stock.
         const { data: current } = await supabase.from('products').select('stock, name').eq('id', item.id).single()
         
         if (!current || (current as any).stock < item.quantity) {
            console.error(`⛔ [Checkout] Stock insuficiente para ${(current as any)?.name || item.id}`)
            throw new Error(`Stock insuficiente para: ${(current as any)?.name || 'un producto'}`)
         } else {
-           // Fallback a update directo si el RPC no existe o falla por otra razón
-           const { error: updateError } = await supabase.from('products').update({ stock: (current as any).stock - item.quantity }).eq('id', item.id)
-           if (updateError) throw new Error('Error crítico descontando stock.')
+           throw new Error(`No se pudo reservar stock para ${(current as any)?.name || 'un producto'}. Intenta nuevamente.`)
         }
       }
     }

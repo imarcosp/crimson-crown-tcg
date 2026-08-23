@@ -3,11 +3,22 @@ import { createClient } from '@supabase/supabase-js'
 import axios from 'axios'
 import dotenv from 'dotenv'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') })
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+if (!SUPABASE_KEY) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY es obligatorio para escribir oportunidades de precios.')
+}
+
+const supabaseHost = new URL(SUPABASE_URL).hostname
+if (!['127.0.0.1', 'localhost'].includes(supabaseHost)) {
+  throw new Error('find-opportunities sólo puede ejecutarse contra Supabase local (loopback).')
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 

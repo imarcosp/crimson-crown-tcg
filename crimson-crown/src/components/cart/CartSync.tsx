@@ -9,6 +9,13 @@ export default function CartSync() {
   const isFirstMount = useRef(true)
   const userIdRef = useRef<string | null>(null)
 
+  // Rehydrate only after the first client render. This keeps the server and
+  // initial browser snapshots identical even when a previous session left
+  // items in localStorage.
+  useEffect(() => {
+    void useCartStore.persist.rehydrate()
+  }, [])
+
   useEffect(() => {
     const syncDown = async () => {
       const { data: { user } } = await supabase.auth.getUser()

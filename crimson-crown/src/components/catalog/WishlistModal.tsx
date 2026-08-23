@@ -19,38 +19,21 @@ export default function WishlistModal({ product, onClose, userId }: Props) {
     setLoading(true)
     try {
       const isSpecific = mode === 'specific'
-      
-      // FIX: Guardamos el acabado correcto basado en lo que recibimos del ProductCard
-      const finish = product.isFoil ? 'Foil' : 'Non-Foil'
 
       if (isSpecific) {
         // 1. Verificamos si existe el producto EXACTO (ID + Finish)
-        // Nota: En un escenario ideal el ID es único por variante, pero en Scryfall el ID es único por carta.
-        // Si usamos el Scryfall ID como ID de producto, solo puede haber una fila.
-        // Para soportar Foil/Non-Foil con el mismo ID, deberíamos tener cuidado.
-        // PERO, para la wishlist, lo importante es que el producto EXISTA en la tabla products para referenciarlo.
-        
-        const { data: exists } = await supabase.from('products').select('id').eq('id', product.id).maybeSingle()
-        
+        // El catálogo es de escritura administrativa. Si la variante aún no
+        // está catalogada no podemos crearla desde el navegador; pedir una
+        // alerta por nombre sigue disponible mediante "Cualquier Versión".
+        const { data: exists, error: lookupError } = await supabase
+          .from('products')
+          .select('id')
+          .eq('id', product.id)
+          .maybeSingle()
+
+        if (lookupError) throw lookupError
         if (!exists) {
-            // 2. Si no existe, lo creamos.
-            const { error: createErr } = await supabase.from('products').insert({
-                id: product.id,
-                name: product.name,
-                set_name: product.setName || product.set_name,
-                collector_number: product.collectorNumber || product.collector_number,
-                image_url: product.image || product.image_url,
-                tcg: product.tcg || 'Magic',
-                stock: 0,
-                price_usd: product.priceUsd || 0,
-                condition: product.condition || 'NM',
-                finish: finish, // <--- AQUÍ SE GUARDA EL ACABADO CORRECTO
-                language: product.language || 'English',
-                scryfall_id: product.id,
-                rarity: product.rarity
-            })
-            
-            if (createErr && !createErr.message.includes('duplicate key')) throw createErr
+          throw new Error('Esta versión todavía no está catalogada. Selecciona “Cualquier Versión” para crear una alerta por nombre.')
         }
       }
 

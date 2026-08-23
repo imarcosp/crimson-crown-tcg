@@ -43,6 +43,10 @@ export function assertNonProductionUrl(rawUrl: string, purpose: string): URL {
   return parsedUrl
 }
 
+export function assertSafeDevelopmentSupabaseUrl(rawUrl: string): URL {
+  return assertNonProductionUrl(rawUrl, 'Supabase de desarrollo')
+}
+
 function requireEnvironmentValue(env: Environment, name: string): string {
   const value = env[name]?.trim()
 

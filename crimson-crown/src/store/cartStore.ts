@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { createClient } from '@/lib/supabase/client'
+import { CART_PERSIST_OPTIONS, migrateCartState } from './cart-hydration'
 
 interface CartItem {
   id: string
@@ -173,6 +174,12 @@ export const useCartStore = create<CartStore>()(
     {
       name: 'cart-storage',
       storage: createJSONStorage(() => localStorage),
+      // Persisted state must not be read while React is rendering the first
+      // client tree. Otherwise a cart saved in localStorage differs from the
+      // empty server snapshot and Next.js reports a hydration mismatch.
+      ...CART_PERSIST_OPTIONS,
+      version: 1,
+      migrate: (persistedState) => migrateCartState(persistedState),
     }
   )
 )

@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
+import { assertSafeDevelopmentSupabaseUrl } from '@/lib/environment/production-guards'
 
 // Instancia única (Singleton) para evitar reconexiones múltiples
 let client: ReturnType<typeof createBrowserClient> | undefined
@@ -21,6 +22,10 @@ export function createClient() {
       removeChannel: () => {},
     } as any)
     return client
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    assertSafeDevelopmentSupabaseUrl(url)
   }
 
   client = createBrowserClient(url, key, {

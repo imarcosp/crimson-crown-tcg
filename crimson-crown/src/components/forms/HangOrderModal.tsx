@@ -333,13 +333,15 @@ export default function HangOrderModal() {
             targetOrderNumber = existingOrder.order_number
             isMerge = true
             
-            // Si hay un nuevo mensaje/nota, lo agregamos a user_notes
+            // La nota se agrega mediante una RPC que sólo permite editar la
+            // orden propia mientras siga en estado Iniciada.
             if (message.trim()) {
                 const newNote = message.trim()
-                const currentNotes = existingOrder.user_notes || ''
-                const updatedNotes = currentNotes ? `${currentNotes}\n---\n[Agregado]: ${newNote}` : newNote
-                
-                await supabase.from('import_orders').update({ user_notes: updatedNotes }).eq('id', targetOrderId)
+                const { error: noteError } = await supabase.rpc('append_import_order_user_note', {
+                    p_order_id: targetOrderId,
+                    p_note: newNote,
+                })
+                if (noteError) throw noteError
             }
         } else {
             // NUEVA ORDEN

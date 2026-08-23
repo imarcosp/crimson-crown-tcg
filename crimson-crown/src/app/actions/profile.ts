@@ -15,10 +15,11 @@ export async function updateProfile(formData: { first_name: string, last_name: s
   const supabase = await getSupabase()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return { success: false, error: 'No autorizado' }
-  const { error } = await supabase
-    .from('profiles')
-    .update({ first_name: formData.first_name, last_name: formData.last_name, phone: formData.phone })
-    .eq('id', user.id)
+  const { error } = await supabase.rpc('update_profile_details', {
+    first_name_input: formData.first_name,
+    last_name_input: formData.last_name,
+    phone_input: formData.phone,
+  })
   if (error) return { success: false, error: error.message }
   return { success: true }
 }

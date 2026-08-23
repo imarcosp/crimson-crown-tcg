@@ -12,9 +12,22 @@ export async function GET(req: Request) {
         // Validar seguridad: Solo Vercel Cron u otra llave secreta debería llamar esto
         const authHeader = req.headers.get('authorization')
         const cronSecret = process.env.CRON_SECRET
-        
-        // En producción, es vital proteger este endpoint. 
-        // Si estamos en local (no hay CRON_SECRET), dejamos pasar para pruebas manuales.
+
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+        const isLoopback = (() => {
+            try {
+                const hostname = new URL(supabaseUrl).hostname
+                return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
+            } catch {
+                return false
+            }
+        })()
+
+        // En producción, la ausencia de CRON_SECRET debe fallar cerrado. Sólo
+        // permitimos llamadas sin secreto contra Supabase local.
+        if (!cronSecret && !isLoopback) {
+            return NextResponse.json({ error: 'CRON_SECRET no configurado' }, { status: 503 })
+        }
         if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
         }

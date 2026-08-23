@@ -366,7 +366,7 @@ export default function Navbar() {
             <div className="flex items-center gap-2">
                 <button onClick={() => setIsMenuOpen(true)} className="p-2 rounded hover:bg-slate-700 cursor-pointer transition-colors"><MenuIcon className="h-6 w-6" /></button>
                 <Link href="/" className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity">
-                    <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/20"><Image src={siteConfig.logo} alt={siteConfig.shortName} fill className="object-cover" /></div>
+                    <div className="relative w-8 h-8 rounded-full overflow-hidden border border-white/20"><Image src={siteConfig.logo} alt={siteConfig.shortName} fill sizes="32px" className="object-cover" /></div>
                     <span className="font-extrabold text-sm hidden xs:block">{siteConfig.shortName.toUpperCase()}</span>
                 </Link>
             </div>
@@ -444,7 +444,7 @@ export default function Navbar() {
           {/* ======================= DESKTOP ======================= */}
           <div className="hidden md:flex items-center justify-between gap-3 w-full">
             <Link href="/" className="flex items-center gap-3 shrink-0 hover:opacity-90 transition-opacity cursor-pointer">
-                <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white/20"><Image src={siteConfig.logo} alt={siteConfig.shortName} fill className="object-cover" /></div>
+                <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white/20"><Image src={siteConfig.logo} alt={siteConfig.shortName} fill sizes="40px" className="object-cover" /></div>
                 <span className="font-extrabold text-lg tracking-tight">{siteConfig.shortName.toUpperCase()}</span>
             </Link>
 

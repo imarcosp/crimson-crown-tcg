@@ -147,10 +147,10 @@ function ProfileContent() {
           
           const { data: { publicUrl } } = supabase.storage.from('payment_proofs').getPublicUrl(fileName)
 
-          const { error } = await supabase.from('orders').update({ 
-              status: 'verifying_payment', 
-              payment_proof_url: publicUrl 
-          }).eq('id', orderId)
+          const { error } = await supabase.rpc('submit_order_payment_proof', {
+              order_id_input: orderId,
+              proof_url_input: publicUrl,
+          })
           
           if (error) throw error
           

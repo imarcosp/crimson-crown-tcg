@@ -1,0 +1,73 @@
+# Crimson Crown — backlog y gates de liberación
+
+Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS queda fuera de alcance hasta completar la estabilización productiva.
+
+## Estado del entorno local
+
+- La réplica local usa Supabase en loopback y datos públicos sanitizados. Los dumps crudos permanecen fuera del worktree.
+- Existe una cuenta admin sintética local y un usuario estándar sintético para pruebas de autorización.
+- No se ejecutaron escrituras contra producción, despliegues, commits ni pushes durante esta fase.
+- El servidor local se mantiene disponible en `http://127.0.0.1:3000` / `http://localhost:3000`.
+
+## Lote actual — listo para revisión manual
+
+- Separación de configuración local: evita que SSR exponga dominio, email, WhatsApp o datos bancarios productivos.
+- Guard de desarrollo: los clientes Supabase rechazan URLs productivas cuando `NODE_ENV=development`, incluso si `.env.local` contiene una configuración antigua.
+- Allowlist de admin: la cuenta sintética solo es admin cuando Supabase apunta a loopback.
+- Hidratación del tipo de cambio y carrito diferida al cliente para evitar mismatches de React.
+- Migración defensiva del carrito persistido para estados heredados o inválidos.
+- Migración local `20260823043637_local_security_baseline.sql`: RLS por rol admin, aislamiento de perfiles/órdenes/buylist/wishlists, grants de RPC y vista administrativa revocados para clientes.
+- Migración local `20260823044210_fix_merge_duplicate_products_lint.sql`: corrección de tipos UUID en `merge_duplicate_products` y autorización admin.
+- Migración local `20260823050711_local_write_surface_hardening.sql`: external prices sólo para admin/backend, historial de precios sin escritura desde navegador y callbacks de triggers sin grants públicos.
+- Migración local `20260823051113_preserve_production_admin_allowlist.sql`: conserva el acceso de los dos admins productivos además del rol `admin`.
+- Migración local `20260823140924_append_import_order_user_note.sql`: la nota de una orden de importación propia se agrega mediante una RPC que sólo acepta órdenes en estado `Iniciada`.
+- Migración local `20260823142117_normalize_import_admin_policies.sql`: las políticas admin de importaciones usan `is_admin()` y no un chequeo duplicado de `profiles.role`.
+- RPCs acotados para editar datos propios (`update_profile_details`, `submit_order_payment_proof`), descuento de stock atómico sólo server-side y créditos sin autoacreditación/saldo negativo.
+- Wishlist específica: ya no intenta crear productos desde el navegador; si la variante no está catalogada, muestra una salida explícita y conserva la alerta por nombre como alternativa.
+- `/api/dolar` lee con la clave pública y persiste el tipo de cambio sólo con service role; `/api/fix-images` exige sesión admin y `/api/cron/release-stock` falla cerrado fuera de loopback si falta `CRON_SECRET`.
+- Storage local preparado con buckets sintéticos `payment_proofs`, `products` y `banners`; `scripts/local-db/prepare-storage-fixtures.ps1`, `storage-fixtures.sql` y `storage-matrix.mjs` son sólo de pruebas locales y no deben entrar al push de producción sin auditar las políticas remotas.
+- Matriz automatizada `npm run test:local-security`: anon no ve tablas privadas; usuario estándar sólo ve sus recursos y no puede mutar productos/créditos/precios; admin conserva acceso operativo; `supabase db lint` sin errores.
+- Pruebas de seguridad local integradas al script `test:environment-safety`.
+- Advertencia de `next/image` del logo corregida.
+
+## P0 — bloquear cualquier promoción a producción
+
+1. **RLS y autorización.** Lote local aplicado y verificado. Antes de producción falta revisar el diff SQL contra el esquema remoto y validar las mismas políticas en una rama/entorno de staging.
+2. **Pruebas de autorización negativas.** La matriz ahora cubre notas de importación, wishlist por nombre, creación de productos y escritura de configuración; falta completar inserción/actualización/borrado de cada tabla con fixtures aislados y pruebas de Storage.
+3. **Funciones administrativas.** RPCs críticas y endpoints de service role auditados para este lote; falta verificar contra el esquema remoto que las políticas de Storage productivas coincidan con el comportamiento esperado.
+4. **Integridad SQL.** Resuelto localmente; lint local en verde.
+5. **Flujos financieros.** Falta probar checkout, webhooks, reserva/liberación de stock y estados de pago con proveedores deshabilitados; nunca confirmar una compra desde pruebas automatizadas.
+
+## P1 — estabilización funcional
+
+- Actualizar `e2e/hang-order.spec.ts` para la UI actual de `/hang`.
+- Completar pruebas de detalle de órdenes, importaciones y buylists con fixtures sintéticos.
+- Verificar que los formularios administrativos no puedan mutar datos sin una política RLS equivalente.
+- Revisar el warning de múltiples clientes GoTrue en el mismo contexto y centralizar el cliente Supabase en el navegador.
+- Añadir pruebas de regresión para la configuración de contacto que se carga desde `system_settings` en cliente.
+- Resolver el desvío de host local en redirects (`127.0.0.1`/`localhost`) para que la sesión admin sea consistente.
+
+## P2 — calidad y operación
+
+- Reducir la deuda heredada de ESLint y TypeScript; el build actual omite validación de tipos.
+- Actualizar `baseline-browser-mapping` cuando se abra un lote de dependencias.
+- Completar la réplica de Auth/Storage gestionados solo con fixtures sintéticos y documentar qué no se importa.
+- Storage productivo pendiente: el dump sanitizado no incluye buckets ni objetos; hay que auditar las políticas de `storage.objects` remotas y decidir si se replica alguna migración antes de promover cambios.
+- Añadir inventario de esquema, row-counts y clasificación de datos como artefactos externos verificables.
+- Documentar backups locales, restauración y recuperación sin incluir dumps dentro de Git.
+
+## SaaS — después de todo lo anterior
+
+- Extraer configuración por tenant, branding, dominios y roles.
+- Separar facturación, límites y observabilidad.
+- Crear un proyecto plantilla sin reutilizar datos ni credenciales de Crimson Crown.
+
+## Gates antes del primer push a producción
+
+1. Revisión manual del lote actual y de cualquier migración SQL nueva.
+2. Suite local de seguridad y tests de autorización negativos en verde.
+3. Build y validación de tipos sin errores nuevos.
+4. Pruebas manuales de checkout y stock en un entorno controlado, sin proveedor de pagos real.
+5. Orden de promoción: migraciones SQL primero (con backup y ventana controlada), luego el código que usa los RPC nuevos; nunca desplegar el frontend antes de `decrement_stock`/`update_profile_details` disponibles.
+6. Verificar manualmente buckets/policies de Storage en producción y decidir si se incluye una migración de Storage; no se debe inferir desde el dump sanitizado.
+7. Diff revisado por el propietario; recién entonces se autoriza commit/push y un despliegue separado.

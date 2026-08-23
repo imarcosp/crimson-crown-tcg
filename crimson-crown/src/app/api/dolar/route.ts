@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { fetchDolarCripto } from '@/lib/dolar'
 import { EXCHANGE_RATE } from '@/lib/constants'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 export async function GET() {
   const cookieStore = await cookies()
@@ -17,6 +18,12 @@ export async function GET() {
       },
     }
   )
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const writer = serviceKey
+    ? createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+    : null
 
   let value = EXCHANGE_RATE
   let shouldUpdate = true
@@ -90,9 +97,11 @@ export async function GET() {
     const fetched = await fetchDolarCripto()
     if (typeof fetched === 'number' && fetched > 0) {
       value = fetched
-      await supabase
+      if (writer) {
+        await writer
         .from('system_settings')
         .upsert({ key: 'dolar_cotizacion', value: fetched, updated_at: new Date().toISOString() })
+      }
     }
   }
 

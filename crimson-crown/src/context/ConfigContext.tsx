@@ -1,6 +1,6 @@
 "use client"
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { EXCHANGE_RATE } from '@/lib/constants'
+import { EXCHANGE_RATE, parseStoredExchangeRate } from '@/lib/exchange-rate'
 
 type Ctx = {
   exchangeRate: number
@@ -24,16 +24,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
   const [enableImports, setEnableImports] = useState<boolean>(true)
   const [importWarningText, setImportWarningText] = useState<string>('Días de Pedido: Lunes, Miércoles y Viernes.\n\nLos precios mostrados son una estimación. El precio final se te informará antes de pagar.')
   const [nextJapanTripDate, setNextJapanTripDate] = useState<string | null>(null)
-  const [exchangeRate, setExchangeRate] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('lastExchangeRate')
-      if (stored) {
-        const parsed = Number(stored)
-        if (!Number.isNaN(parsed) && parsed > 0) return parsed
-      }
-    }
-    return EXCHANGE_RATE
-  })
+  const [exchangeRate, setExchangeRate] = useState<number>(EXCHANGE_RATE)
 
   const refreshExchangeRate = useCallback(async () => {
     try {
@@ -62,7 +53,19 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [])
 
-  useEffect(() => { refreshExchangeRate() }, [refreshExchangeRate])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const stored = parseStoredExchangeRate(localStorage.getItem('lastExchangeRate'))
+      if (stored !== EXCHANGE_RATE) {
+        // Defer the persisted value to the next task so the effect does not
+        // synchronously cascade another render during hydration.
+        setExchangeRate(stored)
+      }
+      void refreshExchangeRate()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [refreshExchangeRate])
 
   return (
     <Ctx.Provider value={{ exchangeRate, enableImports, importWarningText, nextJapanTripDate, setExchangeRate, refreshExchangeRate }}>

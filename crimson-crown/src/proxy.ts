@@ -1,7 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-
-const ADMIN_EMAILS = ["mjperchezabala@gmail.com", "crimsoncrownimports@gmail.com"]
+import { ADMIN_EMAILS } from '@/lib/constants'
 
 export async function proxy(request: NextRequest) {
   // Ignorar rutas estáticas y de auth

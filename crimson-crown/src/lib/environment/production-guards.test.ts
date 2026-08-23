@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   assertNonProductionUrl,
   assertSafeTestEnvironment,
+  assertSafeDevelopmentSupabaseUrl,
 } from './production-guards.ts'
 
 test('rejects every known Crimson Crown production URL', () => {
@@ -25,6 +26,14 @@ test('rejects every known Crimson Crown production URL', () => {
       },
     )
   }
+})
+
+test('blocks production Supabase URLs when running the development server', () => {
+  assert.throws(
+    () => assertSafeDevelopmentSupabaseUrl('https://djfqozfaqkqdoqeoqbzt.supabase.co'),
+    (error: unknown) => error instanceof Error && error.name === 'UnsafeEnvironmentError',
+  )
+  assert.doesNotThrow(() => assertSafeDevelopmentSupabaseUrl('http://127.0.0.1:54621'))
 })
 
 test('accepts an isolated loopback environment without external side effects', () => {
