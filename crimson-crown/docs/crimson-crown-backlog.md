@@ -37,7 +37,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 2. **Pruebas de autorización negativas.** La matriz cubre tablas administrativas, carrito/guardados, órdenes, items, importaciones, buylists, wishlist, notas, Storage y las escrituras públicas intencionales (`feedback`, `search_logs`, `analytics_visits`) con limpieza de fixtures.
 3. **Funciones administrativas.** RPCs críticas y endpoints de service role auditados para este lote; falta verificar contra el esquema remoto que las políticas de Storage productivas coincidan con el comportamiento esperado.
 4. **Integridad SQL.** Resuelto localmente; lint local en verde.
-5. **Flujos financieros.** Falta probar checkout, webhooks, reserva/liberación de stock y estados de pago con proveedores deshabilitados; nunca confirmar una compra desde pruebas automatizadas.
+5. **Flujos financieros.** Lote local parcial completado: checkout E2E de efectivo con orden sintética, descuento atómico de stock, rechazo de sobre-reserva y cron de liberación/restauración sin proveedor externo. La validación de `moto`/`shipping` ahora interpreta el método decorado por la UI y exige dirección. Sigue pendiente diseñar/verificar webhook y estados de pago reales con proveedores deshabilitados; nunca confirmar una compra desde pruebas automatizadas.
 
 ## P1 — estabilización funcional
 

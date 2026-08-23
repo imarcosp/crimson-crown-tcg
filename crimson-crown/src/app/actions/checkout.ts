@@ -4,6 +4,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { sendOrderEmails } from '@/app/actions/email'
 import { cookies } from 'next/headers'
+import { getCheckoutShippingNote, requiresCheckoutAddress } from './checkout-helpers'
 
 type ContactDetails = {
   name: string
@@ -54,7 +55,7 @@ export async function placeOrder(items: any[], couponCode?: string, shippingDeta
     })
     if (profileError) throw profileError
 
-    if (['moto', 'shipping'].includes(shippingDetails?.method)) {
+    if (requiresCheckoutAddress(shippingDetails?.method)) {
       const a = shippingDetails?.address || {}
       const required = [a.street, a.city, a.province, a.zip]
       if (required.some((v: any) => !v || String(v).trim() === '')) {
@@ -119,14 +120,7 @@ export async function placeOrder(items: any[], couponCode?: string, shippingDeta
     let creditsApplied = 0
     let newStatus = 'pending_payment'
     const notes: string[] = []
-    const shipNote = (() => {
-      const m = shippingDetails?.method
-      if (!m) return null
-      if (m === 'pickup') return 'Entrega: Retiro en Tienda (Almagro)'
-      if (m === 'moto') return 'Entrega: Moto Mensajería (CABA/GBA) - A coordinar / Pago en destino'
-      const a = shippingDetails?.address
-      return a ? `Entrega: Correo Argentino | ${a.street}, ${a.city}, ${a.province} (${a.zip})` : 'Entrega: Correo Argentino'
-    })()
+    const shipNote = getCheckoutShippingNote(shippingDetails?.method, shippingDetails?.address)
     if (shipNote) notes.push(shipNote as string)
     notes.push(`Contacto: ${contactDetails.name} ${contactDetails.lastname} (${contactDetails.phone})`)
 
