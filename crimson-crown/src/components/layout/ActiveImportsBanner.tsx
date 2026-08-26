@@ -66,7 +66,7 @@ export default function ActiveImportsBanner() {
                         table: 'import_orders', 
                         filter: `user_id=eq.${session.user.id}` 
                     },
-                    (payload) => {
+                    (payload: { new: { id: string; status: string } }) => {
                         const newStatus = payload.new.status
                         if (['Cotizada', 'Parcialmente Disponible', 'Disponible'].includes(newStatus)) {
                             // Re-fetch para asegurar que tenemos la data fresca

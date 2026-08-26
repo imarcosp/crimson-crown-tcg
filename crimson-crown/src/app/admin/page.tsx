@@ -32,7 +32,7 @@ export default function AdminPage() {
         // Mes actual: Día 1 del mes a las 00:00:00
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
 
-        const newStats = orders.reduce((acc, order) => {
+        const newStats = orders.reduce((acc: { week: number; month: number; year: number }, order: { created_at: string; total_amount: number | string | null }) => {
           const orderTime = new Date(order.created_at).getTime()
           const amount = Number(order.total_amount || 0)
 

@@ -197,7 +197,7 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
                 <div className="flex flex-col md:flex-row items-center gap-4">
                   {enableImports ? (
                     <>
-                      <button onClick={() => { addQuote({ id: p.id, name: p.name, price: p.priceUsd, image: p.image, setName: p.setName }); toggleHangModal() }} className="w-full md:w-auto px-8 bg-white border-2 border-[#9D1B1B] text-[#9D1B1B] hover:bg-red-50 py-4 rounded-xl font-bold text-lg transition-colors cursor-pointer whitespace-nowrap">
+                      <button onClick={() => { addQuote({ id: p.id, name: p.name, price: p.priceUsd, image: p.image, setName: p.setName, quantity: 1 }); toggleHangModal() }} className="w-full md:w-auto px-8 bg-white border-2 border-[#9D1B1B] text-[#9D1B1B] hover:bg-red-50 py-4 rounded-xl font-bold text-lg transition-colors cursor-pointer whitespace-nowrap">
                         Solicitar Cotización
                       </button>
                       <p className="text-slate-500 text-sm font-medium flex items-center gap-2">

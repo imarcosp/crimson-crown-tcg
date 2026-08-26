@@ -57,8 +57,17 @@ export async function proxy(request: NextRequest) {
   // --- ANALYTICS TRACKING (ALTOBUSCADOR) ---
   const source = request.nextUrl.searchParams.get('ref') || request.nextUrl.searchParams.get('source')
   if (source && source.toLowerCase() === 'altobuscador') {
-      // Registramos la visita de manera no bloqueante (Best Effort)
-      await supabase.from('analytics_visits').insert({ source: 'altobuscador' }).catch(err => console.error('Error analytics:', err))
+      // Registramos la visita de manera no bloqueante (Best Effort).
+      const analyticsInsert = supabase
+        .from('analytics_visits')
+        .insert({ source: 'altobuscador' })
+      void Promise.resolve(analyticsInsert)
+        .then(({ error: analyticsError }) => {
+          if (analyticsError) console.error('Error analytics:', analyticsError.message)
+        })
+        .catch((analyticsError: unknown) => {
+          console.error('Error analytics:', analyticsError instanceof Error ? analyticsError.message : 'desconocido')
+        })
   }
 
   // --- AUTH & ADMIN ---

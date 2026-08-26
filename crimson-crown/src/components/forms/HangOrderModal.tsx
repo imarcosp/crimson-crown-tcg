@@ -135,7 +135,7 @@ export default function HangOrderModal() {
             .gt('stock', 0)
         
         if (stocks && stocks.length > 0) {
-            const match = stocks.find(p => {
+            const match = stocks.find((p: { finish?: string | null }) => {
                 const finish = (p.finish || '').toLowerCase()
                 if (item.isFoil) return finish.includes('foil') && !finish.includes('non')
                 else return !finish.includes('foil') || finish.includes('non')

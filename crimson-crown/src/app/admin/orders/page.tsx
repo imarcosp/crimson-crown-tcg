@@ -114,7 +114,7 @@ export default function AdminOrdersPage() {
             .or(`email.ilike.%${cleanTerm}%,first_name.ilike.%${cleanTerm}%,last_name.ilike.%${cleanTerm}%`)
             .limit(50)
          
-         const userIds = userMatches?.map(u => u.id) || []
+          const userIds = userMatches?.map((u: { id: string }) => u.id) || []
 
          // 2. Buscar IDs de productos que coincidan con el nombre
          const { data: prodMatches } = await supabase
@@ -123,7 +123,7 @@ export default function AdminOrdersPage() {
             .ilike('name', `%${cleanTerm}%`)
             .limit(50)
          
-         const prodIds = prodMatches?.map(p => p.id) || []
+          const prodIds = prodMatches?.map((p: { id: string }) => p.id) || []
          let orderIdsFromProducts: string[] = []
 
          if (prodIds.length > 0) {
@@ -132,7 +132,7 @@ export default function AdminOrdersPage() {
                 .select('order_id')
                 .in('product_id', prodIds)
                 .limit(200) // Limite de seguridad
-             orderIdsFromProducts = itemMatches?.map(i => i.order_id) || []
+             orderIdsFromProducts = itemMatches?.map((i: { order_id: string }) => i.order_id) || []
          }
 
          // 3. Buscar IDs de órdenes (Exacto o Parcial)
@@ -452,7 +452,7 @@ export default function AdminOrdersPage() {
                             {/* CAMBIO: Mostrar SIEMPRE si hay url, sin importar el estado */}
                             {order.payment_proof_url && (
                                 <button 
-                                    onClick={() => setProofImage(order.payment_proof_url)}
+                                     onClick={() => setProofImage(order.payment_proof_url ?? null)}
                                     className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 transition-colors cursor-pointer"
                                     title="Ver Comprobante"
                                 >

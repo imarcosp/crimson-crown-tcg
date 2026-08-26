@@ -73,7 +73,7 @@ export default function AdminImportsPage() {
               .ilike('product_name', `%${cleaned}%`)
               .limit(100)
             
-            const itemOrderIds = itemMatches?.map(i => i.order_id) || []
+            const itemOrderIds = itemMatches?.map((i: { order_id: string }) => i.order_id) || []
 
             // 2. Buscar en Usuarios (Nombre/Apellido/Email)
             const { data: userMatches } = await supabase
@@ -81,7 +81,7 @@ export default function AdminImportsPage() {
                 .select('id')
                 .or(`email.ilike.%${cleaned}%,first_name.ilike.%${cleaned}%,last_name.ilike.%${cleaned}%`)
                 .limit(50)
-            const userIds = userMatches?.map(u => u.id) || []
+            const userIds = userMatches?.map((u: { id: string }) => u.id) || []
 
             // 3. Construir OR
             const orConditions: string[] = []

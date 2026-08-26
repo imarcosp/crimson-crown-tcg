@@ -55,8 +55,8 @@ export default function MercadoPagoWallet({ amount }: Props) {
     <div className="w-full">
       {/* Wallet renderiza el botón azul clásico de Mercado Pago */}
       <Wallet 
-        initialization={{ preferenceId: preferenceId, redirectMode: 'modal' }} 
-        customization={{ texts: { valueProp: 'security_details' } }} 
+        initialization={{ preferenceId: preferenceId, redirectMode: 'self' }}
+        customization={{ valueProp: 'security_details' }}
       />
     </div>
   )

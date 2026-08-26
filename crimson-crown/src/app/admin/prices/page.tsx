@@ -47,8 +47,8 @@ export default function AdminPricesMasterPage() {
               ? normalizeWhatsAppNumber(item.value)
               : cleanSystemSettingValue(item.value)
             if (item.key === 'exchange_rate') rate = String(val || '')
-            if (item.key === 'exchange_rate_auto_enabled') setExchangeRateAutoEnabled(val === true || val === 'true')
-            if (item.key === 'enable_imports') setEnableImports(val === true || val === 'true')
+            if (item.key === 'exchange_rate_auto_enabled') setExchangeRateAutoEnabled(val === 'true')
+            if (item.key === 'enable_imports') setEnableImports(val === 'true')
             if (item.key === 'how_to_content') setHowToContent(parseHowToContent(val))
             if (Object.prototype.hasOwnProperty.call(nextInfo, item.key)) nextInfo[item.key] = val
           })

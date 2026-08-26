@@ -26,7 +26,7 @@ interface SellItem {
 
 interface BuylistStore {
   sellItems: SellItem[]
-  addItemToSell: (item: { id: string; name: string; price_usd: number; image_url?: string; set_name?: string; collector_number?: string; finish?: string; condition?: 'NM' | 'EX' | 'VG' | 'G'; finishes?: string[]; tcg?: string; prices?: { NM: number; EX: number; VG: number; G: number }; priceUsd?: number; priceUsdFoil?: number; foilLabel?: string; promo_types?: string[]; scryfall_id?: string; source?: 'moxfield' | 'manual' }) => void
+  addItemToSell: (item: { id: string; name: string; price_usd?: number; image_url?: string; set_name?: string; collector_number?: string; finish?: string; isFoil?: boolean; quantity?: number; condition?: 'NM' | 'EX' | 'VG' | 'G'; finishes?: string[]; tcg?: string; prices?: { NM: number; EX: number; VG: number; G: number }; priceUsd?: number; priceUsdFoil?: number; foilLabel?: string; promo_types?: string[]; scryfall_id?: string; source?: 'moxfield' | 'manual' }) => void
   removeItem: (id: string) => void
   updateQuantity: (id: string, qty: number) => void
   toggleFoil: (id: string) => void

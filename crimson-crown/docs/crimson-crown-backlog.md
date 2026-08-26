@@ -1,6 +1,6 @@
 # Crimson Crown — backlog y gates de liberación
 
-Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS queda fuera de alcance hasta completar la estabilización productiva.
+Actualizado: 2026-08-26. Este documento cubre únicamente Crimson Crown. SaaS queda fuera de alcance hasta completar la estabilización productiva.
 
 ## Estado del entorno local
 
@@ -32,6 +32,8 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 - `/api/dolar` lee con la clave pública y persiste el tipo de cambio sólo con service role; `/api/fix-images` exige sesión admin y `/api/cron/release-stock` falla cerrado fuera de loopback si falta `CRON_SECRET`.
 - Storage local preparado con buckets sintéticos `payment_proofs`, `products` y `banners`; `scripts/local-db/prepare-storage-fixtures.ps1`, `storage-fixtures.sql` y `storage-matrix.mjs` son sólo de pruebas locales y no deben entrar al push de producción sin auditar las políticas remotas.
 - Matriz automatizada `npm run test:local-security`: anon no ve tablas privadas; usuario estándar sólo ve sus recursos, carrito, guardados, órdenes/importaciones/buylists propios y no puede mutar productos, créditos, precios ni tablas administrativas; admin conserva acceso operativo; `supabase db lint` sin errores.
+- Gate estricto de TypeScript habilitado: `npm run typecheck` (`tsc --noEmit`) pasa sin errores y Next.js ya no usa `ignoreBuildErrors`; el build local valida tipos antes de generar artefactos.
+- Suite local completa verificada en este checkpoint: 43 tests de entorno, matrices de seguridad/finanzas/checkout/liberación/Storage, lint SQL sin errores y E2E 11/11 en loopback.
 - Pruebas de seguridad local integradas al script `test:environment-safety`.
 - Advertencia de `next/image` del logo corregida.
 - Host local alternativo normalizado en desarrollo a `127.0.0.1` mediante un redirect de navegador, con prueba E2E de regresión; esto evita separar cookies de Supabase entre `localhost` y `127.0.0.1`.
@@ -55,13 +57,13 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 
 ## P2 — calidad y operación
 
-- Reducir la deuda heredada de ESLint y TypeScript; el build actual omite validación de tipos.
+- Reducir la deuda heredada de ESLint; TypeScript estricto ya está integrado al build y queda ESLint como lote independiente.
 - Actualizar `baseline-browser-mapping` cuando se abra un lote de dependencias.
 - Completar la réplica de Auth/Storage gestionados solo con fixtures sintéticos y documentar qué no se importa.
 - Storage productivo pendiente: el dump sanitizado no incluye buckets ni objetos; hay que auditar las políticas de `storage.objects` remotas y decidir si se replica alguna migración antes de promover cambios.
 - Añadir inventario de esquema, row-counts y clasificación de datos como artefactos externos verificables.
 - Documentar backups locales, restauración y recuperación sin incluir dumps dentro de Git.
-- La validación estricta de TypeScript continúa pendiente: el build actual omite el type-check y una ejecución directa de `tsc --noEmit` reporta errores heredados en actions, panel admin, buylist, emails, checkout y proxy. Se tratará en un lote separado.
+- La validación estricta de TypeScript quedó resuelta en el checkpoint `7cfd5a7`; mantener `npm run typecheck` como gate obligatorio de cada lote.
 
 ## SaaS — después de todo lo anterior
 

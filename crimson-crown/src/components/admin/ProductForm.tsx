@@ -166,9 +166,6 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
           energy: null,
           power: null,
           type: '',
-          gallery: [],
-          subcategory: '',
-          manual_category_mode: false,
           ...meta,
           gallery: meta.gallery || [],
           subcategory: meta.subcategory || '',
@@ -240,12 +237,12 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
       const hasNonFoil = pNormal > 0 || finishesRaw.includes('nonfoil')
       const hasFoil = pFoil > 0 || finishesRaw.includes('foil')
       const hasEtched = finishesRaw.includes('etched') || Number(card.price_usd_etched || card.priceUsdEtched || 0) > 0
-      const otherFoils = finishesRaw.filter((k) => !['nonfoil', 'foil', 'etched'].includes(k))
+       const otherFoils = finishesRaw.filter((k: string) => !['nonfoil', 'foil', 'etched'].includes(k))
       const nextFinishes: string[] = []
       if (hasNonFoil) nextFinishes.push('nonfoil')
       if (hasFoil) nextFinishes.push('foil')
       if (hasEtched) nextFinishes.push('etched')
-      otherFoils.forEach((k) => nextFinishes.push(k))
+       otherFoils.forEach((k: string) => nextFinishes.push(k))
       const uniqueNext = Array.from(new Set(nextFinishes))
 
       let initialFinish = 'Non-Foil'

@@ -72,7 +72,7 @@ export async function rejectImportQuoteAction(orderId: string) {
         // 2. Verificar que la orden pertenece al usuario
         const { data: order } = await supabase
             .from('import_orders')
-            .select('user_id, status')
+            .select('user_id, status, order_number')
             .eq('id', orderId)
             .single()
 
@@ -118,7 +118,7 @@ export async function approveImportQuoteAction(orderId: string, proofUrl: string
         // 2. Verificar que la orden pertenece al usuario y está en estado válido
         const { data: order } = await supabase
             .from('import_orders')
-            .select('user_id, status')
+            .select('user_id, status, order_number')
             .eq('id', orderId)
             .single()
 

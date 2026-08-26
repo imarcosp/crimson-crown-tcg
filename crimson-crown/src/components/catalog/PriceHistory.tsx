@@ -50,7 +50,7 @@ export default function PriceHistory({ data }: Props) {
             <Tooltip 
                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                 labelFormatter={(date) => format(date as Date, 'dd MMMM yyyy', { locale: es })}
-                formatter={(value: number) => [`US$ ${value.toFixed(2)}`, 'Precio']}
+                 formatter={(value: number | undefined) => [`US$ ${(value ?? 0).toFixed(2)}`, 'Precio']}
             />
             <Area 
                 type="monotone" 

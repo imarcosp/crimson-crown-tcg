@@ -36,7 +36,7 @@ export default function NotificationsMenu({ userId }: { userId: string }) {
     
     if (data) {
       setNotifications(data as Notification[])
-      setUnreadCount(data.filter((n: any) => !n.is_read).length)
+       setUnreadCount(data.filter((notification: Notification) => !notification.is_read).length)
     }
     setLoading(false)
   }, [userId, supabase])
@@ -65,7 +65,7 @@ export default function NotificationsMenu({ userId }: { userId: string }) {
           table: 'notifications', 
           filter: `user_id=eq.${userId}` 
         },
-        (payload) => {
+        (payload: { new: Notification }) => {
           const newNotif = payload.new as Notification
           setNotifications((prev) => [newNotif, ...prev])
           setUnreadCount((prev) => prev + 1)

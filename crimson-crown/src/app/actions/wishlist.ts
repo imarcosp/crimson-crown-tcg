@@ -50,8 +50,9 @@ export async function processWishlistNotifications(newItems: { id: string, name:
         console.log(`   --> ¡Match encontrado para ${item.name}! (${allMatches.length} usuarios)`)
         
         for (const match of allMatches) {
-          const email = match.profiles?.email
-          const name = match.profiles?.first_name || 'Cliente'
+          const profile = match.profiles?.[0]
+          const email = profile?.email
+          const name = profile?.first_name || 'Cliente'
           const userId = match.user_id
           const wishId = match.id
 

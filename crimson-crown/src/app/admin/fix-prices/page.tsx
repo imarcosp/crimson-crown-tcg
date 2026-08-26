@@ -54,7 +54,7 @@ export default function FixPricesPage() {
                         .in('scryfall_id', ids)
                     
                     const ckMap = new Map()
-                    currentExternal?.forEach(e => ckMap.set(e.scryfall_id, e))
+                    currentExternal?.forEach((e: { scryfall_id: string; cardkingdom_id_normal: string | null; cardkingdom_id_foil: string | null }) => ckMap.set(e.scryfall_id, e))
 
                     const mappedResults = validCards.map((card: any) => {
                         const ext = ckMap.get(card.id)
@@ -94,7 +94,7 @@ export default function FixPricesPage() {
                 .neq('ignore_ck', true)
                 .limit(20)
             
-            if (missingIds) ids = missingIds.map(x => x.scryfall_id)
+            if (missingIds) ids = missingIds.map((x: { scryfall_id: string }) => x.scryfall_id)
         }
 
         if (ids.length === 0) {
@@ -110,7 +110,7 @@ export default function FixPricesPage() {
             .in('scryfall_id', ids)
         
         const ckMap = new Map()
-        currentExternal?.forEach(e => ckMap.set(e.scryfall_id, e))
+        currentExternal?.forEach((e: { scryfall_id: string; cardkingdom_id_normal: string | null; cardkingdom_id_foil: string | null }) => ckMap.set(e.scryfall_id, e))
 
         try {
             const res = await fetch('https://api.scryfall.com/cards/collection', {

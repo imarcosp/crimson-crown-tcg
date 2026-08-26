@@ -224,7 +224,7 @@ export default function ProductCard(p: Props) {
                     {enableImports ? (
                         <>
                             <span className="text-xs font-medium text-slate-500 flex items-center gap-1 leading-tight max-[400px]:text-[10px]">🇯🇵 Podés pedirlas desde Japón. Sumalo a tu cotización para saber el precio y tiempo de entrega.</span>
-                            <button className="w-full px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border border-[#9D1B1B] text-[#9D1B1B] hover:bg-[#9D1B1B] hover:text-white transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const quoteName = wantsFoil ? `${p.name} (Foil)` : p.name; addQuote({ id: p.id, name: quoteName, setName: p.setName, image: currentImage, quantity: 1 }); toggleHangModal() }}>
+                            <button className="w-full px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 border border-[#9D1B1B] text-[#9D1B1B] hover:bg-[#9D1B1B] hover:text-white transition-colors cursor-pointer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const quoteName = wantsFoil ? `${p.name} (Foil)` : p.name; addQuote({ id: p.id, name: quoteName, price: basePriceUsd, setName: p.setName, image: currentImage, quantity: 1 }); toggleHangModal() }}>
                                 Cotizar
                             </button>
                         </>

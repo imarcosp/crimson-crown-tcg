@@ -14,6 +14,7 @@ import { useConfig } from '@/context/ConfigContext'
 import { ADMIN_EMAILS } from '@/lib/constants'
 import NotificationsMenu from './NotificationsMenu'
 import { siteConfig } from '@/config/site'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 type MenuCategory = {
   category: string
@@ -75,7 +76,7 @@ export default function Navbar() {
     }
     initSession()
     const intervalId = setInterval(() => { if (user?.id) fetchUserData(user.id) }, 30000)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
       if (!mounted) return
       if (session?.user) {
         setUser(session.user)

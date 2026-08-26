@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Html, Body, Head, Heading, Hr, Container, Preview, Section, Text, Column, Row } from '@react-email/components';
+import { siteConfig } from '@/config/site';
 
 export const OrderTemplate = ({ orderId, items, total, totalArs, type }: any) => {
   const arsFormatted = totalArs 

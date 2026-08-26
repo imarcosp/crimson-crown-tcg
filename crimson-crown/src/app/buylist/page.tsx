@@ -221,8 +221,8 @@ export default function BuylistPage() {
               ) : ( 
                 sellItems.map((i) => { 
                   // Lógica de visualización del checkbox
-                  const hasNonFoil = i.priceUsd > 0
-                  const hasFoil = i.priceUsdFoil > 0
+                  const hasNonFoil = Number(i.priceUsd || 0) > 0
+                  const hasFoil = Number(i.priceUsdFoil || 0) > 0
                   
                   // Solo permitimos elegir si AMBOS precios existen
                   const canChoose = hasNonFoil && hasFoil 
@@ -251,7 +251,7 @@ export default function BuylistPage() {
                             {i.name} 
                         </div> 
                         <div className="text-xs text-slate-500 flex gap-2"> 
-                            <span>{i.set_name}</span> 
+                            <span>{i.setName}</span>
                             <span className="font-mono opacity-60">#{i.collector_number}</span> 
                         </div> 
                       </div> 

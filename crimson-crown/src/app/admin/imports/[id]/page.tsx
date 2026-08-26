@@ -92,7 +92,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             
         if (its) {
             // Ordenar para que los ítems con unit_price === 0 aparezcan primero
-            const sortedItems = its.sort((a, b) => {
+            const sortedItems = its.sort((a: { unit_price?: number | string | null }, b: { unit_price?: number | string | null }) => {
                 const aPrice = Number(a.unit_price || 0)
                 const bPrice = Number(b.unit_price || 0)
                 
