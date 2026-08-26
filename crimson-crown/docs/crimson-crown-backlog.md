@@ -26,6 +26,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 - Migración local `20260823142117_normalize_import_admin_policies.sql`: las políticas admin de importaciones usan `is_admin()` y no un chequeo duplicado de `profiles.role`.
 - Migración local `20260823173257_create_place_order_atomic.sql`: checkout transaccional con locks de productos/perfil, precios resueltos en base, créditos y orden/items en una única transacción; aplicada y registrada sólo en Supabase local.
 - Migración local `20260823183638_create_release_expired_orders_atomic.sql`: liberación idempotente de órdenes vencidas con locks de orden/producto; el cron ya no restaura stock con escrituras directas.
+- Migración local `20260823043500_production_compatibility_baseline.sql`: compatibilidad previa para `is_admin()`, `decrement_stock(integer, uuid)` y `restore_stock(uuid)`; aplicada y registrada únicamente en Supabase local, sin grants administrativos para `anon`.
 - RPCs acotados para editar datos propios (`update_profile_details`, `submit_order_payment_proof`), descuento de stock atómico sólo server-side y créditos sin autoacreditación/saldo negativo.
 - Wishlist específica: ya no intenta crear productos desde el navegador; si la variante no está catalogada, muestra una salida explícita y conserva la alerta por nombre como alternativa.
 - `/api/dolar` lee con la clave pública y persiste el tipo de cambio sólo con service role; `/api/fix-images` exige sesión admin y `/api/cron/release-stock` falla cerrado fuera de loopback si falta `CRON_SECRET`.
@@ -60,6 +61,7 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 - Storage productivo pendiente: el dump sanitizado no incluye buckets ni objetos; hay que auditar las políticas de `storage.objects` remotas y decidir si se replica alguna migración antes de promover cambios.
 - Añadir inventario de esquema, row-counts y clasificación de datos como artefactos externos verificables.
 - Documentar backups locales, restauración y recuperación sin incluir dumps dentro de Git.
+- La validación estricta de TypeScript continúa pendiente: el build actual omite el type-check y una ejecución directa de `tsc --noEmit` reporta errores heredados en actions, panel admin, buylist, emails, checkout y proxy. Se tratará en un lote separado.
 
 ## SaaS — después de todo lo anterior
 
@@ -73,6 +75,6 @@ Actualizado: 2026-08-23. Este documento cubre únicamente Crimson Crown. SaaS qu
 2. Suite local de seguridad y tests de autorización negativos en verde.
 3. Build y validación de tipos sin errores nuevos.
 4. Pruebas manuales de checkout y stock en un entorno controlado, sin proveedor de pagos real.
-5. Orden de promoción: migraciones SQL primero (con backup y ventana controlada), luego el código que usa los RPC nuevos; nunca desplegar el frontend antes de `place_order_atomic`/`update_profile_details` disponibles.
+5. Orden de promoción: compatibilidad SQL primero, luego RPCs atómicos y finalmente el código que los usa (con backup y ventana controlada); nunca desplegar el frontend antes de `place_order_atomic`/`update_profile_details` disponibles.
 6. Verificar manualmente buckets/policies de Storage en producción y decidir si se incluye una migración de Storage; no se debe inferir desde el dump sanitizado.
 7. Diff revisado por el propietario; recién entonces se autoriza commit/push y un despliegue separado.
