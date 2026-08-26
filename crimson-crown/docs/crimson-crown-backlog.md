@@ -63,7 +63,16 @@ Actualizado: 2026-08-26. Este documento cubre únicamente Crimson Crown. SaaS qu
 - Storage productivo pendiente: el dump sanitizado no incluye buckets ni objetos; hay que auditar las políticas de `storage.objects` remotas y decidir si se replica alguna migración antes de promover cambios.
 - Añadir inventario de esquema, row-counts y clasificación de datos como artefactos externos verificables.
 - Documentar backups locales, restauración y recuperación sin incluir dumps dentro de Git.
-- La validación estricta de TypeScript quedó resuelta en el checkpoint `7cfd5a7`; mantener `npm run typecheck` como gate obligatorio de cada lote.
+- La validación estricta de TypeScript quedó resuelta en el checkpoint `cd2c63c`; mantener `npm run typecheck` como gate obligatorio de cada lote.
+- ESLint sigue fuera del gate de promoción: la ejecución completa actual reporta 476 errores y 161 advertencias heredadas (principalmente `no-explicit-any` y reglas de efectos React). Requiere un lote dedicado, no un cambio mecánico dentro del hardening financiero.
+
+## Siguiente backlog recomendado (antes de tocar producción)
+
+1. **Preflight remoto de migraciones (P0).** Vincular temporalmente el checkout a `Crimson Crown` sólo con credenciales de lectura/DB proporcionadas por el propietario, obtener `migration list` y ejecutar `db push --dry-run`. No aplicar nada hasta revisar el diff y confirmar backup.
+2. **Storage productivo (P0).** Inspeccionar buckets, objetos y políticas `storage.objects` en Supabase remoto; comparar con la matriz local y preparar una migración mínima sólo si las políticas actuales lo requieren.
+3. **Estados de pago/webhook (P0).** Diseñar idempotencia y autenticación de notificaciones de Mercado Pago, reconciliar `pending_payment`/`paid`/`cancelled` y probar con credenciales de sandbox, sin confirmar pagos reales.
+4. **Staging/variables (P0).** Crear un proyecto Supabase no productivo para Preview/Development y separar las variables de Vercel; el proxy ya bloquea previews que apunten a producción.
+5. **Operación y calidad (P1/P2).** Automatizar snapshots de esquema/row-counts, documentar restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
 
 ## SaaS — después de todo lo anterior
 
