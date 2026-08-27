@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ChevronLeft, ChevronRight, SearchX, Lightbulb, Sparkles } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { siteConfig } from '@/config/site'
+import { buildHybridCatalogProducts } from '@/lib/inventory/catalog'
 
 export const revalidate = 0
 
@@ -90,11 +91,18 @@ async function getExternalPrices(supabase: any, products: any[]) {
       const batch = uniqueIds.slice(index, index + chunkSize)
       const { data: externalPrices } = await supabase
         .from('external_prices')
-        .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil, active_price_normal, active_price_foil, foil_variant, type_line, color_identity')
+        .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, tcgplayer_market_normal, tcgplayer_market_foil, active_price_normal, active_price_foil, foil_variant, type_line, color_identity')
         .in('scryfall_id', batch)
 
       externalPrices?.forEach((row: any) => {
       map.set(String(row.scryfall_id), {
+        cardkingdom_retail_normal: row.cardkingdom_retail_normal,
+        cardkingdom_retail_foil: row.cardkingdom_retail_foil,
+        cardkingdom_retail_etched: row.cardkingdom_retail_etched,
+        tcgplayer_market_normal: row.tcgplayer_market_normal,
+        tcgplayer_market_foil: row.tcgplayer_market_foil,
+        active_price_normal: row.active_price_normal,
+        active_price_foil: row.active_price_foil,
         n: Number(row.active_price_normal || row.cardkingdom_retail_normal || 0),
         f: Number(row.active_price_foil || row.cardkingdom_retail_foil || 0),
         foil_variant: row.foil_variant || null,
@@ -131,6 +139,14 @@ export default async function CatalogPage({
 }) {
   const supabase = await createClient()
   const params = await searchParams
+
+  const { data: activeInventoryRows } = await supabase
+    .from('inventories')
+    .select('id, kind')
+    .eq('is_active', true)
+    .is('archived_at', null)
+  const activeInventoryIds = new Set<string>((activeInventoryRows || []).map((inventory: any) => String(inventory.id)))
+  const inventoryKinds = new Map((activeInventoryRows || []).map((inventory: any) => [String(inventory.id), inventory.kind]))
 
   const page = Number(params.page) || 1
   const pageSize = 25
@@ -197,7 +213,8 @@ export default async function CatalogPage({
   if (!currentQ && !hasAdvancedSearchFilters) {
       let q = supabase
         .from('products')
-        .select('*', { count: 'exact' })
+        .select('*')
+        .in('inventory_id', [...activeInventoryIds])
         .gt('stock', 0)
         .not('name', 'ilike', '%(ARCHIVADO)%') // <-- FILTRO DE ARCHIVADOS
 
@@ -220,17 +237,29 @@ export default async function CatalogPage({
       
       const needsIdentityFilter = effectiveColors.length > 0 || effectiveBasicLandOnly
       q = q.order(sortConfig.col, { ascending: sortConfig.asc, nullsFirst: false })
-      if (!needsIdentityFilter) {
-        q = q.range(from, to)
+      const fetchedProductsRaw: any[] = []
+      const rawPageSize = 1000
+      let rawOffset = 0
+      let keepReading = true
+      while (keepReading) {
+        const res = await q.range(rawOffset, rawOffset + rawPageSize - 1)
+        if (res.error) throw res.error
+        const rows = res.data || []
+        fetchedProductsRaw.push(...rows)
+        keepReading = rows.length === rawPageSize
+        rawOffset += rawPageSize
       }
 
-      const res = await q
-      const fetchedProducts = res.data || []
+      const fetchedProducts = fetchedProductsRaw.map((product: any) => ({
+        ...product,
+        inventory_kind: inventoryKinds.get(String(product.inventory_id)) || 'secondary',
+      }))
+      const externalMap = await getExternalPrices(supabase, fetchedProducts)
+      const hybridProducts = buildHybridCatalogProducts(fetchedProducts, externalMap, { activeInventoryIds })
 
       if (needsIdentityFilter) {
-        const extMap = await getExternalPrices(supabase, fetchedProducts)
-        const filtered = fetchedProducts.filter((product: any) => {
-          const ext = extMap.get(String(product.scryfall_id || product.id))
+        const filtered = hybridProducts.filter((product: any) => {
+          const ext = externalMap.get(String(product.scryfall_id || product.id))
           return (
             matchesColorFilters(ext?.color_identity, effectiveColors) &&
             matchesBasicLandFilter(ext?.type_line, effectiveBasicLandOnly)
@@ -239,8 +268,19 @@ export default async function CatalogPage({
         count = filtered.length
         products = filtered.slice(from, to + 1)
       } else {
-        products = fetchedProducts
-        count = res.count || 0
+        const sorted = hybridProducts.sort((a: any, b: any) => {
+          const left = a[sortConfig.col]
+          const right = b[sortConfig.col]
+          if (left === right) return 0
+          if (left === null || left === undefined) return 1
+          if (right === null || right === undefined) return -1
+          const result = typeof left === 'number' && typeof right === 'number'
+            ? left - right
+            : String(left).localeCompare(String(right))
+          return sortConfig.asc ? result : -result
+        })
+        products = sorted.slice(from, to + 1)
+        count = sorted.length
       }
   } 
   // ---------------------------------------------------------
@@ -319,7 +359,9 @@ export default async function CatalogPage({
       availability: (hasStock ? 'stock' : 'import') as any,
       language: p.language,
       isImport: p.isImport || !hasStock,
-      metadata: p.metadata
+      metadata: p.metadata,
+      inventoryCount: Number(p.inventory_count || 0),
+      pricingSource: p.pricing_source || 'unknown'
     }
   })
 

@@ -88,7 +88,7 @@ async function main() {
   console.log('🔎 Obteniendo productos Riftbound...')
   const { data: products, error } = await supabase
     .from('products')
-    .select('id, name, price_usd, tcg')
+    .select('id, inventory_id, name, price_usd, tcg, is_manual_price')
     .eq('tcg', 'Riftbound')
   if (error) {
     console.error('❌ Error obteniendo productos:', error.message)
@@ -103,6 +103,7 @@ async function main() {
   let updated = 0
   for (let i = 0; i < products.length; i++) {
     const p = products[i]
+    if (p.is_manual_price) continue
     const name = p.name
     console.log(`→ [${i + 1}/${products.length}] ${name}`)
 
@@ -120,6 +121,8 @@ async function main() {
           .from('products')
           .update({ price_usd: newPrice })
           .eq('id', p.id)
+          .eq('inventory_id', p.inventory_id)
+          .eq('is_manual_price', false)
         if (!upErr) {
           updated++
           console.log(`   ✅ ${priceResult.source}: US$ ${newPrice.toFixed(2)}`)
@@ -143,4 +146,3 @@ main().catch((e) => {
   console.error('🔥 Error Fatal:', e)
   process.exit(1)
 })
-

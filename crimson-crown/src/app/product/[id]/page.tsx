@@ -5,6 +5,7 @@ import ProductCard from '@/components/catalog/ProductCard'
 import type { Metadata } from 'next'
 import { Layers } from 'lucide-react'
 import { siteConfig } from '@/config/site'
+import { buildHybridCatalogProducts } from '@/lib/inventory/catalog'
 
 export const revalidate = 60
 
@@ -109,6 +110,53 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  const { data: activeInventories } = await supabase
+    .from('inventories')
+    .select('id, kind')
+    .eq('is_active', true)
+    .is('archived_at', null)
+  let activeInventoryIds = new Set<string>((activeInventories || []).map((inventory: any) => String(inventory.id)))
+  if (!isImport) {
+    const requestedInventoryIsActive = activeInventoryIds.has(String(product.inventory_id || ''))
+    const inventoryKinds = new Map((activeInventories || []).map((inventory: any) => [String(inventory.id), inventory.kind]))
+
+    if (product.variant_key && activeInventoryIds.size > 0) {
+      const { data: matchingRows } = await supabase
+        .from('products')
+        .select('*')
+        .eq('variant_key', product.variant_key)
+        .in('inventory_id', [...activeInventoryIds])
+      const rows = (matchingRows || []).map((row: any) => ({
+        ...row,
+        inventory_kind: inventoryKinds.get(String(row.inventory_id)) || 'secondary',
+      }))
+      const scryfallIds = [...new Set(rows.map((row: any) => String(row.scryfall_id || '')).filter(Boolean))]
+      const { data: externalRows } = scryfallIds.length > 0
+        ? await supabase
+            .from('external_prices')
+            .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, tcgplayer_market_normal, tcgplayer_market_foil')
+            .in('scryfall_id', scryfallIds)
+        : { data: [] }
+      const externalMap = new Map((externalRows || []).map((row: any) => [String(row.scryfall_id), row]))
+      const hybridRows = buildHybridCatalogProducts(rows, externalMap, { activeInventoryIds, includeOutOfStock: true })
+      const selectedListing = hybridRows.find((row: any) => String(row.id) === String(product.id)) || hybridRows[0]
+      if (selectedListing) {
+        product = {
+          ...product,
+          id: requestedInventoryIsActive ? product.id : selectedListing.id,
+          stock: selectedListing.stock,
+          price_usd: selectedListing.price_usd,
+          inventory_count: selectedListing.inventory_count,
+          pricing_source: selectedListing.pricing_source,
+        }
+      } else if (!requestedInventoryIsActive) {
+        return notFound()
+      }
+    } else if (!requestedInventoryIsActive) {
+      return notFound()
+    }
+  }
+
   // 3. Precios y Normalización (Principal)
   let finalPrice = Number(product.price_usd || 0)
   let finalPriceFoil = Number(product.price_usd_foil || 0)
@@ -151,7 +199,9 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
     isImport: isImport,
     availability: product.stock > 0 ? 'stock' : 'backorder',
     language: product.language || (isImport ? 'English' : undefined),
-    metadata: product.metadata
+    metadata: product.metadata,
+    inventoryCount: Number(product.inventory_count || 0),
+    pricingSource: product.pricing_source || 'unknown'
   }
 
   // 4. Obtener Historial
@@ -173,6 +223,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
         .select('*')
         .eq('name', product.name)
         .neq('id', product.id) // Excluir la actual
+        .in('inventory_id', [...activeInventoryIds])
         // .gt('stock', 0)  <-- ELIMINADO PARA MOSTRAR TODO
         .order('stock', { ascending: false }) // Prioridad: Primero lo que tiene stock
         .limit(10) // Aumentamos el límite para ver variedad

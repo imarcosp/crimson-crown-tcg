@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { allocateOffers, buildVariantKey, groupOffers } from './domain.ts'
+import { allocateOffers, buildCatalogListings, buildVariantKey, groupOffers } from './domain.ts'
 
 test('construye la misma clave para una impresión Magic equivalente en distintos inventarios', () => {
   const primaryKey = buildVariantKey({
@@ -70,5 +70,29 @@ test('agrupa ofertas automáticas iguales y conserva manuales diferentes', () =>
   assert.deepEqual(groups[0]?.offers.map((offer) => [offer.pricingSource, offer.priceUsd, offer.stock]), [
     ['cardkingdom', 9, 3],
     ['manual', 12, 1],
+  ])
+})
+
+test('genera listings visuales separados cuando el precio manual difiere', () => {
+  const listings = buildCatalogListings([
+    { productId: 'primary-auto', inventoryId: 'primary', inventoryKind: 'primary' as const, variantKey: 'variant', stock: 2, priceUsd: 9, pricingSource: 'cardkingdom' as const },
+    { productId: 'secondary-auto', inventoryId: 'secondary', inventoryKind: 'secondary' as const, variantKey: 'variant', stock: 3, priceUsd: 9, pricingSource: 'cardkingdom' as const },
+    { productId: 'secondary-manual', inventoryId: 'secondary-2', inventoryKind: 'secondary' as const, variantKey: 'variant', stock: 1, priceUsd: 12, pricingSource: 'manual' as const },
+  ])
+
+  assert.deepEqual(listings.map((listing) => [listing.productId, listing.priceUsd, listing.stock]), [
+    ['primary-auto', 9, 5],
+    ['secondary-manual', 12, 1],
+  ])
+})
+
+test('suma automáticos CK y fallback TCG cuando el precio efectivo coincide', () => {
+  const listings = buildCatalogListings([
+    { productId: 'primary-ck', inventoryId: 'primary', inventoryKind: 'primary' as const, variantKey: 'variant', stock: 1, priceUsd: 9, pricingSource: 'cardkingdom' as const },
+    { productId: 'secondary-tcg', inventoryId: 'secondary', inventoryKind: 'secondary' as const, variantKey: 'variant', stock: 2, priceUsd: 9, pricingSource: 'tcgplayer' as const },
+  ])
+
+  assert.deepEqual(listings.map((listing) => [listing.productId, listing.priceUsd, listing.stock, listing.pricingSource]), [
+    ['primary-ck', 9, 3, 'cardkingdom'],
   ])
 })

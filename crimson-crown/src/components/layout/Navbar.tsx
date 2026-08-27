@@ -161,11 +161,18 @@ export default function Navbar() {
         const PAGE_SIZE = 1000
         let keepLoading = true
         const categoryMap = new Map<string, Set<string>>()
+        const { data: activeInventories } = await supabase
+          .from('inventories')
+          .select('id')
+          .eq('is_active', true)
+          .is('archived_at', null)
+        const activeInventoryIds = (activeInventories || []).map((inventory: any) => String(inventory.id))
 
         while (keepLoading) {
           const { data, error } = await supabase
             .from('products')
             .select('tcg, metadata, name')
+            .in('inventory_id', activeInventoryIds)
             .gt('stock', 0)
             .not('name', 'ilike', '%(ARCHIVADO)%')
             .range(from, from + PAGE_SIZE - 1)

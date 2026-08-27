@@ -18,8 +18,10 @@ type InventorySummary = Inventory & {
   units: number
   variants: number
   valuation: number
+  reservedUnits: number
   soldUnits: number
   sales: number
+  cancelledUnits: number
 }
 
 const EMPTY_FORM = { name: '', description: '', locationLabel: '' }
@@ -53,27 +55,25 @@ export default function AdminInventoriesPage() {
       return
     }
 
-    const [{ data: products, error: productsError }, { data: items, error: itemsError }] = await Promise.all([
-      supabase.from('products').select('inventory_id,stock,price_usd').in('inventory_id', ids),
-      supabase.from('order_items').select('inventory_id,quantity,price_at_purchase').in('inventory_id', ids),
-    ])
+    const { data: metrics, error: metricsError } = await supabase.rpc('get_inventory_metrics', { inventory_id_input: null })
 
-    if (productsError || itemsError) {
-      setErrorMessage(productsError?.message || itemsError?.message || 'No se pudieron cargar los indicadores.')
+    if (metricsError) {
+      setErrorMessage(metricsError.message || 'No se pudieron cargar los indicadores.')
       setLoading(false)
       return
     }
 
     const nextSummaries = result.data.map((inventory) => {
-      const inventoryProducts = (products || []).filter((product: any) => product.inventory_id === inventory.id)
-      const inventoryItems = (items || []).filter((item: any) => item.inventory_id === inventory.id)
+      const metric = (metrics || []).find((row: any) => String(row.inventory_id) === inventory.id)
       return {
         ...inventory,
-        units: inventoryProducts.reduce((sum: number, product: any) => sum + Number(product.stock || 0), 0),
-        variants: inventoryProducts.length,
-        valuation: inventoryProducts.reduce((sum: number, product: any) => sum + Number(product.stock || 0) * Number(product.price_usd || 0), 0),
-        soldUnits: inventoryItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0),
-        sales: inventoryItems.reduce((sum: number, item: any) => sum + Number(item.quantity || 0) * Number(item.price_at_purchase || 0), 0),
+        units: Number(metric?.available_units || 0),
+        variants: Number(metric?.variant_count || 0),
+        valuation: Number(metric?.stock_value || 0),
+        reservedUnits: Number(metric?.reserved_units || 0),
+        soldUnits: Number(metric?.sold_units || 0),
+        sales: Number(metric?.sold_revenue || 0),
+        cancelledUnits: Number(metric?.cancelled_units || 0),
       }
     })
     setSummaries(nextSummaries)
@@ -169,18 +169,19 @@ export default function AdminInventoriesPage() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><h2 className="font-bold text-slate-900">Fuentes de inventario</h2><p className="mt-1 text-xs text-slate-500">El principal está protegido; los secundarios pueden pausarse o archivarse.</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">{summaries.length} inventarios</span></div>
         <div className="divide-y divide-slate-100">
           {loading ? <div className="p-10 text-center text-sm text-slate-500">Cargando inventarios…</div> : summaries.length === 0 ? <div className="p-10 text-center text-sm text-slate-500">No hay inventarios disponibles.</div> : summaries.map((inventory) => (
-            <div key={inventory.id} className="flex flex-col gap-5 px-5 py-5 transition hover:bg-slate-50/70 xl:flex-row xl:items-center">
+            <div key={inventory.id} data-inventory-name={inventory.name} className="flex flex-col gap-5 px-5 py-5 transition hover:bg-slate-50/70 xl:flex-row xl:items-center">
               <div className="flex min-w-0 flex-1 items-start gap-4">
                 <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${inventory.kind === 'primary' ? 'bg-slate-950 text-amber-300' : 'bg-blue-50 text-blue-700'}`}><Boxes size={22} /></div>
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="truncate font-bold text-slate-900">{inventory.name}</h3>{inventory.kind === 'primary' && <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">Principal</span>}<InventoryStatusBadge active={inventory.is_active} archived={Boolean(inventory.archived_at)} /></div><p className="mt-1 max-w-md truncate text-sm text-slate-500">{inventory.description || 'Sin descripción operativa.'}</p>{inventory.location_label && <p className="mt-2 flex items-center gap-1 text-xs font-bold text-slate-400"><MapPin size={13} /> {inventory.location_label}</p>}</div>
               </div>
-              <div className="grid grid-cols-3 gap-5 text-left sm:grid-cols-4 xl:w-[390px]">
+              <div className="grid grid-cols-3 gap-5 text-left sm:grid-cols-5 xl:w-[480px]">
                 <div><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Stock</div><div className="mt-1 font-black text-slate-900">{inventory.units.toLocaleString()}</div></div>
                 <div><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Variantes</div><div className="mt-1 font-black text-slate-900">{inventory.variants.toLocaleString()}</div></div>
+                <div><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Reservadas</div><div className="mt-1 font-black text-amber-700">{inventory.reservedUnits.toLocaleString()}</div></div>
                 <div><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vendidas</div><div className="mt-1 font-black text-slate-900">{inventory.soldUnits.toLocaleString()}</div></div>
                 <div className="hidden sm:block"><div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Valuación</div><div className="mt-1 font-black text-slate-900">US$ {inventory.valuation.toLocaleString('en-US', { maximumFractionDigits: 0 })}</div></div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 xl:justify-end"><Link href={`/admin/inventory?inventory=${inventory.id}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">Ver inventario</Link>{inventory.kind !== 'primary' && !inventory.archived_at && <button onClick={() => void toggleActive(inventory)} disabled={busyId === inventory.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50">{inventory.is_active ? 'Desactivar' : 'Activar'}</button>}{inventory.kind !== 'primary' && !inventory.archived_at && <button onClick={() => void archive(inventory)} disabled={busyId === inventory.id} className="rounded-lg border border-amber-200 px-3 py-2 text-xs font-bold text-amber-700 transition hover:bg-amber-50 disabled:opacity-50"><Archive size={14} /></button>}{inventory.kind !== 'primary' && <button onClick={() => void remove(inventory)} disabled={busyId === inventory.id} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-50"><Trash2 size={14} /></button>}</div>
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end"><Link href={`/admin/inventory?inventory=${inventory.id}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">Ver inventario</Link>{inventory.kind !== 'primary' && !inventory.archived_at && <button onClick={() => void toggleActive(inventory)} disabled={busyId === inventory.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50">{inventory.is_active ? 'Desactivar' : 'Activar'}</button>}{inventory.kind !== 'primary' && !inventory.archived_at && <button aria-label={`Archivar ${inventory.name}`} title={`Archivar ${inventory.name}`} onClick={() => void archive(inventory)} disabled={busyId === inventory.id} className="rounded-lg border border-amber-200 px-3 py-2 text-xs font-bold text-amber-700 transition hover:bg-amber-50 disabled:opacity-50"><Archive size={14} /></button>}{inventory.kind !== 'primary' && <button aria-label={`Eliminar ${inventory.name}`} title={`Eliminar ${inventory.name}`} onClick={() => void remove(inventory)} disabled={busyId === inventory.id} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-50"><Trash2 size={14} /></button>}</div>
             </div>
           ))}
         </div>

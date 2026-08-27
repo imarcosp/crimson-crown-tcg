@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Loader2, Save, Eye, Trash2, PackageCheck, Package, Search, Filter, ArrowLeft, ArrowRight, X, FileText, Check } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { cancelOrder } from '@/app/actions/admin-order-fulfillment'
 
 // ... (Resto de imports y constantes igual) ...
 const ITEMS_PER_PAGE = 20
@@ -263,8 +264,15 @@ export default function AdminOrdersPage() {
       const msg = eligibleIds.length === selectedIds.size ? `¿Cambiar estado a "${newStatus}" para ${eligibleIds.length} órdenes?` : `¿Cambiar estado a "${newStatus}" para ${eligibleIds.length} de ${selectedIds.size} órdenes seleccionadas?`
       if (!confirm(msg)) return
       setLoading(true)
-      const { error } = await supabase.from('orders').update({ status: newStatus }).in('id', eligibleIds)
-      if (error) { alert('Error actualizando: ' + error.message) } else { setSelectedIds(new Set()); fetchOrders() }
+      if (newStatus === 'cancelled') {
+        const results = await Promise.all(eligibleIds.map((orderId) => cancelOrder(orderId, true, true)))
+        const failed = results.find((result) => !result.success)
+        if (failed && !failed.success) alert('Error cancelando: ' + failed.error)
+        else { setSelectedIds(new Set()); fetchOrders() }
+      } else {
+        const { error } = await supabase.from('orders').update({ status: newStatus }).in('id', eligibleIds)
+        if (error) { alert('Error actualizando: ' + error.message) } else { setSelectedIds(new Set()); fetchOrders() }
+      }
       setLoading(false)
   }
 

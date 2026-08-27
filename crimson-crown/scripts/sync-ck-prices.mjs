@@ -26,7 +26,7 @@ async function main() {
     console.log('\n📥 Leyendo estado actual de external_prices...');
     const { data: currentData, error } = await supabase
         .from('external_prices')
-        .select('scryfall_id, cardkingdom_id_normal, cardkingdom_id_foil, cardkingdom_retail_normal, cardkingdom_retail_foil');
+        .select('scryfall_id, cardkingdom_id_normal, cardkingdom_id_foil, cardkingdom_retail_normal, cardkingdom_retail_foil, tcgplayer_market_normal, tcgplayer_market_foil');
     
     if (error) { console.error('Error leyendo BD:', error); process.exit(1); }
     
@@ -213,7 +213,7 @@ async function main() {
     while (hasMore) {
         const { data, error } = await supabase
             .from('products')
-            .select('id, name, finish, condition, scryfall_id, price_usd, is_manual_price')
+            .select('id, inventory_id, name, finish, condition, scryfall_id, price_usd, is_manual_price')
             .eq('tcg', 'Magic')
             .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
         
@@ -254,8 +254,10 @@ async function main() {
         // Para ser seguros, usaremos 'updates' primero, y si no, asumimos que el precio no cambió o usamos el viejo.
         // MEJORA: Para simplificar, usaremos 'updates' como fuente de verdad fresca.
         
-        const extData = updates.get(scryId);
-        if (!extData) {
+        // Combinar el update de hoy con el registro persistido para conservar
+        // TCGplayer cuando Card Kingdom no tiene precio para la variante.
+        const extData = { ...(current || {}), ...(updates.get(scryId) || {}) };
+        if (!currentMap.has(scryId) && !updates.has(scryId)) {
             productsSkippedNoPrice++;
             continue;
         }
@@ -266,9 +268,13 @@ async function main() {
         
         let basePrice = 0;
         if (isFoil) {
-            basePrice = extData.cardkingdom_retail_foil || 0;
+            const cardKingdomPrice = Number(extData.cardkingdom_retail_foil || 0);
+            const tcgPlayerPrice = Number(extData.tcgplayer_market_foil || 0);
+            basePrice = cardKingdomPrice > 0 ? cardKingdomPrice : tcgPlayerPrice;
         } else {
-            basePrice = extData.cardkingdom_retail_normal || 0;
+            const cardKingdomPrice = Number(extData.cardkingdom_retail_normal || 0);
+            const tcgPlayerPrice = Number(extData.tcgplayer_market_normal || 0);
+            basePrice = cardKingdomPrice > 0 ? cardKingdomPrice : tcgPlayerPrice;
         }
 
         if (basePrice <= 0) {
@@ -292,6 +298,7 @@ async function main() {
         if (Math.abs(finalPrice - Number(p.price_usd || 0)) > 0.01) {
             productUpdates.push({
                 id: p.id,
+                inventory_id: p.inventory_id,
                 price_usd: finalPrice
                 // updated_at: new Date().toISOString() // Quitamos esto porque la columna no existe en products
             });
@@ -309,7 +316,9 @@ async function main() {
             const { error } = await supabase
                 .from('products')
                 .update({ price_usd: p.price_usd })
-                .eq('id', p.id);
+                .eq('id', p.id)
+                .eq('inventory_id', p.inventory_id)
+                .eq('is_manual_price', false);
             
             if (error) {
                 console.error(`   Error actualizando producto ${p.id}:`, error.message);

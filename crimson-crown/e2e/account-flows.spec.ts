@@ -22,6 +22,8 @@ type Fixture = {
     set_name: string | null
     collector_number: string | null
     image_url: string | null
+    inventory_id: string
+    variant_key: string
   }
   orderId: string
   orderItemId: string
@@ -78,10 +80,17 @@ async function createFixture(): Promise<Fixture> {
 
   const { data: product, error: productError } = await admin
     .from('products')
-    .select('id, name, set_name, collector_number, image_url')
+    .select('id, name, set_name, collector_number, image_url, inventory_id, variant_key')
     .limit(1)
     .single()
   if (productError || !product?.id) throw new Error(`No se encontró un producto local para el fixture: ${productError?.message || 'sin producto'}`)
+
+  const { data: inventory, error: inventoryError } = await admin
+    .from('inventories')
+    .select('name')
+    .eq('id', product.inventory_id)
+    .single()
+  if (inventoryError || !inventory?.name) throw new Error(`No se encontró el inventario del fixture: ${inventoryError?.message || 'sin inventario'}`)
 
   const { data: order, error: orderError } = await admin
     .from('orders')
@@ -102,6 +111,9 @@ async function createFixture(): Promise<Fixture> {
       product_id: product.id,
       quantity: 1,
       price_at_purchase: 42,
+      inventory_id: product.inventory_id,
+      variant_key: product.variant_key,
+      source_inventory_name: inventory.name,
     })
     .select('id')
     .single()

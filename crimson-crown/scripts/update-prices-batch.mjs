@@ -82,7 +82,7 @@ async function fetchAllRiftbound() {
   while (fetchMore) {
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, set_name, collector_number, price_usd, tcg')
+      .select('id, inventory_id, name, set_name, collector_number, price_usd, tcg, is_manual_price')
       .eq('tcg', 'Riftbound')
       .order('created_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1)
@@ -110,6 +110,7 @@ async function main() {
     const keys = Array.from(priceMap.keys())
 
     for (const p of products) {
+      if (p.is_manual_price) continue
       const dbName = p.name
       const nDb = normalizeName(dbName)
       let price = null
@@ -128,6 +129,8 @@ async function main() {
           .from('products')
           .update({ price_usd: Number(price) })
           .eq('id', p.id)
+          .eq('inventory_id', p.inventory_id)
+          .eq('is_manual_price', false)
         if (!upErr) {
           updated++
           if (examples.length < 10) examples.push(`✅ ${p.name}: US$ ${Number(price).toFixed(2)}`)
@@ -148,4 +151,3 @@ async function main() {
 }
 
 main()
-

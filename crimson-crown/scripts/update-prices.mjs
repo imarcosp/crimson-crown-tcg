@@ -49,15 +49,12 @@ function safeGet(path, root) {
   return path.reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : null), root)
 }
 
-// LÓGICA DE PRECIO (CK vs TCG)
+// LÓGICA DE PRECIO: Card Kingdom es la fuente primaria; TCGplayer solo es fallback.
 const calculatePrice = (ckPrice, tcgPrice) => {
     const ck = Number(ckPrice) || 0
     const tcg = Number(tcgPrice) || 0
 
-    if (ck <= 0 && tcg <= 0) return 0
-    if (ck <= 0) return tcg // Fallback TCG
-    if (tcg > (ck * 1.10)) return tcg // Regla 10%
-    return ck
+    return ck > 0 ? ck : tcg
 }
 
 // Nueva función: Fetch directo a Scryfall para casos desesperados
@@ -194,7 +191,7 @@ async function main() {
   while (fetchMore) {
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, finish, price_usd, scryfall_id, is_manual_price, condition')
+      .select('id, inventory_id, name, finish, price_usd, scryfall_id, is_manual_price, condition')
       .eq('tcg', 'Magic')
       .range(from, from + FETCH_SIZE - 1)
 
@@ -215,7 +212,7 @@ async function main() {
     const chunk = localProducts.slice(i, i + chunkSize)
     
     await Promise.all(chunk.map(async (p) => {
-        if (p.is_manual_price && p.price_usd < 9000) {
+        if (p.is_manual_price) {
             stats.skippedManual++
             return 
         }
@@ -286,7 +283,7 @@ async function main() {
             await supabase.from('products').update({ 
                 price_usd: finalPrice,
                 is_manual_price: false
-            }).eq('id', p.id)
+            }).eq('id', p.id).eq('inventory_id', p.inventory_id).eq('is_manual_price', false)
             stats.productsUpdated++
         }
     }))
@@ -298,9 +295,10 @@ async function main() {
   const { data: riskyItems } = await supabase
     .from('products')
     .select('id, name, set_name, finish, stock')
-    .eq('tcg', 'Magic')
-    .gt('stock', 0)
-    .lte('price_usd', 0)
+      .eq('tcg', 'Magic')
+      .gt('stock', 0)
+      .eq('is_manual_price', false)
+      .lte('price_usd', 0)
 
   if (riskyItems && riskyItems.length > 0) {
       console.warn(`⚠️ ATENCIÓN: ${riskyItems.length} cartas quedaron sin precio (El script NO las tocó porque no encontró precio en origen):`)

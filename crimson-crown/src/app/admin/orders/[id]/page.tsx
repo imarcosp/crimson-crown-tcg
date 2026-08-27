@@ -2,9 +2,10 @@
 import { useEffect, useState, use } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { updateOrderStatus } from '@/app/actions/admin-orders'
+import { cancelOrder, refundOrder, removeOrderItem } from '@/app/actions/admin-order-fulfillment'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { ArrowLeft, X, ZoomIn } from 'lucide-react'
+import { ArrowLeft, MapPin, X, ZoomIn } from 'lucide-react'
 
 export default function AdminOrderDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -21,6 +22,7 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
   const [showRefundPanel, setShowRefundPanel] = useState(false)
   const [showCancelPanel, setShowCancelPanel] = useState(false)
   const [zoomedImage, setZoomedImage] = useState<string | null>(null)
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   
   // Opciones
   const [refundMode, setRefundMode] = useState<'full_credits' | 'split' | 'manual'>('full_credits')
@@ -40,6 +42,9 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
             quantity,
             price_at_purchase,
             product_id,
+            inventory_id,
+            variant_key,
+            source_inventory_name,
             products (
               name,
               set_name,
@@ -109,22 +114,8 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
   const handleConfirmCancellation = async () => {
     setLoading(true)
     try {
-        if (creditsUsed > 0 && refundCreditsOnCancel) {
-             const { error: err } = await supabase.rpc('manage_credits', {
-                target_user_id: order.user_id,
-                amount_change: creditsUsed,
-                transaction_type: 'refund',
-                transaction_desc: `Cancelación #${String(order.id).slice(0,8)}`,
-                ref_id: order.id,
-              })
-              if (err) throw err
-        }
-        if (restockOnCancel) {
-            const { error: err } = await supabase.rpc('restore_stock', { order_id_input: order.id })
-            if (err) throw err
-        }
-        const { error: err } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', order.id)
-        if (err) throw err
+        const result = await cancelOrder(order.id, restockOnCancel, refundCreditsOnCancel)
+        if (!result.success) throw new Error(result.error)
         
         setOrder({ ...order, status: 'cancelled' })
         setShowCancelPanel(false)
@@ -134,33 +125,32 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
   }
 
   const handleSaveRefund = async () => {
+    setLoading(true)
     try {
-      if (restockOnRefund) {
-        const { error: err } = await supabase.rpc('restore_stock', { order_id_input: order.id })
-        if (err) throw err
-      }
-      if (refundMode === 'full_credits' || (refundMode === 'split' && creditsUsed > 0)) {
-        let creditRefundAmount = 0
-        if (refundMode === 'full_credits') creditRefundAmount = totalReal
-        if (refundMode === 'split') creditRefundAmount = creditsUsed
-
-        if (creditRefundAmount > 0) {
-            const { error: err } = await supabase.rpc('manage_credits', {
-              target_user_id: order.user_id,
-              amount_change: creditRefundAmount,
-              transaction_type: 'refund',
-              transaction_desc: `Reembolso #${String(order.id).slice(0,8)}`,
-              ref_id: order.id,
-            })
-            if (err) throw err
-        }
-      }
-      const { error: err } = await supabase.from('orders').update({ status: 'refunded' }).eq('id', order.id)
-      if (err) throw err
+      const creditRefundAmount = refundMode === 'full_credits'
+        ? totalReal
+        : refundMode === 'split'
+          ? creditsUsed
+          : 0
+      const result = await refundOrder(order.id, restockOnRefund, creditRefundAmount)
+      if (!result.success) throw new Error(result.error)
       setOrder({ ...order, status: 'refunded' })
       setShowRefundPanel(false)
       alert('Reembolso procesado.')
     } catch (e: any) { alert(e.message) }
+    finally { setLoading(false) }
+  }
+
+  const handleRemoveItem = async (item: any) => {
+    if (!window.confirm(`¿Quitar una unidad de ${item.products?.name || 'esta carta'} y devolverla a su inventario de origen?`)) return
+    setRemovingItemId(item.id)
+    const result = await removeOrderItem(item.id, 1, true)
+    setRemovingItemId(null)
+    if (!result.success) {
+      alert(result.error)
+      return
+    }
+    window.location.reload()
   }
 
   const saveTracking = async () => {
@@ -292,7 +282,17 @@ export default function AdminOrderDetail({ params }: { params: Promise<{ id: str
                         <div className="text-xs text-slate-400 mt-1 font-mono">{it.quantity} x US$ {unitP.toFixed(2)}</div>
                     </div>
                     <div className="text-right font-bold text-slate-900">
-                    US$ {totalP.toFixed(2)}
+                      <div>US$ {totalP.toFixed(2)}</div>
+                      <div className="mt-2 flex flex-col items-end gap-1">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700 whitespace-nowrap">
+                          <MapPin size={11} /> {it.source_inventory_name || 'Inventario Principal'}
+                        </span>
+                        {['pending_payment', 'verifying_payment'].includes(order.status) && (
+                          <button onClick={() => handleRemoveItem(it)} disabled={removingItemId === it.id} className="text-[10px] font-bold text-red-600 hover:underline disabled:opacity-50">
+                            {removingItemId === it.id ? 'Quitando…' : 'Quitar 1'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                 </div>
                )

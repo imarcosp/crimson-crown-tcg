@@ -110,8 +110,10 @@ async function main() {
   const adminRpc = await anon.rpc('is_admin')
   assert.ok(adminRpc.error, 'is_admin no debe ser invocable por anon')
 
-  const { data: product } = await anon.from('products').select('id,stock').limit(1).single()
+  const { data: product } = await anon.from('products').select('id,stock,inventory_id,variant_key').limit(1).single()
   assert.ok(product?.id, 'debe existir un producto de prueba')
+  const { data: productInventory } = await anon.from('inventories').select('name').eq('id', product.inventory_id).single()
+  assert.ok(productInventory?.name, 'el producto de prueba debe conservar su inventario')
   const productWrite = await standard.from('products').update({ stock: product.stock }).eq('id', product.id).select('id')
   assert.equal(productWrite.data?.length ?? 0, 0, 'standard no debe editar productos')
 
@@ -198,6 +200,9 @@ async function main() {
       product_id: product.id,
       quantity: 1,
       price_at_purchase: 1,
+      inventory_id: product.inventory_id,
+      variant_key: product.variant_key,
+      source_inventory_name: productInventory.name,
     }).select('id').single()
     if (orderItemProbeError) throw new Error(`standard debe poder crear items de su orden: ${orderItemProbeError.message}`)
 

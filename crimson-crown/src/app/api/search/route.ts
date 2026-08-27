@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
+import { buildHybridCatalogProducts } from '@/lib/inventory/catalog'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -28,6 +29,8 @@ type HybridProduct = {
   finishes?: string[]
   didYouMean?: string
   metadata?: any
+  inventory_count?: number
+  pricing_source?: 'cardkingdom' | 'tcgplayer' | 'manual' | 'unknown'
   type_line?: string | null
   color_identity?: string[] | null
 }
@@ -118,7 +121,7 @@ async function fetchExternalPricesByScryfallIds(client: any, ids: string[]) {
     const batch = uniqueIds.slice(index, index + chunkSize)
     const { data } = await client
       .from('external_prices')
-      .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, active_price_normal, active_price_foil, foil_variant, type_line, color_identity')
+      .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, tcgplayer_market_normal, tcgplayer_market_foil, active_price_normal, active_price_foil, foil_variant, type_line, color_identity')
       .in('scryfall_id', batch)
 
     if (Array.isArray(data)) rows.push(...data)
@@ -131,11 +134,19 @@ async function performSearch(query: string, numberQuery: string | null, filters:
   const external: HybridProduct[] = []
   const debug: any = withDebug ? { dbCount: 0, variantsCount: 0, moreCount: 0, localRawCount: 0, ids: [], variantsIds: [], moreIds: [] } : null
 
+  const { data: activeInventoryRows } = await supabase
+    .from('inventories')
+    .select('id, kind')
+    .eq('is_active', true)
+    .is('archived_at', null)
+  const activeInventoryIds = new Set<string>((activeInventoryRows || []).map((inventory: any) => String(inventory.id)))
+  const inventoryKinds = new Map((activeInventoryRows || []).map((inventory: any) => [String(inventory.id), inventory.kind]))
+
   // 1. LOCAL (Supabase)
   const cleaned = String(query).replace(/[\,\.;:_\-]+/g, ' ').trim()
   const tokens = cleaned.split(/\s+/).filter((t: string) => t.length > 1).slice(0, 6)
   
-  let dbQuery = supabase.from('products').select('*')
+  let dbQuery = supabase.from('products').select('*').in('inventory_id', [...activeInventoryIds])
 
   if (tokens.length > 0) {
       tokens.forEach((t) => {
@@ -148,49 +159,56 @@ async function performSearch(query: string, numberQuery: string | null, filters:
   if (filters.tcg) dbQuery = dbQuery.eq('tcg', filters.tcg)
   if (filters.set) dbQuery = dbQuery.ilike('set_name', `%${filters.set}%`)
   if (numberQuery) dbQuery = dbQuery.eq('collector_number', numberQuery)
-  dbQuery = dbQuery.limit(200)
+  dbQuery = dbQuery.limit(1000)
 
   const { data: dbData } = await dbQuery
   if (debug) debug.dbCount = Array.isArray(dbData) ? dbData.length : 0
 
-  // Procesar Local
-  const localRaw: HybridProduct[] = []
-  if (dbData) {
-    dbData.forEach((p: any) => {
-      // FILTRO ESTRICTO EN MEMORIA: Evitar que salgan productos archivados
-      if (p.name.includes('(ARCHIVADO)')) return;
-
-      const f = String(p.finish || '').toLowerCase()
-      const isFoil = (f.includes('foil') && !f.includes('non')) || f.includes('etched')
-      const stockQty = Number(p.stock || 0)
-      const basePrice = Number(p.price_usd || 0)
-      localRaw.push({
-        id: String(p.id),
-        scryfall_id: p.scryfall_id, // Vital: Enviamos el Scryfall ID
-        name: p.name,
-        set_name: p.set_name,
-        image_url: p.image_url,
-        collector_number: String(p.collector_number || ''),
-        price_usd: !isFoil ? basePrice : 0,
-        price_usd_foil: isFoil ? basePrice : 0,
-        priceUsd: !isFoil ? basePrice : 0,
-        priceUsdFoil: isFoil ? basePrice : 0,
-        stock: stockQty,
-        stock_foil: isFoil ? stockQty : 0,
-        tcg: p.tcg || 'Magic',
-        condition: p.condition || 'NM',
-        language: p.language || 'English',
-        finish: p.finish || (isFoil ? 'Foil' : 'Non-Foil'),
-        rarity: p.rarity,
-        isImport: false,
-        finishes: isFoil ? ['foil'] : ['nonfoil'],
-        metadata: p.metadata || undefined,
-        type_line: null,
-        color_identity: null,
-      })
-      if (debug) debug.ids.push(String(p.id))
-    })
-  }
+  // Procesar Local: agrupar solo inventarios activos, manteniendo separadas
+  // las ofertas manuales con precio distinto.
+  const rawExternalPrices = await fetchExternalPricesByScryfallIds(
+    supabase,
+    (dbData || []).map((product: any) => String(product.scryfall_id || product.id)),
+  )
+  const externalPriceMap = new Map<string, any>()
+  rawExternalPrices.forEach((row: any) => externalPriceMap.set(String(row.scryfall_id), row))
+  const rowsWithInventoryKind = (dbData || []).map((product: any) => ({
+    ...product,
+    inventory_kind: inventoryKinds.get(String(product.inventory_id)) || 'secondary',
+  }))
+  const groupedLocal = buildHybridCatalogProducts(rowsWithInventoryKind, externalPriceMap, { activeInventoryIds, includeOutOfStock: true })
+  const localRaw: HybridProduct[] = groupedLocal.map((p: any) => {
+    const f = String(p.finish || '').toLowerCase()
+    const isFoil = (f.includes('foil') && !f.includes('non')) || f.includes('etched')
+    const basePrice = Number(p.price_usd || 0)
+    if (debug) debug.ids.push(String(p.id))
+    return {
+      id: String(p.id),
+      scryfall_id: p.scryfall_id,
+      name: p.name,
+      set_name: p.set_name,
+      image_url: p.image_url,
+      collector_number: String(p.collector_number || ''),
+      price_usd: !isFoil ? basePrice : 0,
+      price_usd_foil: isFoil ? basePrice : 0,
+      priceUsd: !isFoil ? basePrice : 0,
+      priceUsdFoil: isFoil ? basePrice : 0,
+      stock: Number(p.stock || 0),
+      stock_foil: isFoil ? Number(p.stock || 0) : 0,
+      tcg: p.tcg || 'Magic',
+      condition: p.condition || 'NM',
+      language: p.language || 'English',
+      finish: p.finish || (isFoil ? 'Foil' : 'Non-Foil'),
+      rarity: p.rarity,
+      isImport: false,
+      finishes: isFoil ? ['foil'] : ['nonfoil'],
+      metadata: p.metadata || undefined,
+      type_line: null,
+      color_identity: null,
+      inventory_count: Number(p.inventory_count || 0),
+      pricing_source: p.pricing_source || 'unknown',
+    }
+  })
 
   // Ordenar
   if (debug) debug.localRawCount = localRaw.length
@@ -276,7 +294,16 @@ export async function GET(req: Request) {
   if (mode === 'sets') {
     const q = String(searchParams.get('q') || '').trim()
     const tcg = String(searchParams.get('tcg') || '').trim()
-    let query = supabase.from('products').select('set_name').not('set_name', 'is', null)
+    const { data: activeInventories } = await supabase
+      .from('inventories')
+      .select('id')
+      .eq('is_active', true)
+      .is('archived_at', null)
+    let query = supabase
+      .from('products')
+      .select('set_name')
+      .in('inventory_id', (activeInventories || []).map((inventory: any) => String(inventory.id)))
+      .not('set_name', 'is', null)
     if (tcg) query = query.eq('tcg', tcg)
     if (q) query = query.ilike('set_name', `%${q}%`)
     query = query.limit(200)
@@ -389,6 +416,9 @@ export async function GET(req: Request) {
       let k = r.scryfall_id
       if (!k) {
           k = `${r.name}-${r.set_name}-${r.collector_number}`.toLowerCase()
+      }
+      if (!r.isImport && r.pricing_source === 'manual') {
+        k = `${k}:manual:${r.price_usd}:${r.price_usd_foil}`
       }
       
       // Si ya vimos esta impresión, la descartamos (priorizando siempre las locales porque van primero en 'results')

@@ -26,7 +26,7 @@ const admin = createClient(supabaseUrl, serviceRoleKey, {
 async function main() {
   const { data: product, error: productError } = await admin
     .from('products')
-    .select('id,name,stock')
+    .select('id,name,stock,inventory_id,variant_key')
     .gt('stock', 1)
     .order('stock', { ascending: false })
     .limit(1)
@@ -39,6 +39,13 @@ async function main() {
     .eq('email', 'tester.local@example.test')
     .single()
   if (profileError || !profile) throw new Error(`No se encontró perfil estándar local: ${profileError?.message || 'sin datos'}`)
+
+  const { data: inventory, error: inventoryError } = await admin
+    .from('inventories')
+    .select('name')
+    .eq('id', product.inventory_id)
+    .single()
+  if (inventoryError || !inventory) throw new Error(`No se encontró inventario del producto: ${inventoryError?.message || 'sin datos'}`)
 
   const originalStock = Number(product.stock || 0)
   const marker = `LOCAL-FINANCIAL-${Date.now()}`
@@ -81,6 +88,9 @@ async function main() {
       product_id: product.id,
       quantity: 1,
       price_at_purchase: 0,
+      inventory_id: product.inventory_id,
+      variant_key: product.variant_key,
+      source_inventory_name: inventory.name,
     })
     if (itemError) throw new Error(`No se pudo crear item financiero sintético: ${itemError.message}`)
 

@@ -23,9 +23,22 @@ export type InventoryOffer = {
 }
 
 export type CatalogOffer = {
+  productId: string
+  inventoryId: string
+  inventoryKind: InventoryKind
   pricingSource: PricingSource
   priceUsd: number
   stock: number
+  inventoryCount: number
+}
+
+export type CatalogListing = {
+  variantKey: string
+  productId: string
+  inventoryId: string
+  priceUsd: number
+  stock: number
+  pricingSource: PricingSource
   inventoryCount: number
 }
 
@@ -98,6 +111,7 @@ export function allocateOffers(offers: InventoryOffer[], requestedQuantity: numb
 }
 
 const pricingOrder: PricingSource[] = ['cardkingdom', 'tcgplayer', 'manual', 'unknown']
+const automaticSources = new Set<PricingSource>(['cardkingdom', 'tcgplayer'])
 
 export function groupOffers(offers: InventoryOffer[]): CatalogGroup[] {
   const groups = new Map<string, CatalogGroup>()
@@ -110,6 +124,9 @@ export function groupOffers(offers: InventoryOffer[]): CatalogGroup[] {
         totalStock: offer.stock,
         representative: offer,
         offers: [{
+          productId: offer.productId,
+          inventoryId: offer.inventoryId,
+          inventoryKind: offer.inventoryKind,
           pricingSource: offer.pricingSource,
           priceUsd: offer.priceUsd,
           stock: offer.stock,
@@ -120,12 +137,37 @@ export function groupOffers(offers: InventoryOffer[]): CatalogGroup[] {
     }
 
     current.totalStock += offer.stock
-    const merged = current.offers.find((item) => item.pricingSource === offer.pricingSource && item.priceUsd === offer.priceUsd)
+    if (offerOrder(offer, current.representative) < 0) current.representative = offer
+    const merged = current.offers.find((item) => {
+      const samePrice = item.priceUsd === offer.priceUsd
+      const sameSource = item.pricingSource === offer.pricingSource
+      const bothAutomatic = automaticSources.has(item.pricingSource) && automaticSources.has(offer.pricingSource)
+      return samePrice && (sameSource || bothAutomatic)
+    })
     if (merged) {
       merged.stock += offer.stock
       merged.inventoryCount += 1
+      if (pricingOrder.indexOf(offer.pricingSource) < pricingOrder.indexOf(merged.pricingSource)) {
+        merged.pricingSource = offer.pricingSource
+      }
+      if (offerOrder(offer, {
+        productId: merged.productId,
+        inventoryId: merged.inventoryId,
+        inventoryKind: merged.inventoryKind,
+        variantKey: current.variantKey,
+        stock: 0,
+        priceUsd: merged.priceUsd,
+        pricingSource: merged.pricingSource,
+      }) < 0) {
+        merged.productId = offer.productId
+        merged.inventoryId = offer.inventoryId
+        merged.inventoryKind = offer.inventoryKind
+      }
     } else {
       current.offers.push({
+        productId: offer.productId,
+        inventoryId: offer.inventoryId,
+        inventoryKind: offer.inventoryKind,
         pricingSource: offer.pricingSource,
         priceUsd: offer.priceUsd,
         stock: offer.stock,
@@ -141,4 +183,16 @@ export function groupOffers(offers: InventoryOffer[]): CatalogGroup[] {
       return sourceDiff || a.priceUsd - b.priceUsd
     }),
   }))
+}
+
+export function buildCatalogListings(offers: InventoryOffer[]): CatalogListing[] {
+  return groupOffers(offers).flatMap((group) => group.offers.map((offer) => ({
+    variantKey: group.variantKey,
+    productId: offer.productId,
+    inventoryId: offer.inventoryId,
+    priceUsd: offer.priceUsd,
+    stock: offer.stock,
+    pricingSource: offer.pricingSource,
+    inventoryCount: offer.inventoryCount,
+  })))
 }

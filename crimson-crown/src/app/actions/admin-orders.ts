@@ -22,10 +22,16 @@ export async function updateOrderStatus(orderId: string, newStatus: string) {
 
   if (fetchError || !order) return { success: false, error: 'Orden no encontrada' }
 
-  const { error: updateError } = await supabase
-    .from('orders')
-    .update({ status: newStatus })
-    .eq('id', orderId)
+  const updateError = newStatus === 'cancelled'
+    ? (await supabase.rpc('cancel_order_atomic', {
+        order_id_input: orderId,
+        restock_input: true,
+        refund_credits_input: true,
+      })).error
+    : (await supabase
+        .from('orders')
+        .update({ status: newStatus })
+        .eq('id', orderId)).error
   if (updateError) return { success: false, error: updateError.message }
 
   const userEmail = (order as any)?.profiles?.email

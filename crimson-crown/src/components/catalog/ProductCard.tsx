@@ -40,6 +40,8 @@ type Props = {
   language?: string
   isImport?: boolean
   metadata?: any
+  inventoryCount?: number
+  pricingSource?: 'cardkingdom' | 'tcgplayer' | 'manual' | 'unknown'
 }
 
 export default function ProductCard(p: Props) {
@@ -80,6 +82,13 @@ export default function ProductCard(p: Props) {
   const imageContainerClass = getFoilImageContainerClass(foilKind)
   const foilOverlayLayers = getFoilOverlayLayers(foilKind)
   const hasImage = !!(p.image || p.image_url)
+  const pricingLabel = p.pricingSource === 'manual'
+    ? 'Precio manual'
+    : p.pricingSource === 'tcgplayer'
+      ? 'TCGplayer'
+      : p.pricingSource === 'cardkingdom'
+        ? 'Card Kingdom'
+        : null
 
   const handleAddToCart = () => {
     addItem({ ...p, imageUrl: currentImage, stock: p.stock, isFoil: showFoilBadge })
@@ -187,6 +196,16 @@ export default function ProductCard(p: Props) {
                     }`}
                   >
                     <Sparkles size={10} className={foilKind === 'surge' ? 'text-cyan-500 max-[400px]:shrink-0' : 'text-purple-500 max-[400px]:shrink-0'} /> {finishLabel}
+                  </span>
+                )}
+                {pricingLabel && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border max-[400px]:text-[9px] ${p.pricingSource === 'manual' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                    {pricingLabel}
+                  </span>
+                )}
+                {Number(p.inventoryCount || 0) > 1 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-100 max-[400px]:text-[9px]">
+                    {p.inventoryCount} inventarios
                   </span>
                 )}
             </div>

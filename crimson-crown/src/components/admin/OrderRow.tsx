@@ -1,6 +1,7 @@
 "use client"
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { cancelOrder } from '@/app/actions/admin-order-fulfillment'
 
 export default function OrderRow({ order, customer, onUpdated }: { order: any, customer: string, onUpdated: () => void }) {
   const supabase = createClient()
@@ -12,9 +13,12 @@ export default function OrderRow({ order, customer, onUpdated }: { order: any, c
   const saveStatus = async (newStatus: string) => {
     if (newStatus === 'shipped' && !tracking) { alert('Agrega tracking antes de marcar como enviado'); return }
     setSaving(true)
-    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', order.id)
+    const result = newStatus === 'cancelled'
+      ? await cancelOrder(order.id, true, true)
+      : await supabase.from('orders').update({ status: newStatus }).eq('id', order.id)
     setSaving(false)
-    if (!error) { setStatus(newStatus); alert('Estado actualizado'); onUpdated() } else { alert(error.message) }
+    const error = 'error' in result ? result.error : null
+    if (!error) { setStatus(newStatus); alert('Estado actualizado'); onUpdated() } else { alert(error) }
   }
 
   const saveTracking = async () => {

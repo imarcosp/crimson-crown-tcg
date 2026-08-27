@@ -194,6 +194,7 @@ export default function CsvUploader({ inventoryId }: { inventoryId: string }) {
                 .from('products')
                 .update({ stock: (existing.stock || 0) + stockToAdd })
                 .eq('id', existing.id)
+                .eq('inventory_id', inventoryId)
               if (error) throw error
               updated++
               // SI HAY STOCK POSITIVO QUE SE AGREGA, GUARDAR PARA NOTIFICAR

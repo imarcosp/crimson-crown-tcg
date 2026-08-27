@@ -88,6 +88,9 @@ begin
 end;
 $$;
 
+-- La unicidad anterior era global (scryfall_id + acabado + estado + idioma)
+-- y bloquearía que la misma variante exista en dos inventarios.
+drop index if exists public.unique_product_variant;
 create unique index if not exists products_inventory_variant_unique_idx on public.products (inventory_id, variant_key);
 create index if not exists products_active_inventory_idx on public.products (inventory_id, stock) where stock > 0;
 

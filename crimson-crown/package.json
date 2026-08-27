@@ -15,6 +15,7 @@
     "test:local-financial": "node scripts/local-db/financial-matrix.mjs",
     "test:local-atomic-checkout": "node scripts/local-db/checkout-atomic-matrix.mjs",
     "test:local-release-stock": "node scripts/local-db/release-stock-atomic-matrix.mjs",
+    "test:local-multi-inventory": "node scripts/local-db/multi-inventory-runtime-matrix.mjs",
     "test:checkout-contract": "node --test scripts/local-db/checkout-action-contract.test.mjs",
     "test:local-storage": "node scripts/local-db/storage-matrix.mjs",
     "local-storage:prepare": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/local-db/prepare-storage-fixtures.ps1",

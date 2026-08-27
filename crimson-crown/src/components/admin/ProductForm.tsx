@@ -404,7 +404,7 @@ export default function ProductForm({ inventoryId, initial, onClose, onSaved }: 
         const newStock = oldStock + Number(payload.stock || 0)
         const updateData: any = { stock: newStock, image_url: payload.image_url, metadata: payload.metadata }
         if (oldStock === 0 && newStock > 0) updateData.restocked_at = new Date().toISOString()
-        const { data, error } = await supabase.from('products').update(updateData).eq('id', existing.id).select().single()
+        const { data, error } = await supabase.from('products').update(updateData).eq('id', existing.id).eq('inventory_id', inventoryId).select().single()
         if (!error) {
           alert(`Variante existente. Stock actualizado a ${newStock}.`)
           onSaved(data)

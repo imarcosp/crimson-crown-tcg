@@ -141,6 +141,8 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
                     ) : (
                     <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><PackageOpen size={12} /> POR ENCARGO</span>
                     )}
+                    {p.pricingSource === 'manual' && <span className="bg-amber-50 text-amber-700 text-xs font-bold px-2 py-1 rounded border border-amber-200">PRECIO MANUAL</span>}
+                    {Number(p.inventoryCount || 0) > 1 && <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-1 rounded border border-blue-100">{p.inventoryCount} INVENTARIOS</span>}
                   </div>
                   
                   <button 
@@ -177,7 +179,7 @@ export default function ProductDetailView({ product: p, priceHistory }: Props) {
               {p.stock > 0 ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between text-sm text-slate-600 mb-2">
-                    <span>Stock disponible: <strong>{p.stock}</strong></span>
+                    <span>{Number(p.inventoryCount || 0) > 1 ? 'Stock total disponible' : 'Stock disponible'}: <strong>{p.stock}</strong></span>
                   </div>
                   {inCart ? (
                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">

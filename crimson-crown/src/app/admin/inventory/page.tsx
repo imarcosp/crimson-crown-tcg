@@ -168,7 +168,7 @@ export default function InventoryPage() {
 
   const confirmDelete = async () => {
     if (!productToDelete) return
-    const { error } = await supabase.from('products').delete().eq('id', productToDelete)
+    const { error } = await supabase.from('products').delete().eq('id', productToDelete).eq('inventory_id', selectedInventoryId)
     if (!error) load()
     setProductToDelete(null)
   }
@@ -196,7 +196,7 @@ export default function InventoryPage() {
 
   const confirmBulkDelete = async () => {
     if (selectedIds.length === 0) return
-    const { error } = await supabase.from('products').delete().in('id', selectedIds)
+    const { error } = await supabase.from('products').delete().in('id', selectedIds).eq('inventory_id', selectedInventoryId)
     if (!error) {
       setSelectedIds([])
       setBulkDeleteOpen(false)

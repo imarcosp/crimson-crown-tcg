@@ -30,6 +30,7 @@ test('expone solo funciones administrativas protegidas', () => {
 
 test('genera variant_key en servidor y agrega índices operativos', () => {
   assert.match(migration, /create(?: or replace)? function public\.build_product_variant_key/iu)
+  assert.match(migration, /drop\s+index\s+if\s+exists\s+public\.unique_product_variant/iu)
   assert.match(migration, /create unique index[^\n]*products[^\n]*inventory_id[^\n]*variant_key/iu)
   assert.match(migration, /create index[^\n]*order_items[^\n]*inventory_id/iu)
 })
