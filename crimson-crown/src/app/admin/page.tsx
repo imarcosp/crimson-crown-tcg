@@ -91,12 +91,12 @@ export default function AdminPage() {
 
       <h2 className="text-xl font-bold text-slate-800 pt-4">Accesos Rápidos</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Link href="/admin/inventory" className="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition-shadow">
+        <Link href="/admin/inventories" className="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition-shadow">
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-lg bg-blue-50 text-blue-600"><Package size={32} /></div>
             <div>
-              <div className="text-lg font-bold text-slate-900">Inventario</div>
-              <p className="text-sm text-slate-600">Gestiona stock, variantes y cargas CSV.</p>
+              <div className="text-lg font-bold text-slate-900">Inventarios</div>
+              <p className="text-sm text-slate-600">Gestiona fuentes de stock, variantes y cargas CSV.</p>
             </div>
           </div>
         </Link>

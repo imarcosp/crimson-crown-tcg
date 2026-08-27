@@ -11,7 +11,7 @@ import {
   resolveMagicFinishSelection,
 } from '@/lib/cards/finish-normalization'
 
-export default function CsvUploader() {
+export default function CsvUploader({ inventoryId }: { inventoryId: string }) {
   const supabase = createClient()
   const [step, setStep] = useState<'upload' | 'preview' | 'processing' | 'done'>('upload')
   const [file, setFile] = useState<File | null>(null)
@@ -174,6 +174,7 @@ export default function CsvUploader() {
             let query = supabase
               .from('products')
               .select('id, stock, image_url')
+              .eq('inventory_id', inventoryId)
               .eq('finish', finish)
               .eq('condition', condition)
               .eq('language', language)
@@ -203,80 +204,62 @@ export default function CsvUploader() {
               await delay(100)
               const fetchedImage = await fetchScryfallImage(scryfallId, name, setName)
               const initialPrice = await getInitialPriceFromExternal(externalContext, finish, condition)
-              const rpcPayload = {
-                p_name: normName,
-                p_set_name: normSet,
-                p_collector_number: collectorNumber || null,
-                p_scryfall_id: scryfallId || null,
-                p_tcg: 'Magic',
-                p_finish: finish,
-                p_condition: condition,
-                p_language: language,
-                p_price_usd: initialPrice,
-                p_image_url: fetchedImage || null,
-                p_metadata: null,
-                p_stock: stockToAdd,
+              const insertPayload = {
+                inventory_id: inventoryId,
+                name: normName,
+                set_name: normSet,
+                collector_number: collectorNumber || getCol(row, 'Collector number', 'number'),
+                scryfall_id: scryfallId,
+                tcg: 'Magic',
+                stock: stockToAdd,
+                price_usd: initialPrice,
+                is_manual_price: false,
+                condition,
+                language,
+                finish,
+                image_url: fetchedImage,
+                rarity: getCol(row, 'Rarity') ? String(getCol(row, 'Rarity')).charAt(0).toUpperCase() + String(getCol(row, 'Rarity')).slice(1) : '',
               }
-              const { data: rpcRes, error: rpcErr } = await supabase.rpc('upsert_product_variant', rpcPayload)
-              if (!rpcErr && rpcRes) {
+              const { data: newProd, error } = await supabase.from('products').insert(insertPayload).select('id').single()
+              if (!error) {
                 inserted++
-                const newId = String(rpcRes)
-                if (stockToAdd > 0) stockArrivals.push({ id: newId, name: normName })
+                if (stockToAdd > 0 && newProd) stockArrivals.push({ id: newProd.id, name: normName })
               } else {
-                const insertPayload = {
-                  name: normName,
-                  set_name: normSet,
-                  collector_number: collectorNumber || getCol(row, 'Collector number', 'number'),
-                  scryfall_id: scryfallId,
-                  tcg: 'Magic',
-                  stock: stockToAdd,
-                  price_usd: initialPrice,
-                  is_manual_price: false,
-                  condition,
-                  language,
-                  finish,
-                  image_url: fetchedImage,
-                  rarity: getCol(row, 'Rarity') ? String(getCol(row, 'Rarity')).charAt(0).toUpperCase() + String(getCol(row, 'Rarity')).slice(1) : '',
-                }
-                const { data: newProd, error } = await supabase.from('products').insert(insertPayload).select('id').single()
-                if (!error) {
-                  inserted++
-                  if (stockToAdd > 0 && newProd) stockArrivals.push({ id: newProd.id, name: normName })
-                } else {
-                  const msg = String(error.message || '')
-                  if (msg.includes('unique') || msg.includes('duplicate key')) {
-                    let conflictQ = supabase
+                const msg = String(error.message || '')
+                if (msg.includes('unique') || msg.includes('duplicate key')) {
+                  let conflictQ = supabase
+                    .from('products')
+                    .select('id, stock')
+                    .eq('inventory_id', inventoryId)
+                    .eq('finish', finish)
+                    .eq('condition', condition)
+                    .eq('language', language)
+                    .eq('tcg', 'Magic')
+                  if (scryfallId) conflictQ = conflictQ.eq('scryfall_id', scryfallId)
+                  else {
+                    conflictQ = conflictQ.ilike('name', normName).ilike('set_name', normSet)
+                    if (collectorNumber) conflictQ = conflictQ.eq('collector_number', collectorNumber)
+                  }
+                  const { data: existArr } = await conflictQ.order('created_at', { ascending: false }).limit(1)
+                  const exist = Array.isArray(existArr) ? existArr[0] : null
+                  if (exist) {
+                    const newStock = Number(exist.stock || 0) + Number(stockToAdd || 0)
+                    const { error: updErr } = await supabase
                       .from('products')
-                      .select('id, stock')
-                      .eq('finish', finish)
-                      .eq('condition', condition)
-                      .eq('language', language)
-                      .eq('tcg', 'Magic')
-                    if (scryfallId) conflictQ = conflictQ.eq('scryfall_id', scryfallId)
-                    else {
-                      conflictQ = conflictQ.ilike('name', normName).ilike('set_name', normSet)
-                      if (collectorNumber) conflictQ = conflictQ.eq('collector_number', collectorNumber)
-                    }
-                    const { data: existArr } = await conflictQ.order('created_at', { ascending: false }).limit(1)
-                    const exist = Array.isArray(existArr) ? existArr[0] : null
-                    if (exist) {
-                      const newStock = Number(exist.stock || 0) + Number(stockToAdd || 0)
-                      const { error: updErr } = await supabase
-                        .from('products')
-                        .update({ stock: newStock, image_url: fetchedImage })
-                        .eq('id', exist.id)
-                      if (!updErr) {
-                        updated++
-                        if (stockToAdd > 0) stockArrivals.push({ id: exist.id, name: normName })
-                      } else {
-                        throw updErr
-                      }
+                      .update({ stock: newStock, image_url: fetchedImage })
+                      .eq('id', exist.id)
+                      .eq('inventory_id', inventoryId)
+                    if (!updErr) {
+                      updated++
+                      if (stockToAdd > 0) stockArrivals.push({ id: exist.id, name: normName })
                     } else {
-                      throw error
+                      throw updErr
                     }
                   } else {
                     throw error
                   }
+                } else {
+                  throw error
                 }
               }
             }

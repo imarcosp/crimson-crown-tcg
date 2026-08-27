@@ -19,6 +19,7 @@ export default function AdminNav() {
     <nav className="bg-white border-b border-slate-200">
       <div className="container mx-auto px-4 py-3 flex items-center gap-2 flex-wrap">
         <Link href="/admin" className={linkClass('/admin')}>Dashboard</Link>
+        <Link href="/admin/inventories" className={linkClass('/admin/inventories')}>Inventarios</Link>
         <Link href="/admin/commissions" className={linkClass('/admin/commissions')}>Comisiones</Link>
         <div className="flex-1" />
         <Link href="/" className="px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-50">Ir a la Web</Link>

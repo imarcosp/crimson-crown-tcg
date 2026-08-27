@@ -13,12 +13,13 @@ import {
 } from '@/lib/cards/finish-normalization'
 
 type Props = {
+  inventoryId: string
   initial?: any | null
   onClose: () => void
   onSaved: (product: any) => void
 }
 
-export default function ProductForm({ initial, onClose, onSaved }: Props) {
+export default function ProductForm({ inventoryId, initial, onClose, onSaved }: Props) {
   const [mode, setMode] = useState<'Magic' | 'Other'>('Magic')
   const [isRiftbound, setIsRiftbound] = useState(false)
   const [availableFinishes, setAvailableFinishes] = useState<string[] | null>(null)
@@ -94,6 +95,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
           const { data, error } = await supabase
             .from('products')
             .select('tcg, metadata')
+            .eq('inventory_id', inventoryId)
             .range(from, from + PAGE_SIZE - 1)
 
           if (error) throw error
@@ -136,7 +138,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
     return () => {
       mounted = false
     }
-  }, [supabase])
+  }, [supabase, inventoryId])
 
   useEffect(() => {
     if (initial) {
@@ -347,6 +349,7 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
     else delete nextMetadata.subcategory
     const payload: any = { 
         ...formData, 
+        inventory_id: inventoryId,
         name: normalize(formData.name),
         set_name: normalize(formData.set_name),
         tcg: normalizedCategory,
@@ -382,13 +385,13 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
       const oldStock = Number(initial.stock || 0)
       const newStock = Number(formData.stock || 0)
       if (oldStock === 0 && newStock > 0) payload.restocked_at = new Date().toISOString()
-      const { data, error } = await supabase.from('products').update(payload).eq('id', initial.id).select().single()
+      const { data, error } = await supabase.from('products').update(payload).eq('id', initial.id).eq('inventory_id', inventoryId).select().single()
       if (!error) {
         onSaved(data)
         if (oldStock === 0 && newStock > 0) { shouldNotify = true; productId = initial.id }
       } else alert('Error: ' + error.message)
     } else {
-      let query = supabase.from('products').select('id, stock').eq('finish', payload.finish).eq('condition', payload.condition).eq('language', payload.language).eq('tcg', payload.tcg)
+      let query = supabase.from('products').select('id, stock').eq('inventory_id', inventoryId).eq('finish', payload.finish).eq('condition', payload.condition).eq('language', payload.language).eq('tcg', payload.tcg)
       if (payload.scryfall_id) query = query.eq('scryfall_id', payload.scryfall_id)
       else {
         query = query.ilike('name', payload.name).ilike('set_name', payload.set_name)
@@ -409,18 +412,8 @@ export default function ProductForm({ initial, onClose, onSaved }: Props) {
         } else alert('Error fusionando: ' + error.message)
       } else {
         payload.restocked_at = new Date().toISOString()
-        const rpcPayload = {
-          p_name: payload.name, p_set_name: payload.set_name, p_collector_number: payload.collector_number || null, p_scryfall_id: payload.scryfall_id || null, p_tcg: payload.tcg, p_finish: payload.finish, p_condition: payload.condition, p_language: payload.language, p_price_usd: Number(payload.price_usd || 0), p_image_url: payload.image_url || null, p_metadata: payload.metadata || null, p_stock: Number(payload.stock || 0),
-        }
-        const { data: rpcRes, error: rpcErr } = await supabase.rpc('upsert_product_variant', rpcPayload)
-        if (!rpcErr && rpcRes) {
-          const newId = String(rpcRes)
-          const { data } = await supabase.from('products').select('*').eq('id', newId).single()
-          if (data) { onSaved(data); if (Number(payload.stock) > 0) { shouldNotify = true; productId = newId } }
-        } else {
-          const { data, error } = await supabase.from('products').insert([payload]).select().single()
-          if (!error) { onSaved(data); if (Number(payload.stock) > 0) { shouldNotify = true; productId = data.id } } else alert('Error creando: ' + error.message)
-        }
+        const { data, error } = await supabase.from('products').insert([payload]).select().single()
+        if (!error) { onSaved(data); if (Number(payload.stock) > 0) { shouldNotify = true; productId = data.id } } else alert('Error creando: ' + error.message)
       }
     }
     if (shouldNotify && productId) processWishlistNotifications([{ id: productId, name: formData.name }])

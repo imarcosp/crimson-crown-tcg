@@ -1,14 +1,21 @@
 "use client"
 import { useEffect, useState, useMemo } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import ProductForm from '@/components/admin/ProductForm'
 import CsvUploader from '@/components/admin/CsvUploader'
 import { Search, Package, DollarSign, Trash2, Edit, ChevronLeft, ChevronRight, Filter, Tag, EyeOff, Eye } from 'lucide-react'
+import InventorySelector from '@/components/admin/InventorySelector'
+import type { Inventory } from '@/app/actions/admin-inventories'
 
 const ITEMS_PER_PAGE = 25
 
 export default function InventoryPage() {
   const supabase = createClient()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const [inventories, setInventories] = useState<Inventory[]>([])
+  const [selectedInventoryId, setSelectedInventoryId] = useState('')
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<any | null>(null)
@@ -24,7 +31,32 @@ export default function InventoryPage() {
   const [showOutOfStock, setShowOutOfStock] = useState(false) 
   const [zoomedImage, setZoomedImage] = useState<string | null>(null)
 
+  const loadInventories = async () => {
+    const { data, error } = await supabase
+      .from('inventories')
+      .select('id,name,description,location_label,kind,is_active,created_at,updated_at,archived_at')
+      .order('kind', { ascending: true })
+      .order('created_at', { ascending: true })
+    if (error) {
+      console.error('Error cargando inventarios:', error)
+      return
+    }
+    const available = (data || []) as Inventory[]
+    setInventories(available)
+    const requested = searchParams.get('inventory')
+    const next = available.find((item) => item.id === requested && !item.archived_at)?.id
+      || available.find((item) => item.kind === 'primary')?.id
+      || available.find((item) => !item.archived_at)?.id
+      || ''
+    setSelectedInventoryId(next)
+  }
+
   const load = async () => {
+    if (!selectedInventoryId) {
+      setItems([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       let allProducts: any[] = []
@@ -36,6 +68,7 @@ export default function InventoryPage() {
         const { data, error } = await supabase
           .from('products')
           .select('*')
+          .eq('inventory_id', selectedInventoryId)
           .order('created_at', { ascending: false })
           .range(from, from + PAGE_SIZE - 1)
         if (error) throw error
@@ -55,8 +88,16 @@ export default function InventoryPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
-  useEffect(() => { setCurrentPage(1) }, [searchTerm, view, selectedCategory, showManualOnly, showOutOfStock])
+  useEffect(() => { void loadInventories() }, [])
+  useEffect(() => { void load() }, [selectedInventoryId])
+  useEffect(() => { setCurrentPage(1) }, [searchTerm, view, selectedCategory, showManualOnly, showOutOfStock, selectedInventoryId])
+
+  const selectedInventory = inventories.find((inventory) => inventory.id === selectedInventoryId)
+
+  const selectInventory = (id: string) => {
+    setSelectedInventoryId(id)
+    router.replace(`/admin/inventory?inventory=${encodeURIComponent(id)}`)
+  }
 
   const filteredItems = useMemo(() => {
     let result = items
@@ -167,9 +208,10 @@ export default function InventoryPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#0F172A]">Inventario</h1>
-          <p className="text-slate-500 text-sm">Gestiona tu stock físico y precios.</p>
+          <h1 className="text-2xl font-bold text-[#0F172A]">{selectedInventory?.name || 'Inventario'}</h1>
+          <p className="text-slate-500 text-sm">Gestiona stock, precios y cargas de esta fuente de inventario.</p>
         </div>
+        {inventories.length > 0 && <InventorySelector inventories={inventories.filter((inventory) => !inventory.archived_at)} selectedId={selectedInventoryId} onChange={selectInventory} />}
         {view === 'list' && (
           <button onClick={() => setCreating(true)} className="rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white px-4 py-2.5 text-sm font-bold shadow-lg shadow-slate-900/10 transition-all flex items-center gap-2 cursor-pointer">+ Nuevo Producto</button>
         )}
@@ -369,11 +411,11 @@ export default function InventoryPage() {
           )}
         </div>
       ) : (
-        <CsvUploader />
+        selectedInventoryId && <CsvUploader inventoryId={selectedInventoryId} />
       )}
 
-      {creating && <ProductForm initial={null} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); load() }} />}
-      {editing && <ProductForm initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load() }} />}
+      {creating && selectedInventoryId && <ProductForm inventoryId={selectedInventoryId} initial={null} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); void load() }} />}
+      {editing && selectedInventoryId && <ProductForm inventoryId={selectedInventoryId} initial={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void load() }} />}
 
       {zoomedImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 animate-in fade-in duration-200" onClick={() => setZoomedImage(null)}>
