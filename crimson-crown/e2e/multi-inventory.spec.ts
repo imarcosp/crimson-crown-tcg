@@ -18,6 +18,13 @@ let fixture: {
   orderId: string
 } | null = null
 
+let externalLibraryCard: {
+  scryfall_id: string
+  name: string
+  set_name: string
+  collector_number: string
+} | null = null
+
 async function loginAsAdmin(page: Page) {
   await page.goto('/login')
   await page.locator('input[type="email"]').fill(adminEmail)
@@ -53,6 +60,17 @@ test.beforeAll(async () => {
     .limit(1)
     .single()
   if (productError || !sourceProduct) throw productError || new Error('No existe un producto local para el fixture.')
+
+  const { data: libraryCandidates, error: libraryError } = await localAdmin
+    .from('external_prices')
+    .select('scryfall_id, name, set_name, collector_number')
+    .eq('name', 'The Rack')
+    .order('scryfall_id', { ascending: true })
+    .limit(20)
+  if (libraryError || !libraryCandidates?.length) throw libraryError || new Error('No existe una carta de biblioteca para el fixture.')
+  const selectedLibraryCard = libraryCandidates.find((card) => card.scryfall_id !== sourceProduct.scryfall_id)
+  if (!selectedLibraryCard) throw new Error('La carta de biblioteca elegida ya existe en el producto de origen.')
+  externalLibraryCard = selectedLibraryCard
 
   const inventoryName = `Playwright Origen ${Date.now()}`
   const { data: inventory, error: inventoryError } = await localAdmin
@@ -172,4 +190,26 @@ test('la orden muestra el inventario de origen y la eliminación parcial lo cons
   await page.waitForLoadState('networkidle')
   await expect(page.getByText(fixture.inventoryName, { exact: true })).toBeVisible()
   await expect(page.getByText(/^1 x US\$/)).toBeVisible()
+})
+
+test('el buscador administrativo sugiere cartas de external_prices aunque no existan en products', async ({ page }) => {
+  if (!fixture || !externalLibraryCard) throw new Error('Fixture E2E no inicializado.')
+  await loginAsAdmin(page)
+  await unlockAdminPanel(page)
+  await page.goto(`/admin/inventory?inventory=${fixture.inventoryId}`)
+
+  await page.getByRole('button', { name: 'Nuevo Producto' }).click()
+  const search = page.getByPlaceholder('Ej: Sheoldred, The Apocalypse...')
+  await search.fill(externalLibraryCard.name)
+
+  const librarySuggestion = page
+    .getByRole('button')
+    .filter({ hasText: externalLibraryCard.name })
+    .filter({ hasText: 'Biblioteca Magic' })
+  await expect(librarySuggestion.first()).toBeVisible()
+  await librarySuggestion.first().click()
+  const productModal = page.locator('div.fixed.inset-0')
+  await expect(productModal.locator('input').nth(1)).toHaveValue(externalLibraryCard.name)
+  await productModal.locator('input[type="number"]').first().fill('10.50')
+  await expect(page.getByText('MANUAL', { exact: true })).toBeVisible()
 })

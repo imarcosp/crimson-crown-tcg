@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import { buildHybridCatalogProducts } from '@/lib/inventory/catalog'
+import { externalLibraryRowToSuggestion, type ExternalLibraryRow } from '@/lib/inventory/external-library'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -31,6 +32,7 @@ type HybridProduct = {
   metadata?: any
   inventory_count?: number
   pricing_source?: 'cardkingdom' | 'tcgplayer' | 'manual' | 'unknown'
+  search_source?: 'products' | 'external_prices' | 'scryfall'
   type_line?: string | null
   color_identity?: string[] | null
 }
@@ -54,6 +56,16 @@ function normalizeCollectorSearchValue(value: string | null | undefined) {
   if (!raw) return ''
   const normalized = raw.replace(/^0+(?=\d)/, '')
   return normalized || '0'
+}
+
+function normalizeSearchIdentity(value: unknown) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function isSamePrintedCard(left: Pick<HybridProduct, 'name' | 'set_name' | 'collector_number'>, right: Pick<HybridProduct, 'name' | 'set_name' | 'collector_number'>) {
+  return normalizeSearchIdentity(left.name) === normalizeSearchIdentity(right.name) &&
+    normalizeSearchIdentity(left.set_name) === normalizeSearchIdentity(right.set_name) &&
+    normalizeCollectorSearchValue(left.collector_number).toLowerCase() === normalizeCollectorSearchValue(right.collector_number).toLowerCase()
 }
 
 function parseCsvParam(value: string | null) {
@@ -130,9 +142,45 @@ async function fetchExternalPricesByScryfallIds(client: any, ids: string[]) {
   return rows
 }
 
-async function performSearch(query: string, numberQuery: string | null, filters: AdvancedFilters, supabase: any, withDebug: boolean) {
+async function fetchExternalLibraryCandidates(client: any, query: string, numberQuery: string | null, filters: AdvancedFilters) {
+  if (filters.tcg && filters.tcg !== 'Magic') return []
+
+  const fields = 'scryfall_id, name, set_name, collector_number, image_url, rarity, type_line, color_identity, foil_variant, cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, tcgplayer_market_normal, tcgplayer_market_foil, active_price_normal, active_price_foil'
+  const searchTerm = String(query).replace(/\s+/g, ' ').trim()
+
+  const createLibraryQuery = () => {
+    let libraryQuery = client.from('external_prices').select(fields)
+    if (searchTerm) libraryQuery = libraryQuery.ilike('name', `%${searchTerm}%`)
+    if (filters.set) libraryQuery = libraryQuery.ilike('set_name', `%${filters.set}%`)
+    return libraryQuery
+  }
+
+  if (numberQuery) {
+    const { data: exactData } = await createLibraryQuery()
+      .eq('collector_number', numberQuery)
+      .order('name', { ascending: true })
+      .order('set_name', { ascending: true })
+      .limit(100)
+    if (Array.isArray(exactData) && exactData.length > 0) return exactData as ExternalLibraryRow[]
+  }
+
+  let libraryQuery = createLibraryQuery()
+  if (numberQuery) libraryQuery = libraryQuery.ilike('collector_number', `%${numberQuery}%`)
+  libraryQuery = libraryQuery.order('name', { ascending: true }).order('set_name', { ascending: true }).limit(numberQuery && !searchTerm ? 1000 : 100)
+
+  const { data, error } = await libraryQuery
+  if (error || !Array.isArray(data)) return []
+  if (!numberQuery) return data as ExternalLibraryRow[]
+
+  const normalizedNumber = normalizeCollectorSearchValue(numberQuery).toLowerCase()
+  return (data as ExternalLibraryRow[]).filter((row) =>
+    normalizeCollectorSearchValue(row.collector_number).toLowerCase() === normalizedNumber,
+  )
+}
+
+async function performSearch(query: string, numberQuery: string | null, filters: AdvancedFilters, supabase: any, withDebug: boolean, requestedInventoryId: string | null = null) {
   const external: HybridProduct[] = []
-  const debug: any = withDebug ? { dbCount: 0, variantsCount: 0, moreCount: 0, localRawCount: 0, ids: [], variantsIds: [], moreIds: [] } : null
+  const debug: any = withDebug ? { dbCount: 0, variantsCount: 0, moreCount: 0, localRawCount: 0, externalLibraryCount: 0, ids: [], variantsIds: [], moreIds: [] } : null
 
   const { data: activeInventoryRows } = await supabase
     .from('inventories')
@@ -141,12 +189,15 @@ async function performSearch(query: string, numberQuery: string | null, filters:
     .is('archived_at', null)
   const activeInventoryIds = new Set<string>((activeInventoryRows || []).map((inventory: any) => String(inventory.id)))
   const inventoryKinds = new Map((activeInventoryRows || []).map((inventory: any) => [String(inventory.id), inventory.kind]))
+  const scopedInventoryIds = requestedInventoryId && activeInventoryIds.has(requestedInventoryId)
+    ? new Set([requestedInventoryId])
+    : activeInventoryIds
 
   // 1. LOCAL (Supabase)
   const cleaned = String(query).replace(/[\,\.;:_\-]+/g, ' ').trim()
   const tokens = cleaned.split(/\s+/).filter((t: string) => t.length > 1).slice(0, 6)
   
-  let dbQuery = supabase.from('products').select('*').in('inventory_id', [...activeInventoryIds])
+  let dbQuery = supabase.from('products').select('*').in('inventory_id', [...scopedInventoryIds])
 
   if (tokens.length > 0) {
       tokens.forEach((t) => {
@@ -176,7 +227,7 @@ async function performSearch(query: string, numberQuery: string | null, filters:
     ...product,
     inventory_kind: inventoryKinds.get(String(product.inventory_id)) || 'secondary',
   }))
-  const groupedLocal = buildHybridCatalogProducts(rowsWithInventoryKind, externalPriceMap, { activeInventoryIds, includeOutOfStock: true })
+  const groupedLocal = buildHybridCatalogProducts(rowsWithInventoryKind, externalPriceMap, { activeInventoryIds: scopedInventoryIds, includeOutOfStock: true })
   const localRaw: HybridProduct[] = groupedLocal.map((p: any) => {
     const f = String(p.finish || '').toLowerCase()
     const isFoil = (f.includes('foil') && !f.includes('non')) || f.includes('etched')
@@ -212,9 +263,16 @@ async function performSearch(query: string, numberQuery: string | null, filters:
 
   // Ordenar
   if (debug) debug.localRawCount = localRaw.length
-  let local = localRaw.sort((a, b) => b.stock - a.stock)
+  const local = localRaw.sort((a, b) => b.stock - a.stock)
 
-  // 2. EXTERNA (Scryfall)
+  // 2. BIBLIOTECA LOCAL DE MAGIC (external_prices)
+  const libraryRows = query ? await fetchExternalLibraryCandidates(supabase, query, numberQuery, filters) : []
+  const librarySuggestions: HybridProduct[] = libraryRows
+    .map((row) => externalLibraryRowToSuggestion(row))
+    .filter((suggestion) => !local.some((localCard) => isSamePrintedCard(localCard, suggestion)))
+  if (debug) debug.externalLibraryCount = librarySuggestions.length
+
+  // 3. EXTERNA (Scryfall)
   const canUseScryfall = !filters.tcg || filters.tcg === 'Magic'
   if (canUseScryfall && query) {
     let scryfallQueryString = ''
@@ -238,7 +296,11 @@ async function performSearch(query: string, numberQuery: string | null, filters:
           const normalizedExternalCollector = normalizeCollectorSearchValue(c.collector_number)
           if (numberQuery && normalizedExternalCollector !== numberQuery) return
           
-          const isLocal = local.some(l => l.name === c.name && l.set_name === c.set_name && normalizeCollectorSearchValue(l.collector_number) === normalizedExternalCollector)
+          const isLocal = local.some(l => isSamePrintedCard(l, {
+            name: c.name,
+            set_name: c.set_name,
+            collector_number: c.collector_number,
+          }))
           if (isLocal) return
 
           const pNonFoil = Number(c?.prices?.usd || 0)
@@ -271,18 +333,20 @@ async function performSearch(query: string, numberQuery: string | null, filters:
               finishes: c.finishes || [],
               type_line: c.type_line || null,
               color_identity: Array.isArray(c.color_identity) ? c.color_identity : [],
+              search_source: 'scryfall',
           })
         })
     } catch (e) {}
   }
 
-  return { local, external, debug }
+  return { local, library: librarySuggestions, libraryRows, external, debug }
 }
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const rawQ = (searchParams.get('q') || '').trim()
   const mode = (searchParams.get('mode') || '').trim()
+  const requestedInventoryId = String(searchParams.get('inventory_id') || '').trim() || null
   const withDebug = searchParams.get('debug') === '1'
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -290,6 +354,15 @@ export async function GET(req: Request) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     { cookies: { get(name: string) { return cookieStore.get(name)?.value }, set(name: string, value: string, options: any) { try { cookieStore.set({ name, value, ...options }) } catch (error) {} }, remove(name: string, options: any) { try { cookieStore.set({ name, value: '', ...options }) } catch (error) {} }, }, }
   )
+
+  let authorizedInventoryId: string | null = null
+  if (requestedInventoryId) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: isAdmin } = await supabase.rpc('is_admin')
+      if (isAdmin === true) authorizedInventoryId = requestedInventoryId
+    }
+  }
 
   if (mode === 'sets') {
     const q = String(searchParams.get('q') || '').trim()
@@ -344,8 +417,10 @@ export async function GET(req: Request) {
 
   if (filters.collector) numberQuery = filters.collector
 
-  let { local, external, debug } = await performSearch(nameQuery, numberQuery, filters, supabase, withDebug)
-  let results = [...local, ...external]
+  const initialSearch = await performSearch(nameQuery, numberQuery, filters, supabase, withDebug, authorizedInventoryId)
+  const { local, library, external, debug } = initialSearch
+  let libraryRows = initialSearch.libraryRows
+  let results = [...local, ...library, ...external]
 
   // Lógica Fuzzy
   if (results.length === 0 && !numberQuery && nameQuery) {
@@ -357,8 +432,9 @@ export async function GET(req: Request) {
         const fuzzyData = await fuzzyRes.json()
         const correctedName = fuzzyData.name
         if (correctedName && correctedName.toLowerCase() !== nameQuery.toLowerCase()) {
-          const secondTry = await performSearch(correctedName, null, { ...filters, name: correctedName }, supabase, false)
-          results = [...secondTry.local, ...secondTry.external]
+          const secondTry = await performSearch(correctedName, null, { ...filters, name: correctedName }, supabase, false, authorizedInventoryId)
+          libraryRows = secondTry.libraryRows
+          results = [...secondTry.local, ...secondTry.library, ...secondTry.external]
           results.forEach(r => r.didYouMean = correctedName)
         }
       }
@@ -372,12 +448,15 @@ export async function GET(req: Request) {
     const admin = (serviceUrl && serviceKey) ? createClient(serviceUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } }) : null
 
     // Usamos scryfall_id si existe, si no id (para externos)
+    const libraryIds = new Set(libraryRows.map((row) => String(row.scryfall_id)))
     const scryIds = results.map(r => r.scryfall_id || r.id).filter(Boolean)
+    const idsToFetch = scryIds.filter((id) => !libraryIds.has(String(id)))
     
     if (scryIds.length > 0) {
         const clientForPrices = admin || supabase
-        const dbPrices = await fetchExternalPricesByScryfallIds(clientForPrices, scryIds)
+        const dbPrices = await fetchExternalPricesByScryfallIds(clientForPrices, idsToFetch)
         const priceMap = new Map<string, any>()
+        libraryRows.forEach((row) => { if (row?.scryfall_id) priceMap.set(String(row.scryfall_id), row) })
         ;(dbPrices || []).forEach((row: any) => { if (row?.scryfall_id) priceMap.set(String(row.scryfall_id), row) })
         
         results.forEach((r) => {
