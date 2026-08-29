@@ -235,6 +235,30 @@ test('rejects an external-looking output whose junction parent resolves inside t
   })
 })
 
+test('rejects a release-evidence junction that expands the internal exception', async (t) => {
+  await withFixture(async ({ rootDir }) => {
+    const evidenceParent = join(rootDir, 'local-artifacts')
+    const evidenceAlias = join(evidenceParent, 'release-evidence')
+    await mkdir(evidenceParent)
+
+    try {
+      await symlink(rootDir, evidenceAlias, 'junction')
+    } catch (error) {
+      t.skip(`junction unavailable on this host: ${error.code ?? 'unknown error'}`)
+      return
+    }
+
+    await assert.rejects(
+      () => buildProjection({ rootDir, outputDir: join(rootDir, 'outside-evidence') }),
+      /directorio de proyección dentro del repositorio no permitido/,
+    )
+    await assert.rejects(
+      () => buildProjection({ rootDir, outputDir: join(evidenceAlias, 'redirected-output') }),
+      /directorio de proyección dentro del repositorio no permitido/,
+    )
+  })
+})
+
 test('keeps the real candidate manifest fail-closed by default', async () => {
   const outputParent = await mkdtemp(join(tmpdir(), 'crimson-release-projection-real-output-'))
   const outputDir = join(outputParent, 'projection')

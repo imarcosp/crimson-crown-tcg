@@ -16,6 +16,10 @@ function isWithin(path, parent) {
   return relativePath === '' || (relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath))
 }
 
+function isSamePath(left, right) {
+  return isWithin(left, right) && isWithin(right, left)
+}
+
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
 }
@@ -73,14 +77,25 @@ async function resolvePhysicalPaths({ rootDir, outputDir }) {
   }
 
   const physicalOutput = join(physicalParent, basename(absoluteOutput))
+  const lexicalEvidence = resolve(absoluteRoot, releaseEvidenceRelativePath)
+  const expectedPhysicalEvidence = join(physicalRoot, releaseEvidenceRelativePath)
   let physicalEvidence = null
-  try {
-    physicalEvidence = await realpath(join(physicalRoot, releaseEvidenceRelativePath))
-  } catch (error) {
-    if (error?.code !== 'ENOENT') fail('directorio de evidencia de release no disponible')
+
+  if (isWithin(absoluteOutput, lexicalEvidence)) {
+    try {
+      const resolvedEvidence = await realpath(lexicalEvidence)
+      if (isSamePath(resolvedEvidence, expectedPhysicalEvidence)) {
+        physicalEvidence = resolvedEvidence
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') fail('directorio de evidencia de release no disponible')
+    }
   }
 
-  if (isWithin(physicalOutput, physicalRoot) && (!physicalEvidence || !isWithin(physicalOutput, physicalEvidence))) {
+  if (
+    isWithin(physicalOutput, physicalRoot)
+    && (!isWithin(absoluteOutput, lexicalEvidence) || !physicalEvidence || !isWithin(physicalOutput, physicalEvidence))
+  ) {
     fail('directorio de proyección dentro del repositorio no permitido')
   }
 
