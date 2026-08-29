@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/client'
 import { MIN_PRODUCT_PRICE_USD } from '@/lib/pricing/constants'
 import { X, Search, Loader2, Image as ImageIcon, Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { saveAdminProduct } from '@/app/actions/admin-products'
+import { createUploadTicketAction } from '@/app/actions/storage-uploads'
+import { uploadWithTicket } from '@/lib/storage/upload-client'
 import {
   finishKeyToLabel,
   finishKeyToValue,
@@ -316,18 +318,27 @@ export default function ProductForm({ inventoryId, initial, onClose, onSaved }: 
     if (!formData.name) return
     setSaving(true)
     const finalUrls: string[] = []
-    for (const item of media) {
+    try {
+      for (const item of media) {
         if (item.file) {
-            const ext = item.file.name.split('.').pop() || 'jpg'
-            const fileName = `${Math.random().toString(36).slice(2)}.${ext}`
-            const { error } = await supabase.storage.from('products').upload(fileName, item.file)
-            if (!error) {
-                const { data } = supabase.storage.from('products').getPublicUrl(fileName)
-                finalUrls.push(data.publicUrl)
-            }
+          const ticket = await createUploadTicketAction({
+            kind: 'admin-product-image',
+            inventoryId,
+            name: item.file.name,
+            size: item.file.size,
+            mimeType: item.file.type,
+          })
+          await uploadWithTicket(item.file, ticket)
+          const { data } = supabase.storage.from(ticket.bucket).getPublicUrl(ticket.path)
+          finalUrls.push(data.publicUrl)
         } else {
-            finalUrls.push(item.url)
+          finalUrls.push(item.url)
         }
+      }
+    } catch {
+      alert('No se pudo cargar la imagen. Intenta nuevamente.')
+      setSaving(false)
+      return
     }
     const mainImage = finalUrls[0] || ''
     const gallery = finalUrls.slice(1)

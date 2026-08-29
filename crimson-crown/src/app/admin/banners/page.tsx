@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Trash2, Edit, Plus, Image as ImageIcon, ToggleLeft, ToggleRight, Save, X, Upload, Link as LinkIcon, ExternalLink } from 'lucide-react'
+import { createUploadTicketAction } from '@/app/actions/storage-uploads'
+import { uploadWithTicket } from '@/lib/storage/upload-client'
 
 export default function AdminBannersPage() {
   const supabase = createClient()
@@ -55,11 +57,14 @@ export default function AdminBannersPage() {
       let finalUrl = currentImageUrl
 
       if (file) {
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${Date.now()}.${fileExt}`
-        const { error: uploadError } = await supabase.storage.from('banners').upload(fileName, file)
-        if (uploadError) throw uploadError
-        const { data: { publicUrl } } = supabase.storage.from('banners').getPublicUrl(fileName)
+        const ticket = await createUploadTicketAction({
+          kind: 'banner',
+          name: file.name,
+          size: file.size,
+          mimeType: file.type,
+        })
+        await uploadWithTicket(file, ticket)
+        const { data: { publicUrl } } = supabase.storage.from(ticket.bucket).getPublicUrl(ticket.path)
         finalUrl = publicUrl
       }
 
@@ -90,8 +95,8 @@ export default function AdminBannersPage() {
       setEditing(null)
       fetchBanners()
 
-    } catch (e: any) {
-      alert('Error: ' + e.message)
+    } catch {
+      alert('No se pudo guardar el banner. Intenta nuevamente.')
     } finally {
       setUploading(false)
     }

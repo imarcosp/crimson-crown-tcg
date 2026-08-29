@@ -6,6 +6,9 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { sendImportNotification } from '@/app/actions/email'
+import { getAdminInventories, type Inventory } from '@/app/actions/admin-inventories'
+import { createUploadTicketAction } from '@/app/actions/storage-uploads'
+import { uploadWithTicket } from '@/lib/storage/upload-client'
 
 type Platform = 'Coolstuffinc' | 'Cardkingdom' | 'Manapool' | 'TCG Player' | 'EBay' | 'Amazon' | 'Full Moon' | 'Ideal808' | 'CoreTCG' | 'Troll and Toad' | 'Spellfinder' | 'Otro'
 
@@ -36,6 +39,8 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState('')
+  const [activeInventories, setActiveInventories] = useState<Inventory[]>([])
+  const [selectedActiveInventoryId, setSelectedActiveInventoryId] = useState('')
 
   const [formData, setFormData] = useState({
     product_name: '',
@@ -109,6 +114,25 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   }
 
   useEffect(() => { fetchOrder() }, [id])
+
+  useEffect(() => {
+      let mounted = true
+
+      const loadActiveInventories = async () => {
+          const result = await getAdminInventories()
+          if (!mounted || !result.success) return
+
+          const available = result.data.filter((inventory) => inventory.is_active && !inventory.archived_at)
+          setActiveInventories(available)
+          setSelectedActiveInventoryId((current) => {
+              if (available.some((inventory) => inventory.id === current)) return current
+              return available.find((inventory) => inventory.kind === 'primary')?.id || available[0]?.id || ''
+          })
+      }
+
+      loadActiveInventories()
+      return () => { mounted = false }
+  }, [])
 
   const getCustomerName = () => {
       if (!order?.profiles) return 'Cliente'
@@ -222,14 +246,28 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
   const uploadImageToSupabase = async (): Promise<string> => {
       if (!file) return formData.image_url
+      if (!selectedActiveInventoryId) {
+          alert('Selecciona un inventario activo antes de cargar la imagen.')
+          return ''
+      }
       setUploading(true)
-      const ext = file.name.split('.').pop()
-      const fileName = `imports/${Date.now()}.${ext}`
-      const { error } = await supabase.storage.from('products').upload(fileName, file)
-      if (error) { alert('Error: ' + error.message); setUploading(false); return '' }
-      const { data } = supabase.storage.from('products').getPublicUrl(fileName)
-      setUploading(false)
-      return data.publicUrl
+      try {
+          const ticket = await createUploadTicketAction({
+              kind: 'admin-product-image',
+              inventoryId: selectedActiveInventoryId,
+              name: file.name,
+              size: file.size,
+              mimeType: file.type,
+          })
+          await uploadWithTicket(file, ticket)
+          const { data } = supabase.storage.from(ticket.bucket).getPublicUrl(ticket.path)
+          return data.publicUrl
+      } catch {
+          alert('No se pudo cargar la imagen. Intenta nuevamente.')
+          return ''
+      } finally {
+          setUploading(false)
+      }
   }
 
   const openModal = (item?: any) => {
@@ -586,6 +624,19 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                           </div>
                           <div className="md:col-span-2 space-y-1">
                               <label className="text-xs font-bold text-slate-500 uppercase">Imagen</label>
+                              {file && (
+                                  <select
+                                      value={selectedActiveInventoryId}
+                                      onChange={(event) => setSelectedActiveInventoryId(event.target.value)}
+                                      className="mb-2 w-full rounded-lg border bg-white px-3 py-2 text-xs"
+                                      aria-label="Inventario activo para la imagen"
+                                  >
+                                      <option value="" disabled>Selecciona un inventario activo</option>
+                                      {activeInventories.map((inventory) => (
+                                          <option key={inventory.id} value={inventory.id}>{inventory.name}</option>
+                                      ))}
+                                  </select>
+                              )}
                               <div className="flex gap-2 items-start">
                                   <div className="w-16 h-16 bg-slate-100 rounded-lg shrink-0 border relative overflow-hidden flex items-center justify-center">
                                       {previewUrl ? <Image src={previewUrl} alt="" fill className="object-cover" unoptimized/> : <ImageIcon className="text-slate-300"/>}

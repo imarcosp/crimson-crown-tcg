@@ -10,6 +10,8 @@ import Link from 'next/link'
 import { notifyAdminOrderUpdated } from '@/app/actions/email'
 import { siteConfig } from '@/config/site'
 import { useContactWhatsapp } from '@/hooks/useContactWhatsapp'
+import { createUploadTicketAction } from '@/app/actions/storage-uploads'
+import { uploadWithTicket } from '@/lib/storage/upload-client'
 
 const getImageUrl = (item: any) => {
     if (!item) return ''
@@ -181,18 +183,20 @@ export default function HangOrderModal() {
     setAddingItem(true)
     let finalImageUrl = customProduct.image_url
 
-    // Si el usuario subió una imagen local, la subimos a Supabase
     if (customFile) {
         setUploadingCustom(true)
         try {
-            const ext = customFile.name.split('.').pop()
-            const fileName = `imports/custom_${Date.now()}.${ext}`
-            const { error: uploadError } = await supabase.storage.from('products').upload(fileName, customFile)
-            if (uploadError) throw uploadError
-            const { data } = supabase.storage.from('products').getPublicUrl(fileName)
+            const ticket = await createUploadTicketAction({
+                kind: 'customer-product-request',
+                name: customFile.name,
+                size: customFile.size,
+                mimeType: customFile.type,
+            })
+            await uploadWithTicket(customFile, ticket)
+            const { data } = supabase.storage.from(ticket.bucket).getPublicUrl(ticket.path)
             finalImageUrl = data.publicUrl
-        } catch (error: any) {
-            alert('Error al subir imagen: ' + error.message)
+        } catch {
+            alert('No se pudo cargar la imagen. Intenta nuevamente.')
             setUploadingCustom(false)
             setAddingItem(false)
             return
