@@ -54,3 +54,6 @@ next-env.d.ts
 temp_*.json
 scripts/debug/*
 *.tmp
+
+# Local Codex worktrees
+.worktrees/
