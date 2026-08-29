@@ -10,7 +10,7 @@ export type UploadIntent = {
   readonly kind: UploadKind
   readonly name: string
   readonly size: number
-  readonly mimeType: SupportedUploadMimeType
+  readonly mimeType: string
 }
 
 export type AllowedUploadExtension = 'jpg' | 'jpeg' | 'png' | 'webp' | 'pdf'
