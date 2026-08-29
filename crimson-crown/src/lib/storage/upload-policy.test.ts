@@ -289,8 +289,11 @@ test('accepts only positive canonical PostgreSQL bigint IDs for import proof pat
 })
 
 test('rejects an arbitrarily long import ID before attempting bigint conversion', () => {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'BigInt')
   const originalBigInt = globalThis.BigInt
   let conversions = 0
+
+  assert.ok(originalDescriptor)
 
   Object.defineProperty(globalThis, 'BigInt', {
     configurable: true,
@@ -312,10 +315,7 @@ test('rejects an arbitrarily long import ID before attempting bigint conversion'
     )
     assert.equal(conversions, 0)
   } finally {
-    Object.defineProperty(globalThis, 'BigInt', {
-      configurable: true,
-      value: originalBigInt,
-    })
+    Object.defineProperty(globalThis, 'BigInt', originalDescriptor)
   }
 })
 
