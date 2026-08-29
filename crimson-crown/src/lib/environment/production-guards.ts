@@ -1,6 +1,13 @@
-const CRIMSON_PRODUCTION_PROJECT_REF = 'djfqozfaqkqdoqeoqbzt'
+import {
+  assertSafeClientSupabaseUrl as assertSafeClientTarget,
+  assertSafeRuntimeSupabaseUrl as assertSafeRuntimeTarget,
+  classifySupabaseTarget,
+  CRIMSON_LOCAL_SUPABASE_API_PORT,
+  CRIMSON_PRODUCTION_PROJECT_REF,
+  UnsafeEnvironmentError,
+} from './supabase-target-policy.mjs'
+
 const CRIMSON_PRODUCTION_DOMAIN = 'crimsoncrownimports.com'
-const CRIMSON_LOCAL_SUPABASE_API_PORT = '54621'
 const EXTERNAL_SIDE_EFFECT_CREDENTIALS = [
   'RESEND_API_KEY',
   'MERCADOPAGO_ACCESS_TOKEN',
@@ -10,12 +17,7 @@ const EXTERNAL_SIDE_EFFECT_CREDENTIALS = [
 
 type Environment = Record<string, string | undefined>
 
-export class UnsafeEnvironmentError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'UnsafeEnvironmentError'
-  }
-}
+export { UnsafeEnvironmentError }
 
 export function assertNonProductionUrl(rawUrl: string, purpose: string): URL {
   let parsedUrl: URL
@@ -44,24 +46,22 @@ export function assertNonProductionUrl(rawUrl: string, purpose: string): URL {
 }
 
 export function assertSafeDevelopmentSupabaseUrl(rawUrl: string): URL {
-  return assertNonProductionUrl(rawUrl, 'Supabase de desarrollo')
+  return assertSafeClientTarget(rawUrl, 'local')
 }
 
 export function assertSafeRuntimeSupabaseUrl(
   rawUrl: string,
   env: Environment = process.env,
 ): URL {
-  if (env.VERCEL_ENV?.trim().toLowerCase() === 'production') {
-    try {
-      return new URL(rawUrl)
-    } catch {
-      throw new UnsafeEnvironmentError(
-        'Entorno inseguro: la URL de Supabase del despliegue no es válida.',
-      )
-    }
-  }
+  return assertSafeRuntimeTarget(rawUrl, env)
+}
 
-  return assertNonProductionUrl(rawUrl, 'Supabase del despliegue no productivo')
+export function assertSafeClientSupabaseUrl(
+  rawUrl: string,
+  expectedTarget: 'local' | 'staging' | 'production',
+  stagingRef = '',
+): URL {
+  return assertSafeClientTarget(rawUrl, expectedTarget, stagingRef)
 }
 
 function requireEnvironmentValue(env: Environment, name: string): string {
@@ -84,9 +84,8 @@ export function assertSafeTestEnvironment(
   env: Environment,
   forbiddenSecretValues: Iterable<string> = [],
 ): void {
-  const supabaseUrl = assertNonProductionUrl(
+  const supabaseTarget = classifySupabaseTarget(
     requireEnvironmentValue(env, 'NEXT_PUBLIC_SUPABASE_URL'),
-    'Supabase para pruebas',
   )
   const playwrightUrl = assertNonProductionUrl(
     requireEnvironmentValue(env, 'PLAYWRIGHT_BASE_URL'),
@@ -94,8 +93,7 @@ export function assertSafeTestEnvironment(
   )
 
   if (
-    !isLoopbackHostname(supabaseUrl.hostname) ||
-    supabaseUrl.port !== CRIMSON_LOCAL_SUPABASE_API_PORT
+    supabaseTarget.kind !== 'local'
   ) {
     throw new UnsafeEnvironmentError(
       `Entorno inseguro: Supabase para pruebas debe usar loopback en el puerto ${CRIMSON_LOCAL_SUPABASE_API_PORT}.`,

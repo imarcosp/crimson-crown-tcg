@@ -6,6 +6,7 @@ import {
   assertSafeTestEnvironment,
   assertSafeDevelopmentSupabaseUrl,
   assertSafeRuntimeSupabaseUrl,
+  UnsafeEnvironmentError,
 } from './production-guards.ts'
 
 test('rejects every known Crimson Crown production URL', () => {
@@ -54,9 +55,45 @@ test('blocks the production Supabase URL in Preview, Development, or unknown run
   }
 })
 
-test('keeps loopback Supabase valid in non-production Vercel environments', () => {
+test('enforces the Supabase target assigned to each runtime without disclosing foreign refs', () => {
+  const foreignRefs = [
+    'jzkxvgntwompkntimrao',
+    'tszglqwrklthnzhqdffn',
+    'shwqihiueeuqeumdoepn',
+  ]
+
+  for (const projectRef of foreignRefs) {
+    assert.throws(
+      () =>
+        assertSafeRuntimeSupabaseUrl(`https://${projectRef}.supabase.co`, {
+          VERCEL_ENV: 'preview',
+          CRIMSON_STAGING_SUPABASE_PROJECT_REF: projectRef,
+        }),
+      (error: unknown) =>
+        error instanceof UnsafeEnvironmentError && !error.message.includes(projectRef),
+    )
+  }
+
+  assert.throws(() =>
+    assertSafeRuntimeSupabaseUrl('https://arbitraryref1234567890.supabase.co', {
+      VERCEL_ENV: 'production',
+    }),
+  )
   assert.doesNotThrow(() =>
-    assertSafeRuntimeSupabaseUrl('http://127.0.0.1:54621', { VERCEL_ENV: 'preview' }),
+    assertSafeRuntimeSupabaseUrl('https://djfqozfaqkqdoqeoqbzt.supabase.co', {
+      VERCEL_ENV: 'production',
+    }),
+  )
+  assert.doesNotThrow(() =>
+    assertSafeRuntimeSupabaseUrl('https://crimsonstage12345678.supabase.co', {
+      VERCEL_ENV: 'preview',
+      CRIMSON_STAGING_SUPABASE_PROJECT_REF: 'crimsonstage12345678',
+    }),
+  )
+  assert.throws(() =>
+    assertSafeRuntimeSupabaseUrl('http://127.0.0.1:54621', {
+      VERCEL_ENV: 'preview',
+    }),
   )
 })
 
