@@ -96,7 +96,7 @@ Actualizado: 2026-08-29. Este documento cubre únicamente Crimson Crown. SaaS y 
 
 ## Siguiente backlog recomendado (antes de tocar producción)
 
-1. **Revisar el diseño del lote de emergencia P0.** El diseño por fases quedó escrito en `docs/superpowers/specs/2026-08-29-crimson-crown-emergency-hardening-design.md`: guard entre proyectos, manifiesto/proyección de releases, cierre compatible de Storage y vista/funciones privilegiadas. Falta la revisión manual del documento antes de convertirlo en plan de implementación.
+1. **Ejecutar el lote de emergencia P0.** El diseño fue aprobado y quedó convertido en cuatro planes test-first dentro de `docs/superpowers/plans/`: seguridad de entornos/releases, superficies privilegiadas de Postgres, transición de Storage y ensayo staging/release. La ejecución comienza por el guard entre proyectos y se detiene obligatoriamente antes de producción.
 2. **Preparar staging exclusivo de Crimson.** Crear un proyecto/branch no productivo sólo después de confirmar costo y organización; separar las variables de Vercel y probar allí la secuencia completa.
 3. **RLS y Data API por grupos.** Después de desplegar el frontend compatible, preparar y probar localmente la revocación de escrituras directas sobre productos/inventarios/movimientos; continuar luego con los demás dominios sin una migración monolítica.
 4. **Lotes funcionales.** Admin/mobile/Auth primero; filtros y accesos rápidos después; Deckbuilder como subsistema independiente.

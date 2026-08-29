@@ -44,7 +44,7 @@ Las identidades conocidas se tratan como datos de control, no como configuració
 | El Perchero producción | `tszglqwrklthnzhqdffn` | Prohibido para Crimson |
 | Che Maracucho | `shwqihiueeuqeumdoepn` | Prohibido para Crimson |
 
-El valor de la futura referencia staging de Crimson se configurará como secreto de entorno y no se inventará ni se reutilizará. Hasta que exista, Preview y Development remotos deben fallar cerrados.
+El valor de la futura referencia staging de Crimson se configurará como allowlist de entorno y no se inventará ni se reutilizará. El ref no es una credencial: el servidor conserva la variable autoritativa y el navegador recibe una copia pública que el build exige que sea idéntica; las claves continúan separadas y secretas según su rol. Hasta que exista el ref, Preview y Development remotos deben fallar cerrados.
 
 ## Fase 0: guard de entorno y release fail-closed
 
@@ -168,7 +168,7 @@ La transición separa dos conceptos:
 - `products`: máximo 5 MiB; `image/jpeg`, `image/png` o `image/webp`.
 - `payment_proofs`: máximo 5 MiB; `image/jpeg`, `image/png`, `image/webp` o `application/pdf`.
 
-El nombre/extensión recibido del navegador no determina el tipo. El servidor valida MIME declarado, extensión permitida, tamaño y, para imágenes, firma/contenido antes de emitir autorización de upload. Los nombres canónicos usan UUID y nunca conservan un nombre de cliente ejecutable.
+El nombre/extensión recibido del navegador no determina el tipo. Antes de emitir la autorización, el servidor valida el MIME declarado, la extensión permitida y el tamaño anunciado; el bucket vuelve a imponer MIME y tamaño al recibir el objeto. Después del upload y antes de finalizar la operación de negocio, el servidor verifica los metadatos almacenados y la firma real del contenido. Un objeto inválido no se referencia y se elimina por su ruta exacta. Los nombres canónicos usan UUID y nunca conservan un nombre de cliente ejecutable.
 
 ### Uploads mediante autorización de ruta
 
