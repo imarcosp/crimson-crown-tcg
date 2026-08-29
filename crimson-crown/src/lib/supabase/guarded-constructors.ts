@@ -44,7 +44,12 @@ export function guardBrowserSupabaseConstructor<TConstructor extends CallableFun
   environment?: Environment,
 ): TConstructor {
   const guardedConstructor = (rawUrl: string, ...args: unknown[]) => {
-    const activeEnvironment = environment ?? process.env
+    const activeEnvironment = environment ?? {
+      NEXT_PUBLIC_CRIMSON_DEPLOYMENT_TARGET:
+        process.env.NEXT_PUBLIC_CRIMSON_DEPLOYMENT_TARGET,
+      NEXT_PUBLIC_CRIMSON_STAGING_SUPABASE_PROJECT_REF:
+        process.env.NEXT_PUBLIC_CRIMSON_STAGING_SUPABASE_PROJECT_REF,
+    }
     const safeUrl = assertSafeClientSupabaseUrl(
       rawUrl,
       browserTarget(activeEnvironment),
