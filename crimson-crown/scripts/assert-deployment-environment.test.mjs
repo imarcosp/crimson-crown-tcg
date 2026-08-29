@@ -89,6 +89,25 @@ test('rechaza referencias de staging públicas y privadas distintas sin revelarl
   assert.doesNotMatch(outputOf(result), new RegExp(`${privateRef}|${publicRef}`))
 })
 
+test('rechaza metadatos Vercel ausentes o desconocidos aunque el destino sea local', () => {
+  const cases = [undefined, 'unexpected']
+
+  for (const vercelEnvironment of cases) {
+    const result = runGate({
+      VERCEL: '1',
+      VERCEL_ENV: vercelEnvironment,
+      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54621',
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'local-anon-key',
+      NEXT_PUBLIC_CRIMSON_DEPLOYMENT_TARGET: 'local',
+      CRIMSON_STAGING_SUPABASE_PROJECT_REF: '',
+      NEXT_PUBLIC_CRIMSON_STAGING_SUPABASE_PROJECT_REF: '',
+    })
+
+    assert.notEqual(result.status, 0, outputOf(result))
+    assert.match(outputOf(result), /UnsafeEnvironmentError/)
+  }
+})
+
 test('la importación no altera exitCode; el entry point sí informa el fallo', () => {
   const invalidEnvironment = {
     VERCEL: '1',

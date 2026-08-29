@@ -9,7 +9,8 @@ import {
 function expectedDeploymentTarget(env) {
   if (env.VERCEL_ENV === 'production') return 'production'
   if (env.VERCEL_ENV === 'preview' || env.VERCEL_ENV === 'development') return 'staging'
-  return 'local'
+  if (!env.VERCEL) return 'local'
+  throw new UnsafeEnvironmentError('Entorno Vercel no autorizado para este deployment.')
 }
 
 function assertStagingReferences(env) {
