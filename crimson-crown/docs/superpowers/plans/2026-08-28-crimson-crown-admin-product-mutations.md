@@ -59,7 +59,7 @@ export type ProductInputResult =
 export function parseAdminProductInput(input: unknown): ProductInputResult
 ```
 
-- [ ] **Step 1: Write the failing validation tests.**
+- [x] **Step 1: Write the failing validation tests.**
 
 Use literal fixtures and assert consumer-visible results:
 
@@ -108,7 +108,7 @@ test('rechaza objetos metadata no planos y prototipos peligrosos', () => {
 })
 ```
 
-- [ ] **Step 2: Run the focused test and observe RED.**
+- [x] **Step 2: Run the focused test and observe RED.**
 
 Run:
 
@@ -118,7 +118,7 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-
 
 Expected: FAIL because `product-mutations.ts` does not exist.
 
-- [ ] **Step 3: Implement minimal normalization and validation.**
+- [x] **Step 3: Implement minimal normalization and validation.**
 
 Implementation rules:
 
@@ -132,11 +132,11 @@ const normalizeText = (value: unknown) => String(value ?? '').trim().replace(/\s
 // Return a newly constructed allowlisted object; never spread the input.
 ```
 
-- [ ] **Step 4: Run the focused test and observe GREEN.**
+- [x] **Step 4: Run the focused test and observe GREEN.**
 
 Expected: all validation tests pass with zero warnings.
 
-- [ ] **Step 5: Commit the contract.**
+- [x] **Step 5: Commit the contract.**
 
 ```powershell
 git add -- crimson-crown/src/lib/admin/product-mutations.ts crimson-crown/src/lib/admin/product-mutations.test.ts
@@ -176,7 +176,7 @@ public.admin_delete_products(
 ) returns table(deleted_ids uuid[], rejected_ids uuid[])
 ```
 
-- [ ] **Step 1: Write the failing local runtime matrix.**
+- [x] **Step 1: Write the failing local runtime matrix.**
 
 `scripts/local-db/admin-product-mutations-matrix.mjs` must:
 
@@ -197,7 +197,7 @@ public.admin_delete_products(
 
 All expected stock values must be literal integers derived in the test, not calculated by production helpers.
 
-- [ ] **Step 2: Run the matrix and observe RED.**
+- [x] **Step 2: Run the matrix and observe RED.**
 
 Run:
 
@@ -207,7 +207,7 @@ node scripts/local-db/admin-product-mutations-matrix.mjs
 
 Expected: FAIL with PostgREST function-not-found for `admin_create_or_restock_product`.
 
-- [ ] **Step 3: Generate the migration with the installed CLI.**
+- [x] **Step 3: Generate the migration with the installed CLI.**
 
 Run:
 
@@ -217,7 +217,7 @@ Run:
 
 Record the exact generated path in the task notes before editing it.
 
-- [ ] **Step 4: Implement shared SQL validation and the three RPCs.**
+- [x] **Step 4: Implement shared SQL validation and the three RPCs.**
 
 The migration must include these concrete protections:
 
@@ -278,7 +278,7 @@ revoke all on function public.admin_delete_products(uuid, uuid[], text) from pub
 grant execute on function public.admin_delete_products(uuid, uuid[], text) to authenticated, service_role;
 ```
 
-- [ ] **Step 5: Apply only the new migration to local Supabase.**
+- [x] **Step 5: Apply only the new migration to local Supabase.**
 
 Discover the command before use:
 
@@ -289,11 +289,11 @@ Discover the command before use:
 
 Confirm the output names only `admin_product_mutations` and does not mention a linked project.
 
-- [ ] **Step 6: Run the matrix and observe GREEN.**
+- [x] **Step 6: Run the matrix and observe GREEN.**
 
 Run `node scripts/local-db/admin-product-mutations-matrix.mjs` twice. Both runs must pass, proving fixture cleanup and idempotency.
 
-- [ ] **Step 7: Add the package command.**
+- [x] **Step 7: Add the package command.**
 
 Add exactly:
 
@@ -301,7 +301,7 @@ Add exactly:
 "test:local-admin-products": "node scripts/local-db/admin-product-mutations-matrix.mjs"
 ```
 
-- [ ] **Step 8: Run local SQL lint and focused regression matrices.**
+- [x] **Step 8: Run local SQL lint and focused regression matrices.**
 
 Run:
 
@@ -311,7 +311,7 @@ npm run test:local-admin-products
 npm run test:local-multi-inventory
 ```
 
-- [ ] **Step 9: Commit the database slice.**
+- [x] **Step 9: Commit the database slice.**
 
 Stage only the generated migration, matrix and `package.json`/lockfile if changed, then commit:
 
@@ -408,7 +408,7 @@ export function createAdminProductActionCore(gateway: AdminProductGateway): {
 }
 ```
 
-- [ ] **Step 1: Extract an injectable action core and write failing behavior tests.**
+- [x] **Step 1: Extract an injectable action core and write failing behavior tests.**
 
 `admin-products.test.ts` must exercise real validation and a small fake implementing the exact Supabase boundary. Tests must assert outcomes, not source text:
 
@@ -437,11 +437,11 @@ test('saveAdminProduct returns the database stock transition', async () => {
 
 The fake gateway must return complete `ProductMutationRpcRow` and product objects and record only the boundary needed by the action. Do not mock React, Next.js, or Supabase internals.
 
-- [ ] **Step 2: Run focused tests and observe RED.**
+- [x] **Step 2: Run focused tests and observe RED.**
 
 Expected: FAIL because `admin-products.ts` and action core do not exist.
 
-- [ ] **Step 3: Implement the action core and `'use server'` wrappers.**
+- [x] **Step 3: Implement the action core and `'use server'` wrappers.**
 
 Concrete behavior:
 
@@ -462,11 +462,11 @@ Map Postgres codes `42501`, `22023`, `23505`, and `23503` to stable Spanish mess
 
 `importAdminProducts` must process chunks of five with `Promise.all`, preserve input indexes, and return partial row errors. It calls `processWishlistNotifications` once after all successful rows, using only stock arrivals returned by the RPC.
 
-- [ ] **Step 4: Run focused tests and observe GREEN.**
+- [x] **Step 4: Run focused tests and observe GREEN.**
 
-- [ ] **Step 5: Run `npm run typecheck`.**
+- [x] **Step 5: Run `npm run typecheck`.**
 
-- [ ] **Step 6: Commit the Server Action slice.**
+- [x] **Step 6: Commit the Server Action slice.**
 
 ```powershell
 git commit -m "feat: secure admin product actions"
@@ -484,7 +484,7 @@ git commit -m "feat: secure admin product actions"
 
 **Interfaces:** Uses `saveAdminProduct` and `deleteAdminProducts` from Task 3.
 
-- [ ] **Step 1: Add failing Playwright assertions for manual mutations.**
+- [x] **Step 1: Add failing Playwright assertions for manual mutations.**
 
 Extend the existing local multi-inventory scenario to:
 
@@ -498,7 +498,7 @@ Extend the existing local multi-inventory scenario to:
 
 Run only the focused test and confirm it fails because the current UI performs direct writes and does not report rejected IDs.
 
-- [ ] **Step 2: Replace ProductForm database mutations with `saveAdminProduct`.**
+- [x] **Step 2: Replace ProductForm database mutations with `saveAdminProduct`.**
 
 Keep browser reads and public product-image upload unchanged. Generate one operation key per explicit save click:
 
@@ -514,11 +514,11 @@ const result = await saveAdminProduct({
 
 Remove direct `insert`/`update` and client-side duplicate-merge queries. Use `result.data.previousStock/currentStock` for the existing restock message and `onSaved(result.data.product)`.
 
-- [ ] **Step 3: Replace single and bulk delete calls.**
+- [x] **Step 3: Replace single and bulk delete calls.**
 
 Use one operation key per confirmation. When `rejectedIds` is non-empty, keep them selected and show `No se eliminaron productos con historial.`. Reload after successful deletions.
 
-- [ ] **Step 4: Run focused E2E, action tests and typecheck.**
+- [x] **Step 4: Run focused E2E, action tests and typecheck.**
 
 ```powershell
 npm run test:e2e -- e2e/multi-inventory.spec.ts
@@ -526,7 +526,7 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-
 npm run typecheck
 ```
 
-- [ ] **Step 5: Commit the manual UI migration.**
+- [x] **Step 5: Commit the manual UI migration.**
 
 ```powershell
 git commit -m "refactor: route admin product edits through server"
@@ -544,13 +544,13 @@ git commit -m "refactor: route admin product edits through server"
 
 **Interfaces:** Uses `importAdminProducts` from Task 3.
 
-- [ ] **Step 1: Add a failing CSV behavior test.**
+- [x] **Step 1: Add a failing CSV behavior test.**
 
 Use a two-row local fixture: one valid row and one row with negative quantity. Assert that the valid row increments the selected inventory exactly once and the invalid row is reported without affecting another inventory.
 
-- [ ] **Step 2: Run the focused test and observe RED.**
+- [x] **Step 2: Run the focused test and observe RED.**
 
-- [ ] **Step 3: Keep CSV parsing and enrichment in the component, then submit normalized rows once.**
+- [x] **Step 3: Keep CSV parsing and enrichment in the component, then submit normalized rows once.**
 
 Replace client queries and writes with:
 
@@ -564,11 +564,11 @@ const result = await importAdminProducts({ inventoryId, rows })
 
 Create `importRunId` once per user-started import. Retrying the same in-memory run reuses keys; starting a new import creates a new run ID. Map `result.data` to the existing progress, stats and log UI. Remove all direct product `insert`/`update` paths and the duplicate-key fallback.
 
-- [ ] **Step 4: Run CSV E2E twice and observe GREEN without duplicate stock.**
+- [x] **Step 4: Run CSV E2E twice and observe GREEN without duplicate stock.**
 
-- [ ] **Step 5: Run the local admin-product and multi-inventory matrices.**
+- [x] **Step 5: Run the local admin-product and multi-inventory matrices.**
 
-- [ ] **Step 6: Commit the CSV migration.**
+- [x] **Step 6: Commit the CSV migration.**
 
 ```powershell
 git commit -m "refactor: secure inventory CSV imports"
@@ -583,7 +583,7 @@ git commit -m "refactor: secure inventory CSV imports"
 - Modify: `docs/crimson-crown-backlog.md`
 - Create: `docs/superpowers/plans/2026-08-28-crimson-crown-admin-product-mutations-verification.md`
 
-- [ ] **Step 1: Run the complete relevant local gate.**
+- [x] **Step 1: Run the complete relevant local gate.**
 
 ```powershell
 npm run test:local-admin-products
@@ -597,13 +597,13 @@ npm run build
 
 Run full `npm run lint` and record its exact remaining inherited error/warning counts; do not mix unrelated lint fixes into this slice.
 
-- [ ] **Step 2: Run local database lint.**
+- [x] **Step 2: Run local database lint.**
 
 ```powershell
 .\node_modules\.bin\supabase.cmd db lint --local --schema public --level warning --fail-on error
 ```
 
-- [ ] **Step 3: Inspect the final diff for isolation and secrets.**
+- [x] **Step 3: Inspect the final diff for isolation and secrets.**
 
 ```powershell
 git status --short
@@ -615,16 +615,16 @@ git grep -n "djfqozfaqkqdoqeoqbzt" -- crimson-crown/src crimson-crown/scripts cr
 
 Expected: only Crimson Crown files; no secret values, dumps, production URLs in tests, or modifications to sibling projects.
 
-- [ ] **Step 4: Document evidence and remaining production gate.**
+- [x] **Step 4: Document evidence and remaining production gate.**
 
 The verification note must list command, exit code, test count, migration filename and local-only status. Update the backlog to mark only subproject 1 complete; keep RLS, Storage, staging and quality open.
 
-- [ ] **Step 5: Commit the verification checkpoint.**
+- [x] **Step 5: Commit the verification checkpoint.**
 
 ```powershell
 git commit -m "docs: verify secure admin product mutations"
 ```
 
-- [ ] **Step 6: Stop before production.**
+- [x] **Step 6: Stop before production.**
 
 Report changed behavior, manual test checklist, the additive migration name and rollback considerations. Do not push, deploy, link Supabase, or apply the migration remotely. Wait for the owner's manual review before any production action.
