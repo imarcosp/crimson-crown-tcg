@@ -20,6 +20,27 @@ const identities = {
   admin: { email: 'admin.local@example.test', password: 'CrimsonLocalAdmin!2026' },
 }
 
+const privilegedRpcDenialProbes = [
+  { name: 'assign_import_order_number' },
+  { name: 'calculate_import_order_total', args: { p_order_id: -1 } },
+  { name: 'find_orders_by_id_part', args: { q: 'privileged-denial-probe' } },
+  { name: 'generate_import_order_number' },
+  { name: 'generate_next_import_order_number' },
+  { name: 'get_inventory_valuation' },
+  { name: 'get_trash_products', args: { batch_size: 1 } },
+  { name: 'handle_new_user' },
+  { name: 'notify_buylist_manager' },
+  { name: 'notify_credit_change' },
+  { name: 'notify_import_manager' },
+  { name: 'notify_order_manager' },
+  { name: 'notify_stock_alert' },
+  { name: 'on_commission_adjustments_change' },
+  { name: 'on_commission_allocations_change' },
+  { name: 'set_import_order_commission_eligible' },
+  { name: 'set_order_commission_eligible' },
+  { name: 'sync_product_prices' },
+]
+
 function client() {
   return createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } })
 }
@@ -44,6 +65,21 @@ async function countRows(supabase, table) {
 async function expectBlocked(label, operation) {
   const { data, error } = await operation()
   assert.ok(error || (data?.length ?? 0) === 0, `${label} debe estar bloqueado`)
+}
+
+function expectPermissionDenied(label, result, hiddenRpcName = null) {
+  if (result.error?.code === '42501') {
+    assert.match(result.error.message ?? '', /permission denied/i, `${label} debe negarse antes de ejecutar la función`)
+    return
+  }
+
+  if (hiddenRpcName && result.error?.code === 'PGRST202') {
+    assert.match(result.error.message ?? '', /schema cache/i, `${label} debe quedar oculto del schema cache`)
+    assert.match(result.error.message ?? '', new RegExp(`\\b${hiddenRpcName}\\b`), `${label} debe identificar la RPC oculta`)
+    return
+  }
+
+  assert.fail(`${label} debe fallar por privilegio antes de ejecutar; código recibido: ${result.error?.code ?? 'sin error'}`)
 }
 
 async function main() {
@@ -105,7 +141,34 @@ async function main() {
   }
 
   const viewProbe = await anon.from('admin_users').select('id').limit(1)
-  assert.ok(viewProbe.error, 'la vista admin_users no debe estar expuesta')
+  expectPermissionDenied('anon no debe leer admin_users', viewProbe)
+
+  const standardViewProbe = await standard.from('admin_users').select('id').limit(1)
+  expectPermissionDenied('authenticated no debe leer admin_users', standardViewProbe)
+
+  for (const probe of privilegedRpcDenialProbes) {
+    expectPermissionDenied(
+      `anon no debe invocar ${probe.name}`,
+      await anon.rpc(probe.name, probe.args),
+      probe.name,
+    )
+    expectPermissionDenied(
+      `authenticated no debe invocar ${probe.name}`,
+      await standard.rpc(probe.name, probe.args),
+      probe.name,
+    )
+  }
+
+  const anonCommissionAdmin = await anon.rpc('is_commission_admin')
+  expectPermissionDenied('anon no debe invocar is_commission_admin', anonCommissionAdmin, 'is_commission_admin')
+
+  const standardCommissionAdmin = await standard.rpc('is_commission_admin')
+  assert.ifError(standardCommissionAdmin.error)
+  assert.equal(standardCommissionAdmin.data, false, 'el usuario estándar no debe ser admin de comisiones')
+
+  const adminCommissionAdmin = await admin.rpc('is_commission_admin')
+  assert.ifError(adminCommissionAdmin.error)
+  assert.equal(adminCommissionAdmin.data, true, 'el admin local debe ser admin de comisiones')
 
   const adminRpc = await anon.rpc('is_admin')
   assert.ok(adminRpc.error, 'is_admin no debe ser invocable por anon')
@@ -312,6 +375,15 @@ async function main() {
     standardOrders,
     adminOrders,
     externalCount,
+    privilegedRpcDenials: {
+      functions: privilegedRpcDenialProbes.length,
+      probes: privilegedRpcDenialProbes.length * 2,
+    },
+    commissionAdmin: {
+      anon: 'denied',
+      standard: standardCommissionAdmin.data,
+      admin: adminCommissionAdmin.data,
+    },
   }, null, 2))
 }
 
