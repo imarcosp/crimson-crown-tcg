@@ -8,13 +8,14 @@ import { fileURLToPath } from 'node:url'
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const migrationsRoot = path.join(appRoot, 'supabase', 'migrations')
 const migrationSuffix = '_freeze_approved_import_quote_items.sql'
+const rlsFixMigrationSuffix = '_fix_import_item_guard_rls.sql'
 const expectedContainer = 'supabase_db_crimson-crown'
 
-async function loadMigration() {
+async function loadMigration(suffix = migrationSuffix) {
   const matches = (await readdir(migrationsRoot))
-    .filter((filename) => filename.endsWith(migrationSuffix))
+    .filter((filename) => filename.endsWith(suffix))
     .sort()
-  assert.equal(matches.length, 1, `migración esperada ${migrationSuffix}: ${matches.join(', ') || 'ninguna'}`)
+  assert.equal(matches.length, 1, `migración esperada ${suffix}: ${matches.join(', ') || 'ninguna'}`)
   return { filename: matches[0], sql: await readFile(path.join(migrationsRoot, matches[0]), 'utf8') }
 }
 
@@ -120,18 +121,23 @@ commit;
 }
 
 const migrationPromise = loadMigration()
+const rlsFixMigrationPromise = loadMigration(rlsFixMigrationSuffix)
 
 test('registra el gate focalizado de congelamiento de ítems', async () => {
   const packageJson = JSON.parse(await readFile(path.join(appRoot, 'package.json'), 'utf8'))
   assert.equal(packageJson.scripts?.['test:import-item-freeze'], 'node --test scripts/local-db/import-item-freeze-contract.test.mjs')
 })
 
-test('define backstop invoker y RPC service-role-only con lock padre primero', async () => {
+test('define backstop interno y RPC service-role-only con lock padre primero', async () => {
   const { filename, sql } = await migrationPromise
+  const { filename: fixFilename, sql: fixSql } = await rlsFixMigrationPromise
   const normalized = sql.toLowerCase().replace(/\s+/gu, ' ')
+  const normalizedFix = fixSql.toLowerCase().replace(/\s+/gu, ' ')
 
   assert.match(filename, /^\d{14}_freeze_approved_import_quote_items\.sql$/u)
+  assert.match(fixFilename, /^\d{14}_fix_import_item_guard_rls\.sql$/u)
   transactionBody(sql)
+  transactionBody(fixSql)
   assert.doesNotMatch(sql, /security\s+definer/iu)
   assert.doesNotMatch(sql, /\b(?:payment_proof_url|truncate|alter\s+table)\b/iu)
   assert.match(sql, /create\s+or\s+replace\s+function\s+public\.guard_import_item_quote_mutation\s*\(\s*\)\s*returns\s+trigger/iu)
@@ -144,6 +150,12 @@ test('define backstop invoker y RPC service-role-only con lock padre primero', a
   assert.match(sql, /to_jsonb\(new\)[\s\S]*'is_available'[\s\S]*'is_delivered'[\s\S]*'in_cart'/iu)
   assert.match(sql, /old\.order_id\s+is\s+distinct\s+from\s+new\.order_id/iu)
   assert.match(sql, /revoke\s+all\s+on\s+function\s+public\.guard_import_item_quote_mutation\(\)[\s\S]*from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role/iu)
+  assert.match(fixSql, /create\s+or\s+replace\s+function\s+public\.guard_import_item_quote_mutation\s*\(\s*\)[\s\S]*security\s+definer[\s\S]*set\s+search_path\s*=\s*public\s*,\s*pg_temp/iu)
+  assert.match(fixSql, /revoke\s+all\s+on\s+function\s+public\.guard_import_item_quote_mutation\(\)[\s\S]*from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role/iu)
+  assert.match(normalizedFix, /payload_input \?& item_keys/u)
+  assert.match(normalizedFix, /jsonb_typeof\(payload_input -> 'product_name'\) is distinct from 'string'/u)
+  assert.match(normalizedFix, /payload_input \?& array\['field', 'value'\]::text\[\]/u)
+  assert.match(normalizedFix, /flag_field is null or flag_field not in/u)
 
   for (const signature of [
     'public.admin_mutate_import_item_atomic(bigint, bigint, text, jsonb)',
@@ -170,6 +182,8 @@ test('las cinco mutaciones admin y el rechazo cruzan Server Actions atómicas', 
 test('trigger/RPC permiten estados editables, congelan aprobados y cierran ACL sin cambiar filas', async () => {
   const { sql } = await migrationPromise
   const body = transactionBody(sql)
+  const { sql: fixSql } = await rlsFixMigrationPromise
+  const fixBody = transactionBody(fixSql)
   assertExactLocalContainer()
   const result = dockerPsql(String.raw`
 begin;
@@ -181,6 +195,7 @@ select
   (select md5(coalesce(jsonb_agg(to_jsonb(ii) order by ii.id)::text, '[]')) from public.import_items ii) as items_hash;
 
 ${body}
+${fixBody}
 
 do $cases$
 declare
@@ -203,7 +218,7 @@ begin
     raise exception 'La migración alteró filas existentes.';
   end if;
 
-  if (select prosecdef from pg_proc where oid = 'public.guard_import_item_quote_mutation()'::regprocedure)
+  if not (select prosecdef from pg_proc where oid = 'public.guard_import_item_quote_mutation()'::regprocedure)
     or has_function_privilege('public', 'public.guard_import_item_quote_mutation()', 'execute')
     or has_function_privilege('anon', 'public.guard_import_item_quote_mutation()', 'execute')
     or has_function_privilege('authenticated', 'public.guard_import_item_quote_mutation()', 'execute')
@@ -278,6 +293,104 @@ $cases$;
 rollback;
 `)
   assert.equal(result.status, 0, outputOf(result))
+})
+
+test('preserva el INSERT RLS del owner y rechaza owner ajeno y payloads parciales', async () => {
+  const { sql } = await migrationPromise
+  const { sql: fixSql } = await rlsFixMigrationPromise
+  const body = transactionBody(sql)
+  const fixBody = transactionBody(fixSql)
+  assertExactLocalContainer()
+
+  const result = dockerPsql(String.raw`
+begin;
+${body}
+${fixBody}
+
+select id as owner_id from public.profiles order by id limit 1 \gset
+select id as foreign_id from public.profiles where id <> :'owner_id'::uuid order by id limit 1 \gset
+insert into public.import_orders(user_id, status, user_notes)
+values (:'owner_id', 'Iniciada', 'guard-rls-owner') returning id as owner_order_id \gset
+insert into public.import_orders(user_id, status, user_notes)
+values (:'foreign_id', 'Iniciada', 'guard-rls-foreign') returning id as foreign_order_id \gset
+select set_config('codex.foreign_order_id', :'foreign_order_id', true);
+
+select set_config('request.jwt.claim.sub', :'owner_id', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+set local role authenticated;
+insert into public.import_items(order_id, product_name, quantity)
+values (:'owner_order_id', 'owner-direct', 1)
+returning id as owner_item_id \gset
+
+do $foreign_denial$
+declare
+  rejected boolean := false;
+  foreign_order_id bigint := current_setting('codex.foreign_order_id')::bigint;
+begin
+  begin
+    insert into public.import_items(order_id, product_name, quantity)
+    values (foreign_order_id, 'foreign-direct', 1);
+  exception when insufficient_privilege then rejected := true;
+  end;
+  if not rejected then raise exception 'El owner insertó en una orden ajena.'; end if;
+end;
+$foreign_denial$;
+reset role;
+
+select set_config('request.jwt.claim.role', 'service_role', true);
+set local role service_role;
+do $invalid_payloads$
+declare
+  candidate jsonb;
+  rejected boolean;
+  before_count bigint;
+  owner_order_id bigint;
+  owner_item_id bigint;
+begin
+  select id into owner_order_id
+  from public.import_orders where user_notes = 'guard-rls-owner';
+  select id into owner_item_id
+  from public.import_items where order_id = owner_order_id and product_name = 'owner-direct';
+  select count(*) into before_count
+  from public.import_items where order_id = owner_order_id;
+
+  foreach candidate in array array[
+    '{}'::jsonb,
+    '{"product_name":"x","image_url":"","quantity":1,"platform":"Otro","unit_price":1,"tax_percent":0,"shipping_cost":0,"set_name":"","collector_number":""}'::jsonb,
+    '{"product_name":null,"image_url":"","quantity":1,"platform":"Otro","unit_price":1,"tax_percent":0,"shipping_cost":0,"set_name":"","collector_number":"","product_url":""}'::jsonb,
+    '{"product_name":"x","image_url":"","quantity":1,"platform":"Otro","unit_price":1,"tax_percent":0,"shipping_cost":0,"set_name":"","collector_number":"","product_url":"","extra":true}'::jsonb,
+    '{"product_name":"x","image_url":"","quantity":1.5,"platform":"Otro","unit_price":1,"tax_percent":0,"shipping_cost":0,"set_name":"","collector_number":"","product_url":""}'::jsonb
+  ] loop
+    rejected := false;
+    begin
+      perform public.admin_mutate_import_item_atomic(
+        owner_order_id, null, 'insert', candidate
+      );
+    exception when sqlstate '22023' then rejected := true;
+    end;
+    if not rejected then raise exception 'Payload parcial aceptado: %', candidate; end if;
+  end loop;
+
+  rejected := false;
+  begin
+    perform public.admin_mutate_import_item_atomic(
+      owner_order_id, owner_item_id, 'set-flag', '{}'::jsonb
+    );
+  exception when sqlstate '22023' then rejected := true;
+  end;
+  if not rejected then raise exception 'set-flag vacío fue aceptado.'; end if;
+
+  if (select count(*) from public.import_items where order_id = owner_order_id) <> before_count then
+    raise exception 'Un payload inválido mutó artículos.';
+  end if;
+end;
+$invalid_payloads$;
+reset role;
+rollback;
+`)
+
+  assert.equal(result.status, 0, outputOf(result))
+  assert.match(result.stdout, /ROLLBACK/u)
 })
 
 test('insert/update/delete concurrentes con approve nunca dejan un snapshot aprobado inconsistente', async () => {
