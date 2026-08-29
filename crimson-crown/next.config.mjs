@@ -1,3 +1,7 @@
+import { assertDeploymentEnvironment } from './scripts/assert-deployment-environment.mjs'
+
+assertDeploymentEnvironment()
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {

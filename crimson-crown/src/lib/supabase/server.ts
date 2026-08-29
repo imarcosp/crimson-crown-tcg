@@ -1,17 +1,22 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { assertSafeDevelopmentSupabaseUrl } from '@/lib/environment/production-guards'
+import {
+  assertSafeRuntimeSupabaseUrl,
+  UnsafeEnvironmentError,
+} from '@/lib/environment/production-guards'
 
 export async function createClient() {
-  const cookieStore = await cookies()
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  if (process.env.NODE_ENV === 'development') {
-    assertSafeDevelopmentSupabaseUrl(url)
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+  const safeUrl = assertSafeRuntimeSupabaseUrl(url)
+  if (!key.trim()) {
+    throw new UnsafeEnvironmentError('Entorno Supabase incompleto para este deployment.')
   }
+  const cookieStore = await cookies()
 
   return createServerClient(
-    url,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    safeUrl.toString(),
+    key,
     {
       cookies: {
         getAll() {

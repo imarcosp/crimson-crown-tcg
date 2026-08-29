@@ -17,8 +17,13 @@ export async function proxy(request: NextRequest) {
   })
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+  let safeSupabaseUrl: URL
   try {
-    assertSafeRuntimeSupabaseUrl(supabaseUrl)
+    safeSupabaseUrl = assertSafeRuntimeSupabaseUrl(supabaseUrl)
+    if (!supabaseKey.trim()) {
+      throw new UnsafeEnvironmentError('Entorno Supabase incompleto para este deployment.')
+    }
   } catch (error) {
     if (error instanceof UnsafeEnvironmentError) {
       console.error('[Proxy] Entorno Supabase bloqueado:', error.name)
@@ -30,8 +35,8 @@ export async function proxy(request: NextRequest) {
   }
 
   const supabase = createServerClient(
-    supabaseUrl,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    safeSupabaseUrl.toString(),
+    supabaseKey,
     {
       cookies: {
         getAll() {

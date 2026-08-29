@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/assert-deployment-environment.mjs && next build",
     "typecheck": "tsc --noEmit",
     "start": "next start",
     "lint": "eslint",
     "update-prices": "node scripts/update-prices.mjs",
     "sync:master-healer": "node scripts/sync-master-healer-v2-compatible.mjs",
-    "test:environment-safety": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types src/lib/environment/production-guards.test.ts src/lib/auth/admin-access.test.ts src/config/site.test.ts src/lib/exchange-rate.test.ts src/store/cartStore.test.ts src/app/actions/checkout-helpers.test.ts scripts/assert-safe-test-environment.test.mjs scripts/write-local-test-environment.test.mjs scripts/local-db/verify-artifact-location.test.mjs scripts/local-db/assert-local-network-isolation.test.mjs scripts/local-db/install-local-firewall-rules.test.mjs scripts/local-db/sanitize-public.test.mjs scripts/local-db/checkout-action-contract.test.mjs scripts/local-db/release-stock-route-contract.test.mjs scripts/assert-vercel-environment-safety.test.mjs scripts/local-db/production-migration-readiness.test.mjs scripts/typecheck-contract.test.mjs",
+    "test:environment-safety": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types src/lib/environment/production-guards.test.ts src/lib/auth/admin-access.test.ts src/config/site.test.ts src/lib/exchange-rate.test.ts src/store/cartStore.test.ts src/app/actions/checkout-helpers.test.ts scripts/assert-safe-test-environment.test.mjs scripts/write-local-test-environment.test.mjs scripts/local-db/verify-artifact-location.test.mjs scripts/local-db/assert-local-network-isolation.test.mjs scripts/local-db/install-local-firewall-rules.test.mjs scripts/local-db/sanitize-public.test.mjs scripts/local-db/checkout-action-contract.test.mjs scripts/local-db/release-stock-route-contract.test.mjs scripts/assert-deployment-environment.test.mjs scripts/assert-vercel-environment-safety.test.mjs scripts/local-db/production-migration-readiness.test.mjs scripts/typecheck-contract.test.mjs",
+    "test:deployment-safety": "node --test scripts/assert-deployment-environment.test.mjs scripts/assert-vercel-environment-safety.test.mjs",
     "test:local-security": "node scripts/local-db/security-matrix.mjs",
     "test:local-financial": "node scripts/local-db/financial-matrix.mjs",
     "test:local-atomic-checkout": "node scripts/local-db/checkout-atomic-matrix.mjs",
@@ -24,6 +25,9 @@
     "local-db:assert-network": "node scripts/local-db/assert-local-network-isolation.mjs",
     "local-db:install-firewall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/local-db/install-local-firewall-rules.ps1",
     "test:e2e": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/assert-safe-test-environment.mjs && playwright test"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "dependencies": {
     "@mercadopago/sdk-react": "^1.0.7",
