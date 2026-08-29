@@ -1,13 +1,18 @@
 import 'dotenv/config'
 import fs from 'fs'
 import path from 'path'
-import { createClient } from '@supabase/supabase-js'
+import {
+  assertLegacyRpcMigrationOptIn,
+  createOperationalSupabaseClient as createClient,
+} from './lib/guarded-supabase-client.mjs'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const supabase = createClient(supabaseUrl, supabaseKey)
-
 async function run() {
+  // Legacy RPC execution is deprecated. It remains quarantined behind both this
+  // script-specific opt-in and the guarded operational target declaration.
+  assertLegacyRpcMigrationOptIn()
+  const supabase = createClient(supabaseUrl, supabaseKey)
   const sqlPath = path.join(process.cwd(), 'supabase/migrations/20240701000000_search_functions.sql')
   console.log(`Reading migration from: ${sqlPath}`)
   
@@ -40,4 +45,12 @@ async function run() {
   }
 }
 
-run()
+run().catch((error) => {
+  if (error instanceof Error && error.name === 'UnsafeEnvironmentError') {
+    console.error('UnsafeEnvironmentError: La migración RPC heredada no está habilitada.')
+    process.exitCode = 1
+    return
+  }
+
+  throw error
+})

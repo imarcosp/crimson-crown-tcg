@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createServerClient } from '@supabase/ssr'
+import { createGuardedServerClient as createServerClient } from '@/lib/supabase/guarded-constructors'
 import { cookies } from 'next/headers'
 import { CheckCircle, AlertCircle, Clock } from 'lucide-react'
 import PaymentVerifier from '@/components/cart/PaymentVerifier'

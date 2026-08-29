@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { createServerClient } from '@supabase/ssr'
+import {
+  createGuardedServerClient as createServerClient,
+  createGuardedSupabaseClient as createClient,
+} from '@/lib/supabase/guarded-constructors'
 import { cookies } from 'next/headers'
 
 export async function GET() {

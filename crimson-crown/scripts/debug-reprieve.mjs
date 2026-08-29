@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
+import { createOperationalSupabaseClient as createClient } from './lib/guarded-supabase-client.mjs'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 const TARGET_ID = 'ab9eef1c-8e8e-45e6-aaef-98ff569a1845'

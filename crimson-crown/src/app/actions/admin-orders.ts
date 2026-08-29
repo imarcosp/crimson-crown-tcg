@@ -1,5 +1,5 @@
 "use server"
-import { createServerClient } from '@supabase/ssr'
+import { createGuardedServerClient as createServerClient } from '@/lib/supabase/guarded-constructors'
 import { cookies } from 'next/headers'
 import { siteConfig } from '@/config/site'
 import { getResendClient } from '@/lib/email/resend-client'

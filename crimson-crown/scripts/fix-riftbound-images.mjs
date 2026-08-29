@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import axios from 'axios'
-import { createClient } from '@supabase/supabase-js'
+import { createOperationalSupabaseClient as createClient } from './lib/guarded-supabase-client.mjs'
 
 // --- CONFIGURACIÓN ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL

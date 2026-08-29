@@ -1,7 +1,7 @@
 "use server"
 import { render } from '@react-email/render'
 import OrderTemplate from '@/components/emails/OrderTemplate'
-import { createClient } from '@supabase/supabase-js'
+import { createGuardedSupabaseClient as createClient } from '@/lib/supabase/guarded-constructors'
 import { siteConfig } from '@/config/site'
 import {
   generateBuylistQuotePdfBuffer,

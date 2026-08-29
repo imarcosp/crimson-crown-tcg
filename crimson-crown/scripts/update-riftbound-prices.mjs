@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
+import { createOperationalSupabaseClient as createClient } from './lib/guarded-supabase-client.mjs'
 import axios from 'axios'
 import { load as cheerioLoad } from 'cheerio'
 

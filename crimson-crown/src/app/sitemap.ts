@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next'
-import { createClient } from '@supabase/supabase-js'
+import { createGuardedSupabaseClient as createClient } from '@/lib/supabase/guarded-constructors'
 import { siteConfig } from '@/config/site'
 
 // 1. FORZAR DINAMISMO: Esto obliga a Next.js a regenerar el sitemap en cada petición

@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from 'next/cache'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { createGuardedSupabaseClient as createAdminClient } from '@/lib/supabase/guarded-constructors'
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'
 import { ADMIN_EMAILS, OWNER_ADMIN_EMAIL } from '@/lib/constants'
 import { COMMISSION_START_PERIOD_KEY, getCurrentCommissionMonthKey } from '@/lib/commissions'

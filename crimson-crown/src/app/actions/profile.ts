@@ -1,5 +1,5 @@
 "use server"
-import { createServerClient } from '@supabase/ssr'
+import { createGuardedServerClient as createServerClient } from '@/lib/supabase/guarded-constructors'
 import { cookies } from 'next/headers'
 
 const getSupabase = async () => {

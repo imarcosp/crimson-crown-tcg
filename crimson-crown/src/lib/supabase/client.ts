@@ -1,4 +1,4 @@
-import { createBrowserClient } from '@supabase/ssr'
+import { createGuardedBrowserClient as createBrowserClient } from '@/lib/supabase/guarded-constructors'
 import {
   assertSafeClientSupabaseUrl,
   UnsafeEnvironmentError,

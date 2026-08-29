@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import dotenv from 'dotenv'
-import { createClient } from '@supabase/supabase-js'
+import { createOperationalSupabaseClient as createClient } from '../lib/guarded-supabase-client.mjs'
 
 dotenv.config({ path: '.env.test.local', override: true })
 

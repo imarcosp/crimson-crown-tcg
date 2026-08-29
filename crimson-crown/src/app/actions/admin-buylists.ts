@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient as createAdminClient } from "@supabase/supabase-js"
+import { createGuardedSupabaseClient as createAdminClient } from '@/lib/supabase/guarded-constructors'
 import { createClient } from "@/lib/supabase/server"
 import { ADMIN_EMAILS } from "@/lib/constants"
 import { sendBuylistNotification } from "@/app/actions/email"

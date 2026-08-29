@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
+import { createGuardedServerClient as createServerClient } from '@/lib/supabase/guarded-constructors'
 import { NextResponse, type NextRequest } from 'next/server'
 import { ADMIN_EMAILS } from '@/lib/constants'
 import {

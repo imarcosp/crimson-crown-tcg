@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
+import { createGuardedServerClient as createServerClient } from '@/lib/supabase/guarded-constructors'
 import { cookies } from 'next/headers'
 import { fetchDolarCripto } from '@/lib/dolar'
 import { EXCHANGE_RATE } from '@/lib/constants'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { createGuardedSupabaseClient as createServiceClient } from '@/lib/supabase/guarded-constructors'
 
 export async function GET() {
   const cookieStore = await cookies()

@@ -1,7 +1,7 @@
 "use server"
 
 import { MercadoPagoConfig, Payment } from 'mercadopago'
-import { createClient } from '@supabase/supabase-js'
+import { createGuardedSupabaseClient as createClient } from '@/lib/supabase/guarded-constructors'
 
 const client = new MercadoPagoConfig({ 
   accessToken: process.env.MP_ACCESS_TOKEN || '' 

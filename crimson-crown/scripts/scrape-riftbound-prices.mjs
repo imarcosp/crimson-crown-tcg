@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { chromium } from 'playwright'
-import { createClient } from '@supabase/supabase-js'
+import { createOperationalSupabaseClient as createClient } from './lib/guarded-supabase-client.mjs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 

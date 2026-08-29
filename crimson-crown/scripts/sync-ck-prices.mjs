@@ -1,6 +1,6 @@
 import { resolve } from 'path';
 import dotenv from 'dotenv';
-import { createClient } from '@supabase/supabase-js';
+import { createOperationalSupabaseClient as createClient } from './lib/guarded-supabase-client.mjs';
 import fs from 'fs';
 
 // 1. CONFIGURACIÓN INICIAL

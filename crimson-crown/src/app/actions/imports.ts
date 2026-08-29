@@ -1,7 +1,7 @@
 'use server'
-import { createServerClient } from '@supabase/ssr'
+import { createGuardedServerClient as createServerClient } from '@/lib/supabase/guarded-constructors'
 import { cookies } from 'next/headers'
-import { createClient } from '@supabase/supabase-js'
+import { createGuardedSupabaseClient as createClient } from '@/lib/supabase/guarded-constructors'
 
 // Inicializamos el cliente Admin para bypassear RLS
 const adminSupabase = createClient(

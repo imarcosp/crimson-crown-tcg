@@ -1,7 +1,7 @@
 import path from "path"
 import { readFile } from "fs/promises"
 import puppeteer from "puppeteer"
-import { createClient as createAdminClient } from "@supabase/supabase-js"
+import { createGuardedSupabaseClient as createAdminClient } from '@/lib/supabase/guarded-constructors'
 import { siteConfig } from "@/config/site"
 
 export type BuylistQuotePdfItem = {

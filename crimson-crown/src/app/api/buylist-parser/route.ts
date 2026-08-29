@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
+import { createGuardedServerClient as createServerClient } from '@/lib/supabase/guarded-constructors'
 import { cookies } from 'next/headers'
 import { buildCardsToProcessFromMoxfieldData, extractMoxfieldDeckId, fetchMoxfieldDeckWithDiagnostics, mapMoxfieldAttemptsToError } from '@/lib/moxfield'
 

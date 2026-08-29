@@ -1,5 +1,5 @@
 // scripts/find-opportunities.ts
-import { createClient } from '@supabase/supabase-js'
+import { createOperationalSupabaseClient as createClient } from './lib/guarded-supabase-client.mjs'
 import axios from 'axios'
 import dotenv from 'dotenv'
 import path from 'path'

@@ -1,6 +1,6 @@
 "use server"
 
-import { createServerClient } from '@supabase/ssr'
+import { createGuardedServerClient as createServerClient } from '@/lib/supabase/guarded-constructors'
 import { sendOrderEmails } from '@/app/actions/email'
 import { cookies } from 'next/headers'
 import { requiresCheckoutAddress } from './checkout-helpers'

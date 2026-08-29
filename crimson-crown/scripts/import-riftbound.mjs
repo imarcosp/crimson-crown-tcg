@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { createClient } from '@supabase/supabase-js'
+import { createOperationalSupabaseClient as createClient } from './lib/guarded-supabase-client.mjs'
 import fs from 'fs'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)

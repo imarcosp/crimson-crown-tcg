@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
-import { createClient } from '@supabase/supabase-js';
+import { createOperationalSupabaseClient as createClient } from './lib/guarded-supabase-client.mjs';
 
 // --- STREAM JSON IMPORTS ---
 import streamChain from 'stream-chain';
