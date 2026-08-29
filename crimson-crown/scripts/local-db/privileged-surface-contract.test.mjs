@@ -42,6 +42,114 @@ const requiredSearchPathSignatures = [
 
 const authenticatedSignature = 'is_commission_admin()'
 
+function expectedMigrationStatements() {
+  const statements = [
+    'begin',
+    'alter view public.admin_users set (security_invoker = true)',
+    'revoke all on table public.admin_users from public, anon, authenticated',
+  ]
+
+  for (const signature of requiredSearchPathSignatures) {
+    statements.push(`alter function public.${signature} set search_path = public, pg_temp`)
+  }
+
+  for (const signature of requiredSearchPathSignatures) {
+    const revokedRoles = signature === authenticatedSignature
+      ? 'public, anon'
+      : 'public, anon, authenticated'
+    const grantedRoles = signature === authenticatedSignature
+      ? 'authenticated, service_role'
+      : 'service_role'
+    statements.push(`revoke all on function public.${signature} from ${revokedRoles}`)
+    statements.push(`grant execute on function public.${signature} to ${grantedRoles}`)
+  }
+
+  statements.push('commit')
+  return statements
+}
+
+function stripSupportedSqlComments(sql) {
+  assert.equal(typeof sql, 'string')
+  let output = ''
+  let state = 'sql'
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const character = sql[index]
+    const next = sql[index + 1]
+
+    if (state === 'line-comment') {
+      if (character === '\r' || character === '\n') {
+        output += '\n'
+        state = 'sql'
+      }
+      continue
+    }
+
+    if (state === 'block-comment') {
+      if (character === '/' && next === '*') {
+        throw new Error('SQL ambiguo: comentarios de bloque anidados no están soportados')
+      }
+      if (character === '*' && next === '/') {
+        output += ' '
+        state = 'sql'
+        index += 1
+      }
+      continue
+    }
+
+    if (character === '-' && next === '-') {
+      output += ' '
+      state = 'line-comment'
+      index += 1
+      continue
+    }
+    if (character === '/' && next === '*') {
+      output += ' '
+      state = 'block-comment'
+      index += 1
+      continue
+    }
+    if (character === '$') {
+      throw new Error('SQL ambiguo: dollar quoting o parámetros no están soportados')
+    }
+    if (character === "'" || character === '"' || character === '`') {
+      throw new Error('SQL ambiguo: literales o identificadores quoted no están soportados')
+    }
+
+    output += character
+  }
+
+  if (state === 'block-comment') {
+    throw new Error('SQL ambiguo: comentario de bloque sin cierre')
+  }
+  return output
+}
+
+function parseConservativeStatements(sql) {
+  const withoutComments = stripSupportedSqlComments(sql)
+  if (!withoutComments.trimEnd().endsWith(';')) {
+    throw new Error('SQL ambiguo: toda sentencia debe terminar en punto y coma')
+  }
+
+  const chunks = withoutComments.split(';')
+  const trailer = chunks.pop()
+  if (trailer.trim().length > 0 || chunks.some((chunk) => chunk.trim().length === 0)) {
+    throw new Error('SQL ambiguo: sentencia vacía o contenido posterior al último punto y coma')
+  }
+
+  return chunks.map((chunk) => chunk.trim().replace(/\s+/g, ' ').toLowerCase())
+}
+
+function assertExactMigrationStatements(sql) {
+  const actual = parseConservativeStatements(sql)
+  const expected = expectedMigrationStatements()
+  try {
+    assert.deepEqual(actual, expected)
+  } catch (cause) {
+    throw new Error('La migración no coincide con la secuencia exacta permitida.', { cause })
+  }
+}
+
 async function assertEvidenceIsVerifiable(evidence) {
   assert.ok(['repository', 'catalog'].includes(evidence.kind), `kind inválido: ${evidence.location}`)
   assert.ok(typeof evidence.detail === 'string' && evidence.detail.length > 0)
@@ -94,42 +202,46 @@ async function loadSingleMigration(suffix) {
 }
 
 test('la migración futura endurece la vista y fija los 24 search_path', async () => {
-  const sql = (await loadSingleMigration('_harden_privileged_surfaces.sql')).toLowerCase().trim()
+  const sql = await loadSingleMigration('_harden_privileged_surfaces.sql')
+  assertExactMigrationStatements(sql)
+})
 
-  assert.match(sql, /^begin;/)
-  assert.match(sql, /commit;$/)
-  assert.match(sql, /alter view public\.admin_users set \(security_invoker\s*=\s*true\)/)
-  assert.match(sql, /revoke all on (table )?public\.admin_users from public, anon, authenticated/)
+test('el contrato rechaza cualquier sentencia adicional o SQL dinámico', async (t) => {
+  const sql = await loadSingleMigration('_harden_privileged_surfaces.sql')
+  const maliciousStatements = [
+    ['grant all a anon', 'grant all on table public.admin_users to anon;'],
+    ['grant global de funciones', 'grant execute on all functions in schema public to anon;'],
+    ['alter table fuera de alcance', 'alter table public.products disable row level security;'],
+    ['delete de datos', 'delete from public.products;'],
+    [
+      'execute mediante variable',
+      "do $$ declare command text := 'grant all on table public.admin_users to anon'; begin execute command; end $$;",
+    ],
+  ]
 
-  for (const signature of requiredSearchPathSignatures) {
-    assert.ok(
-      sql.includes(`alter function public.${signature} set search_path = public, pg_temp`),
-      `falta search_path fijo: ${signature}`,
-    )
-
-    const revokedRoles = signature === authenticatedSignature
-      ? 'public, anon'
-      : 'public, anon, authenticated'
-    const grantedRoles = signature === authenticatedSignature
-      ? 'authenticated, service_role'
-      : 'service_role'
-    assert.ok(
-      sql.includes(`revoke all on function public.${signature} from ${revokedRoles}`),
-      `falta revoke exacto: ${signature}`,
-    )
-    assert.ok(
-      sql.includes(`grant execute on function public.${signature} to ${grantedRoles}`),
-      `falta grant exacto: ${signature}`,
-    )
+  for (const [name, statement] of maliciousStatements) {
+    await t.test(name, () => {
+      const candidate = sql.replace(/commit;\s*$/i, `${statement}\ncommit;`)
+      assert.throws(
+        () => assertExactMigrationStatements(candidate),
+        /SQL ambiguo|migración no coincide con la secuencia exacta/,
+      )
+    })
   }
+})
 
-  assert.equal((sql.match(/alter function public\./g) ?? []).length, 24)
-  assert.equal((sql.match(/revoke all on function public\./g) ?? []).length, 24)
-  assert.equal((sql.match(/grant execute on function public\./g) ?? []).length, 24)
-  assert.doesNotMatch(sql, /\bexecute\s+format\s*\(/)
-  assert.doesNotMatch(sql, /\bexecute\s+'[^']*'/)
-  assert.doesNotMatch(sql, /\b(insert|update|truncate|drop|create)\b/)
-  assert.doesNotMatch(sql, /\bowner\s+to\b/)
+test('el parser acepta comentarios simples y rechaza comentarios ambiguos', async () => {
+  const sql = await loadSingleMigration('_harden_privileged_surfaces.sql')
+  const reviewedSql = sql
+    .replace('begin;', '-- revisión humana\nbegin;')
+    .replace('alter view', '/* opción de vista revisada */\nalter view')
+  assert.doesNotThrow(() => assertExactMigrationStatements(reviewedSql))
+
+  const nestedComment = sql.replace('begin;', 'begin; /* exterior /* anidado */ */')
+  assert.throws(() => assertExactMigrationStatements(nestedComment), /SQL ambiguo/)
+
+  const unterminatedComment = `${sql}\n/* sin cierre`
+  assert.throws(() => assertExactMigrationStatements(unterminatedComment), /SQL ambiguo/)
 })
 
 test('el inventario clasifica exactamente las 24 superficies reportadas', async () => {
