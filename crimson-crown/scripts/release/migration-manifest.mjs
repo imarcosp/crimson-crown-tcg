@@ -87,10 +87,18 @@ function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-export async function loadAndValidateManifest({ rootDir, allowCandidates }) {
+export function getMigrationManifestPaths({ rootDir }) {
   const absoluteRoot = resolve(rootDir)
-  const manifestPath = join(absoluteRoot, manifestRelativePath)
-  const migrationsPath = join(absoluteRoot, migrationsRelativePath)
+
+  return {
+    rootDir: absoluteRoot,
+    manifestPath: join(absoluteRoot, manifestRelativePath),
+    migrationsPath: join(absoluteRoot, migrationsRelativePath),
+  }
+}
+
+export async function loadAndValidateManifest({ rootDir, allowCandidates }) {
+  const { manifestPath, migrationsPath } = getMigrationManifestPaths({ rootDir })
   let manifest
 
   try {
