@@ -1,5 +1,6 @@
-import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import { getMigrationManifestPaths, loadAndValidateManifest } from './migration-manifest.mjs'
 
@@ -13,6 +14,10 @@ function fail(message) {
 function isWithin(path, parent) {
   const relativePath = relative(parent, path)
   return relativePath === '' || (relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath))
+}
+
+function sha256(bytes) {
+  return createHash('sha256').update(bytes).digest('hex')
 }
 
 function replaceMigrationSetting(config) {
@@ -50,14 +55,60 @@ function replaceMigrationSetting(config) {
   return projectedConfig
 }
 
-async function ensureEmptyOutputDirectory(outputDir) {
+async function resolvePhysicalPaths({ rootDir, outputDir }) {
+  const absoluteRoot = resolve(rootDir)
+  const absoluteOutput = resolve(outputDir)
+  let physicalRoot
+  let physicalParent
+
   try {
-    if ((await readdir(outputDir)).length !== 0) {
-      fail('directorio de proyección no está vacío')
-    }
+    physicalRoot = await realpath(absoluteRoot)
   } catch (error) {
-    if (error?.code !== 'ENOENT') throw error
-    await mkdir(outputDir, { recursive: true })
+    fail('directorio raíz de proyección no disponible')
+  }
+  try {
+    physicalParent = await realpath(dirname(absoluteOutput))
+  } catch (error) {
+    fail('directorio padre de proyección no disponible')
+  }
+
+  const physicalOutput = join(physicalParent, basename(absoluteOutput))
+  let physicalEvidence = null
+  try {
+    physicalEvidence = await realpath(join(physicalRoot, releaseEvidenceRelativePath))
+  } catch (error) {
+    if (error?.code !== 'ENOENT') fail('directorio de evidencia de release no disponible')
+  }
+
+  if (isWithin(physicalOutput, physicalRoot) && (!physicalEvidence || !isWithin(physicalOutput, physicalEvidence))) {
+    fail('directorio de proyección dentro del repositorio no permitido')
+  }
+
+  return { physicalRoot, physicalOutput }
+}
+
+async function reserveOutputDirectory(outputDir) {
+  try {
+    await mkdir(outputDir)
+  } catch (error) {
+    if (error?.code === 'EEXIST') fail('directorio de proyección ya existe')
+    fail('no se pudo reservar el directorio de proyección')
+  }
+}
+
+async function createProjectionDirectory(directory) {
+  try {
+    await mkdir(directory)
+  } catch (error) {
+    fail('no se pudo crear el directorio de proyección')
+  }
+}
+
+async function writeExclusive(path, contents) {
+  try {
+    await writeFile(path, contents, { flag: 'wx' })
+  } catch (error) {
+    fail('no se pudo escribir el archivo de proyección')
   }
 }
 
@@ -66,16 +117,11 @@ function remoteMarker(entry) {
 }
 
 export async function buildProjection({ rootDir, outputDir, allowCandidates = false }) {
-  const { rootDir: absoluteRoot, migrationsPath } = getMigrationManifestPaths({ rootDir })
-  const absoluteOutput = resolve(outputDir)
-  const releaseEvidencePath = resolve(absoluteRoot, releaseEvidenceRelativePath)
+  const { physicalRoot, physicalOutput } = await resolvePhysicalPaths({ rootDir, outputDir })
+  const { migrationsPath } = getMigrationManifestPaths({ rootDir: physicalRoot })
 
-  if (isWithin(absoluteOutput, absoluteRoot) && !isWithin(absoluteOutput, releaseEvidencePath)) {
-    fail('directorio de proyección dentro del repositorio no permitido')
-  }
-
-  const manifest = await loadAndValidateManifest({ rootDir: absoluteRoot, allowCandidates })
-  const sourceConfigPath = join(absoluteRoot, 'supabase', 'config.toml')
+  const manifest = await loadAndValidateManifest({ rootDir: physicalRoot, allowCandidates })
+  const sourceConfigPath = join(physicalRoot, 'supabase', 'config.toml')
   let projectedConfig
   try {
     projectedConfig = replaceMigrationSetting(await readFile(sourceConfigPath, 'utf8'))
@@ -84,13 +130,13 @@ export async function buildProjection({ rootDir, outputDir, allowCandidates = fa
     fail('no se pudo preparar la configuración de Supabase')
   }
 
-  await ensureEmptyOutputDirectory(absoluteOutput)
+  await reserveOutputDirectory(physicalOutput)
 
-  const projectedSupabasePath = join(absoluteOutput, 'supabase')
+  const projectedSupabasePath = join(physicalOutput, 'supabase')
   const projectedMigrationsPath = join(projectedSupabasePath, 'migrations')
-  await mkdir(projectedMigrationsPath, { recursive: true })
-  await cp(sourceConfigPath, join(projectedSupabasePath, 'config.toml'))
-  await writeFile(join(projectedSupabasePath, 'config.toml'), projectedConfig)
+  await createProjectionDirectory(projectedSupabasePath)
+  await createProjectionDirectory(projectedMigrationsPath)
+  await writeExclusive(join(projectedSupabasePath, 'config.toml'), projectedConfig)
 
   for (const entry of manifest.entries) {
     if (entry.class === 'baseline_present') continue
@@ -100,10 +146,19 @@ export async function buildProjection({ rootDir, outputDir, allowCandidates = fa
       if (!projectedRemoteFilePattern.test(projectedFile)) {
         fail('nombre remoto de migración no seguro')
       }
-      await writeFile(join(projectedMigrationsPath, projectedFile), remoteMarker(entry))
+      await writeExclusive(join(projectedMigrationsPath, projectedFile), remoteMarker(entry))
       continue
     }
 
-    await cp(join(migrationsPath, entry.file), join(projectedMigrationsPath, entry.file))
+    let forwardBytes
+    try {
+      forwardBytes = await readFile(join(migrationsPath, entry.file))
+    } catch (error) {
+      fail('no se pudo leer la migración forward')
+    }
+    if (sha256(forwardBytes) !== entry.sha256) {
+      fail('hash SHA-256 no coincide')
+    }
+    await writeExclusive(join(projectedMigrationsPath, entry.file), forwardBytes)
   }
 }

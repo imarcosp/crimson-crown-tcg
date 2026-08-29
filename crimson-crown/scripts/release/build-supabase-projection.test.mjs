@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import test from 'node:test'
@@ -88,7 +88,8 @@ function parseToml(text) {
 
 async function withFixture(callback, { config } = {}) {
   const rootDir = await mkdtemp(join(tmpdir(), 'crimson-release-projection-root-'))
-  const outputDir = await mkdtemp(join(tmpdir(), 'crimson-release-projection-output-'))
+  const outputParent = await mkdtemp(join(tmpdir(), 'crimson-release-projection-output-'))
+  const outputDir = join(outputParent, 'projection')
   const migrationsDir = join(rootDir, 'supabase', 'migrations')
   const manifestPath = join(rootDir, 'scripts', 'release', 'migration-manifest.json')
 
@@ -108,10 +109,10 @@ async function withFixture(callback, { config } = {}) {
   }, null, 2)}\n`)
 
   try {
-    await callback({ rootDir, outputDir })
+    await callback({ rootDir, outputDir, outputParent })
   } finally {
     await rm(rootDir, { recursive: true, force: true })
-    await rm(outputDir, { recursive: true, force: true })
+    await rm(outputParent, { recursive: true, force: true })
   }
 }
 
@@ -159,6 +160,7 @@ test('rejects a projection destination inside the repository outside release evi
 test('permits release evidence inside the ignored repository location', async () => {
   await withFixture(async ({ rootDir }) => {
     const outputDir = join(rootDir, 'local-artifacts', 'release-evidence', 'projection')
+    await mkdir(dirname(outputDir), { recursive: true })
 
     await buildProjection({ rootDir, outputDir })
 
@@ -181,8 +183,61 @@ test('requires exactly one disabled migrations setting in the source config', as
   )
 })
 
+test('refuses an existing output reservation without overwriting it', async () => {
+  await withFixture(async ({ rootDir, outputDir }) => {
+    await mkdir(outputDir)
+    await writeFile(join(outputDir, 'caller-owned.txt'), 'do not replace\n')
+
+    await assert.rejects(
+      () => buildProjection({ rootDir, outputDir }),
+      /directorio de proyección ya existe/,
+    )
+    assert.equal(await readFile(join(outputDir, 'caller-owned.txt'), 'utf8'), 'do not replace\n')
+  })
+})
+
+test('refuses an empty output collision before creating projection files', async () => {
+  await withFixture(async ({ rootDir, outputDir }) => {
+    await mkdir(outputDir)
+
+    await assert.rejects(
+      () => buildProjection({ rootDir, outputDir }),
+      /directorio de proyección ya existe/,
+    )
+    assert.deepEqual(await readdir(outputDir), [])
+  })
+})
+
+test('requires an existing immediate parent for the output reservation', async () => {
+  await withFixture(async ({ rootDir, outputParent }) => {
+    await assert.rejects(
+      () => buildProjection({ rootDir, outputDir: join(outputParent, 'missing-parent', 'projection') }),
+      /directorio padre de proyección no disponible/,
+    )
+  })
+})
+
+test('rejects an external-looking output whose junction parent resolves inside the repository', async (t) => {
+  await withFixture(async ({ rootDir, outputParent }) => {
+    const junctionParent = join(outputParent, 'repository-alias')
+
+    try {
+      await symlink(rootDir, junctionParent, 'junction')
+    } catch (error) {
+      t.skip(`junction unavailable on this host: ${error.code ?? 'unknown error'}`)
+      return
+    }
+
+    await assert.rejects(
+      () => buildProjection({ rootDir, outputDir: join(junctionParent, 'projection') }),
+      /directorio de proyección dentro del repositorio no permitido/,
+    )
+  })
+})
+
 test('keeps the real candidate manifest fail-closed by default', async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), 'crimson-release-projection-real-output-'))
+  const outputParent = await mkdtemp(join(tmpdir(), 'crimson-release-projection-real-output-'))
+  const outputDir = join(outputParent, 'projection')
 
   try {
     await assert.rejects(
@@ -190,6 +245,6 @@ test('keeps the real candidate manifest fail-closed by default', async () => {
       /equivalencia remota sin verificar/,
     )
   } finally {
-    await rm(outputDir, { recursive: true, force: true })
+    await rm(outputParent, { recursive: true, force: true })
   }
 })
