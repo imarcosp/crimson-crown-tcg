@@ -606,6 +606,22 @@ test('rejects an ATX evidence heading hidden inside a raw HTML block', async () 
   }, manifestWithVerifiedEvidence(evidence))
 })
 
+test('rejects an ATX evidence heading after a CommonMark raw tag with trailing content', async () => {
+  const evidence = 'docs/evidence/raw-html-trailing-content.md#verified'
+
+  await withFixture(async (rootDir) => {
+    await writeFile(
+      join(rootDir, 'docs', 'evidence', 'raw-html-trailing-content.md'),
+      '<script type="text/plain">ignored\n# Verified\n</script>\n',
+    )
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    )
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
 test('rejects ATX evidence headings inside processing, declaration, and CDATA blocks', async () => {
   const cases = [
     ['processing.md', '<?proof\n# Verified\n?>\n'],

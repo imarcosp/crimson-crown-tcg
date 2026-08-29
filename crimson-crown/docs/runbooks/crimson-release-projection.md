@@ -13,7 +13,7 @@ Evidence references are resolved physically below `docs/evidence/`. Every lexica
 
 - an ATX heading of levels 1–6 whose text contains only ASCII letters, digits, spaces, `_` and `-`. Its base slug lowercases the text and replaces each run of spaces with `-`; if that slug is already used, the first unused `-1`, `-2` and so on is appended.
 
-Fenced code blocks, HTML comments and raw HTML blocks are ignored. Explicit HTML anchors, Setext headings and inline Markdown-derived labels are intentionally unsupported. Raw HTML covers strict standalone opening/closing tag lines with same-tag depth, processing instructions, declarations and CDATA blocks; headings that need richer text must be replaced by a separate supported ATX evidence heading.
+Fenced code blocks, HTML comments and raw HTML blocks are ignored. Explicit HTML anchors, Setext headings and inline Markdown-derived labels are intentionally unsupported. Raw-text `script`, `pre`, `style` and `textarea` blocks start on the CommonMark tag prefix even when the opening line has trailing content, and end only at the matching close tag. Other tag-start blocks are ignored through the next blank line or EOF; processing instructions, declarations and CDATA blocks use their deterministic terminators. Headings that need richer text must be replaced by a separate supported ATX evidence heading.
 
 Run only after the prerequisites are satisfied:
 

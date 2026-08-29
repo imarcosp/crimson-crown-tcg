@@ -17,9 +17,14 @@ const evidenceSegmentPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const evidenceAnchorPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
 const atxHeadingPattern = /^[ ]{0,3}#{1,6}(?:[ \t]+|$)(.*)$/
 const simpleHeadingTextPattern = /^[A-Za-z0-9 _-]+$/
-const rawHtmlOpeningPattern = /^[ ]{0,3}<([A-Za-z][A-Za-z0-9-]*)(?:[ \t][^<>]*)?>[ \t]*$/
-const rawHtmlClosingPattern = /^[ ]{0,3}<\/([A-Za-z][A-Za-z0-9-]*)>[ \t]*$/
-const voidHtmlTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'])
+const rawTextHtmlOpeningPattern = /^[ ]{0,3}<(script|pre|style|textarea)(?:[ \t>]|$)/i
+const htmlTagBlockOpeningPattern = /^[ ]{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?:[ \t/>]|$)/
+const rawTextHtmlClosingPatterns = Object.freeze({
+  pre: /<\/pre>/i,
+  script: /<\/script>/i,
+  style: /<\/style>/i,
+  textarea: /<\/textarea>/i,
+})
 const controlCharacterPattern = /[\u0000-\u001f\u007f-\u009f]/
 const markdownDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
 const execFileAsync = promisify(execFile)
@@ -204,22 +209,24 @@ function collectMarkdownAnchors(markdown) {
       continue
     }
 
-    const rawHtmlOpening = line.match(rawHtmlOpeningPattern)
-    const rawHtmlClosing = line.match(rawHtmlClosingPattern)
     if (rawHtmlBlock) {
-      if (rawHtmlOpening?.[1].toLowerCase() === rawHtmlBlock.tag) rawHtmlBlock.depth += 1
-      if (rawHtmlClosing?.[1].toLowerCase() === rawHtmlBlock.tag) rawHtmlBlock.depth -= 1
-      if (rawHtmlBlock.depth === 0) rawHtmlBlock = null
-      continue
-    }
-    if (rawHtmlOpening) {
-      const tag = rawHtmlOpening[1].toLowerCase()
-      if (!voidHtmlTags.has(tag) && !line.trimEnd().endsWith('/>')) {
-        rawHtmlBlock = { depth: 1, tag }
+      if (rawHtmlBlock.closingPattern?.test(line) || (!rawHtmlBlock.closingPattern && line.trim() === '')) {
+        rawHtmlBlock = null
       }
       continue
     }
-    if (rawHtmlClosing) continue
+    const rawTextHtmlOpening = line.match(rawTextHtmlOpeningPattern)
+    if (rawTextHtmlOpening) {
+      const closingPattern = rawTextHtmlClosingPatterns[rawTextHtmlOpening[1].toLowerCase()]
+      if (!closingPattern.test(line.slice(rawTextHtmlOpening[0].length))) {
+        rawHtmlBlock = { closingPattern }
+      }
+      continue
+    }
+    if (htmlTagBlockOpeningPattern.test(line)) {
+      rawHtmlBlock = { closingPattern: null }
+      continue
+    }
 
     const atxHeading = line.match(atxHeadingPattern)
     if (!atxHeading) continue
