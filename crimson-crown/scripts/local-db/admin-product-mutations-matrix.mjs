@@ -150,6 +150,25 @@ async function main() {
     assert.ifError(afterConcurrent.error)
     assert.equal(Number(afterConcurrent.data.stock), 9, 'dos reposiciones concurrentes deben conservar la suma exacta')
 
+    const invalidCsvLikeRow = await admin.rpc('admin_create_or_restock_product', {
+      inventory_id_input: inventoryIds[0],
+      product_input: {
+        ...baseProduct,
+        name: `Local Invalid CSV Product ${runId}`,
+        collector_number: `invalid-${runId}`,
+        stock: -2,
+      },
+      operation_key_input: operationKey('invalid-csv-row'),
+    })
+    assert.equal(invalidCsvLikeRow.error?.code, '22023', 'una cantidad negativa debe rechazarse como dato inválido')
+    const invalidCsvLikeProduct = await service
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('inventory_id', inventoryIds[0])
+      .eq('name', `Local Invalid CSV Product ${runId}`)
+    assert.ifError(invalidCsvLikeProduct.error)
+    assert.equal(invalidCsvLikeProduct.count, 0, 'una fila CSV inválida no debe crear productos')
+
     const otherInventory = rpcRow(await admin.rpc('admin_create_or_restock_product', {
       inventory_id_input: inventoryIds[1],
       product_input: { ...baseProduct, stock: 0 },
@@ -246,6 +265,7 @@ async function main() {
       standardBlocked: true,
       createIdempotent: true,
       concurrentRestockExact: true,
+      invalidCsvRowRejected: true,
       inventoryIsolation: true,
       updateAudited: true,
       historicalDeleteRejected: true,

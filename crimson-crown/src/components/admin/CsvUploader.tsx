@@ -1,9 +1,9 @@
 "use client"
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Papa from 'papaparse'
 import { Upload, Loader2, FileSpreadsheet, CheckCircle } from 'lucide-react'
-import { processWishlistNotifications } from '@/app/actions/wishlist' // <--- IMPORTAR
+import { importAdminProducts } from '@/app/actions/admin-products'
 import { MIN_PRODUCT_PRICE_USD } from '@/lib/pricing/constants'
 import {
   canonicalizeMagicFinishLabel,
@@ -19,6 +19,7 @@ export default function CsvUploader({ inventoryId }: { inventoryId: string }) {
   const [logs, setLogs] = useState<string[]>([])
   const [progress, setProgress] = useState(0)
   const [stats, setStats] = useState({ total: 0, inserted: 0, updated: 0, errors: 0 })
+  const importRunIdRef = useRef<string | null>(null)
 
   const mapCondition = (cond: string) => {
     const c = String(cond).toLowerCase()
@@ -76,8 +77,6 @@ export default function CsvUploader({ inventoryId }: { inventoryId: string }) {
     return null
   }
 
-  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
   const fetchExternalFinishContext = async (scryfallId: string | null) => {
     if (!scryfallId) return null
     const { data, error } = await supabase
@@ -116,6 +115,7 @@ export default function CsvUploader({ inventoryId }: { inventoryId: string }) {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
     if (!selectedFile) return
+    importRunIdRef.current = crypto.randomUUID()
     setFile(selectedFile)
     Papa.parse(selectedFile, {
       header: true,
@@ -138,149 +138,98 @@ export default function CsvUploader({ inventoryId }: { inventoryId: string }) {
     setStep('processing')
     setLogs([])
     setStats({ total: parsedRows.length, inserted: 0, updated: 0, errors: 0 })
-    let inserted = 0
-    let updated = 0
-    let errs = 0
-    const BATCH_SIZE = 5
-    
-    // LISTA DE PRODUCTOS QUE ENTRARON CON STOCK (Para notificar)
-    const stockArrivals: { id: string, name: string }[] = []
+    setProgress(0)
+    const runId = importRunIdRef.current || crypto.randomUUID()
+    importRunIdRef.current = runId
+    const preparationErrors: Array<{ index: number; error: string }> = []
+    const preparedRows: Array<{ originalIndex: number; operationKey: string; product: unknown }> = []
+    const PREPARATION_BATCH_SIZE = 5
 
-    for (let i = 0; i < parsedRows.length; i += BATCH_SIZE) {
-      const batch = parsedRows.slice(i, i + BATCH_SIZE)
-      await Promise.all(
-        batch.map(async (row) => {
-          const name = getCol(row, 'Name', 'name')
-          if (!name) return
-          try {
-            let finish = 'Non-Foil'
-            const foilVal = String(getCol(row, 'Foil') || '').toLowerCase()
-            const etchedVal = String(getCol(row, 'Etched') || '').toLowerCase()
-            if (foilVal.includes('foil') || foilVal === 'true' || foilVal === 'yes') finish = 'Foil'
-            if (etchedVal === 'true' || name.toLowerCase().includes('etched')) finish = 'Etched Foil'
-            
-            const condition = mapCondition(getCol(row, 'Condition') || '')
-            const language = mapLanguage(getCol(row, 'Language') || '')
-            const scryfallId = getCol(row, 'Scryfall ID', 'scryfall_id', 'scryfall id') || null
-            const externalContext = await fetchExternalFinishContext(scryfallId)
-            finish = resolveMagicFinishSelection(canonicalizeMagicFinishLabel(finish), null, externalContext)
-            const stockToAdd = Number(getCol(row, 'Quantity', 'quantity') || 1)
-            const setName = getCol(row, 'Set name', 'set_name') || getCol(row, 'Set code', 'code')
-            const collectorNumber = String(getCol(row, 'Collector number', 'number') || '').trim()
-            const normalize = (s: any) => String(s || '').trim().replace(/\s+/g, ' ')
-            const normName = normalize(name)
-            const normSet = normalize(setName)
+    for (let start = 0; start < parsedRows.length; start += PREPARATION_BATCH_SIZE) {
+      const batch = parsedRows.slice(start, start + PREPARATION_BATCH_SIZE)
+      const preparedBatch = await Promise.all(batch.map(async (row, offset) => {
+        const index = start + offset
+        const rawName = getCol(row, 'Name', 'name')
+        try {
+          const normalize = (value: unknown) => String(value || '').trim().replace(/\s+/g, ' ')
+          const name = normalize(rawName)
+          const setName = normalize(getCol(row, 'Set name', 'set_name') || getCol(row, 'Set code', 'code'))
+          let finish = 'Non-Foil'
+          const foilValue = String(getCol(row, 'Foil') || '').toLowerCase()
+          const etchedValue = String(getCol(row, 'Etched') || '').toLowerCase()
+          if (foilValue.includes('foil') || foilValue === 'true' || foilValue === 'yes') finish = 'Foil'
+          if (etchedValue === 'true' || name.toLowerCase().includes('etched')) finish = 'Etched Foil'
 
-            let query = supabase
-              .from('products')
-              .select('id, stock, image_url')
-              .eq('inventory_id', inventoryId)
-              .eq('finish', finish)
-              .eq('condition', condition)
-              .eq('language', language)
+          const condition = mapCondition(getCol(row, 'Condition') || '')
+          const language = mapLanguage(getCol(row, 'Language') || '')
+          const scryfallId = normalize(getCol(row, 'Scryfall ID', 'scryfall_id', 'scryfall id')) || null
+          const externalContext = await fetchExternalFinishContext(scryfallId)
+          finish = resolveMagicFinishSelection(canonicalizeMagicFinishLabel(finish), null, externalContext)
+          const quantityValue = getCol(row, 'Quantity', 'quantity')
+          const stock = quantityValue === null || String(quantityValue).trim() === '' ? 1 : Number(quantityValue)
+          const collectorNumber = normalize(getCol(row, 'Collector number', 'number')) || null
+          const imageUrl = Number.isInteger(stock) && stock >= 0
+            ? await fetchScryfallImage(scryfallId, name, setName)
+            : ''
+          const price = await getInitialPriceFromExternal(externalContext, finish, condition)
+          const rawRarity = normalize(getCol(row, 'Rarity'))
 
-            if (scryfallId) {
-              query = query.eq('scryfall_id', scryfallId)
-            } else {
-              query = query.ilike('name', normName).ilike('set_name', normSet)
-              if (collectorNumber) query = query.eq('collector_number', collectorNumber)
-            }
-
-            const { data: existingArr } = await query.order('created_at', { ascending: false }).limit(1)
-            const existing = Array.isArray(existingArr) ? existingArr[0] : null
-
-            if (existing) {
-              const { error } = await supabase
-                .from('products')
-                .update({ stock: (existing.stock || 0) + stockToAdd })
-                .eq('id', existing.id)
-                .eq('inventory_id', inventoryId)
-              if (error) throw error
-              updated++
-              // SI HAY STOCK POSITIVO QUE SE AGREGA, GUARDAR PARA NOTIFICAR
-              if (stockToAdd > 0) {
-                  stockArrivals.push({ id: existing.id, name: name })
-              }
-            } else {
-              await delay(100)
-              const fetchedImage = await fetchScryfallImage(scryfallId, name, setName)
-              const initialPrice = await getInitialPriceFromExternal(externalContext, finish, condition)
-              const insertPayload = {
-                inventory_id: inventoryId,
-                name: normName,
-                set_name: normSet,
-                collector_number: collectorNumber || getCol(row, 'Collector number', 'number'),
-                scryfall_id: scryfallId,
-                tcg: 'Magic',
-                stock: stockToAdd,
-                price_usd: initialPrice,
-                is_manual_price: false,
-                condition,
-                language,
-                finish,
-                image_url: fetchedImage,
-                rarity: getCol(row, 'Rarity') ? String(getCol(row, 'Rarity')).charAt(0).toUpperCase() + String(getCol(row, 'Rarity')).slice(1) : '',
-              }
-              const { data: newProd, error } = await supabase.from('products').insert(insertPayload).select('id').single()
-              if (!error) {
-                inserted++
-                if (stockToAdd > 0 && newProd) stockArrivals.push({ id: newProd.id, name: normName })
-              } else {
-                const msg = String(error.message || '')
-                if (msg.includes('unique') || msg.includes('duplicate key')) {
-                  let conflictQ = supabase
-                    .from('products')
-                    .select('id, stock')
-                    .eq('inventory_id', inventoryId)
-                    .eq('finish', finish)
-                    .eq('condition', condition)
-                    .eq('language', language)
-                    .eq('tcg', 'Magic')
-                  if (scryfallId) conflictQ = conflictQ.eq('scryfall_id', scryfallId)
-                  else {
-                    conflictQ = conflictQ.ilike('name', normName).ilike('set_name', normSet)
-                    if (collectorNumber) conflictQ = conflictQ.eq('collector_number', collectorNumber)
-                  }
-                  const { data: existArr } = await conflictQ.order('created_at', { ascending: false }).limit(1)
-                  const exist = Array.isArray(existArr) ? existArr[0] : null
-                  if (exist) {
-                    const newStock = Number(exist.stock || 0) + Number(stockToAdd || 0)
-                    const { error: updErr } = await supabase
-                      .from('products')
-                      .update({ stock: newStock, image_url: fetchedImage })
-                      .eq('id', exist.id)
-                      .eq('inventory_id', inventoryId)
-                    if (!updErr) {
-                      updated++
-                      if (stockToAdd > 0) stockArrivals.push({ id: exist.id, name: normName })
-                    } else {
-                      throw updErr
-                    }
-                  } else {
-                    throw error
-                  }
-                } else {
-                  throw error
-                }
-              }
-            }
-          } catch (err: any) {
-            errs++
-            setLogs((prev) => [...prev, `❌ Error en ${name}: ${err.message}`])
+          return {
+            originalIndex: index,
+            operationKey: `csv:${runId}:${index}`,
+            product: {
+              name,
+              set_name: setName,
+              collector_number: collectorNumber,
+              scryfall_id: scryfallId,
+              tcg: 'Magic',
+              stock,
+              price_usd: price,
+              is_manual_price: false,
+              condition,
+              language,
+              finish,
+              image_url: imageUrl,
+              rarity: rawRarity ? rawRarity.charAt(0).toUpperCase() + rawRarity.slice(1) : '',
+              metadata: {},
+            },
           }
-        })
-      )
-      const currentProgress = Math.round(((i + batch.length) / parsedRows.length) * 100)
-      setProgress(Math.min(currentProgress, 100))
-      setStats({ total: parsedRows.length, inserted, updated, errors: errs })
+        } catch {
+          preparationErrors.push({ index, error: 'No se pudo preparar esta fila.' })
+          return null
+        }
+      }))
+      preparedRows.push(...preparedBatch.filter((row): row is NonNullable<typeof row> => row !== null))
+      const preparedCount = Math.min(start + batch.length, parsedRows.length)
+      setProgress(parsedRows.length > 0 ? Math.round((preparedCount / parsedRows.length) * 70) : 70)
     }
 
-    // --- PROCESAR NOTIFICACIONES AL FINAL ---
-    if (stockArrivals.length > 0) {
-        console.log(`🔔 Procesando notificaciones para ${stockArrivals.length} productos importados...`)
-        processWishlistNotifications(stockArrivals)
-    }
+    const result = await importAdminProducts({
+      inventoryId,
+      rows: preparedRows.map(({ operationKey, product }) => ({ operationKey, product })),
+    })
 
+    if (result.success) {
+      const actionErrors = result.data.errors.map((error) => ({
+        index: preparedRows[error.index]?.originalIndex ?? error.index,
+        error: error.error,
+      }))
+      const allErrors = [...preparationErrors, ...actionErrors].sort((left, right) => left.index - right.index)
+      setLogs(allErrors.map(({ index, error }) => {
+        const name = getCol(parsedRows[index] || {}, 'Name', 'name') || `fila ${index + 1}`
+        return `❌ Error en ${name}: ${error}`
+      }))
+      setStats({
+        total: parsedRows.length,
+        inserted: result.data.inserted,
+        updated: result.data.updated,
+        errors: allErrors.length,
+      })
+    } else {
+      setLogs([`❌ ${result.error}`])
+      setStats({ total: parsedRows.length, inserted: 0, updated: 0, errors: parsedRows.length })
+    }
+    setProgress(100)
     setStep('done')
   }
 
@@ -290,6 +239,7 @@ export default function CsvUploader({ inventoryId }: { inventoryId: string }) {
     setParsedRows([])
     setProgress(0)
     setLogs([])
+    importRunIdRef.current = null
   }
 
   return (

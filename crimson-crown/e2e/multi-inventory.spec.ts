@@ -16,10 +16,19 @@ let fixture: {
   inventoryName: string
   productId: string
   productName: string
+  sourceProductId: string
+  variantKey: string
+  setName: string
+  collectorNumber: string
+  scryfallId: string
+  condition: string
+  language: string
+  finish: string
   orderId: string
 } | null = null
 
 const manualProductMarker = `Playwright Producto Seguro ${Date.now()}`
+const csvProductMarker = `Playwright CSV Inválido ${Date.now()}`
 
 let externalLibraryCard: {
   scryfall_id: string
@@ -139,6 +148,14 @@ test.beforeAll(async () => {
     inventoryName: inventory.name,
     productId: clonedProduct.id,
     productName: String(sourceProduct.name),
+    sourceProductId: String(sourceProduct.id),
+    variantKey: String(sourceProduct.variant_key),
+    setName: String(sourceProduct.set_name || ''),
+    collectorNumber: String(sourceProduct.collector_number || ''),
+    scryfallId: String(sourceProduct.scryfall_id || ''),
+    condition: String(sourceProduct.condition || 'NM'),
+    language: String(sourceProduct.language || 'English'),
+    finish: String(sourceProduct.finish || 'Non-Foil'),
     orderId: order.id,
   }
 })
@@ -154,6 +171,16 @@ test.afterAll(async () => {
   if (manualProductIds.length > 0) {
     await localAdmin.from('inventory_stock_movements').delete().in('product_id', manualProductIds)
     await localAdmin.from('products').delete().in('id', manualProductIds)
+  }
+  const { data: csvProducts } = await localAdmin
+    .from('products')
+    .select('id')
+    .eq('inventory_id', fixture.inventoryId)
+    .like('name', `${csvProductMarker}%`)
+  const csvProductIds = (csvProducts || []).map((product) => product.id)
+  if (csvProductIds.length > 0) {
+    await localAdmin.from('inventory_stock_movements').delete().in('product_id', csvProductIds)
+    await localAdmin.from('products').delete().in('id', csvProductIds)
   }
   await localAdmin.from('inventory_stock_movements').delete().eq('inventory_id', fixture.inventoryId)
   await localAdmin.from('order_items').delete().eq('order_id', fixture.orderId)
@@ -301,4 +328,48 @@ test('las mutaciones manuales conservan auditoría y reportan productos con hist
   await deletableRow.getByTitle('Eliminar').click()
   await page.getByRole('button', { name: 'Sí, eliminar' }).click()
   await expect(deletableRow).toHaveCount(0)
+})
+
+test('el CSV aplica filas válidas una vez y reporta cantidades negativas', async ({ page }) => {
+  if (!fixture) throw new Error('Fixture E2E no inicializado.')
+  const csvEscape = (value: string) => `"${value.replaceAll('"', '""')}"`
+  const foil = fixture.finish.toLowerCase().includes('foil') && !fixture.finish.toLowerCase().includes('non') ? 'true' : 'false'
+  const etched = fixture.finish.toLowerCase().includes('etched') ? 'true' : 'false'
+  const csv = [
+    'Name,Set name,Collector number,Scryfall ID,Quantity,Condition,Language,Foil,Etched,Rarity',
+    [fixture.productName, fixture.setName, fixture.collectorNumber, fixture.scryfallId, '1', fixture.condition, fixture.language, foil, etched, 'Rare'].map(csvEscape).join(','),
+    [csvProductMarker, 'Playwright Set', 'NEG-1', '', '-2', 'NM', 'English', 'false', 'false', 'Common'].map(csvEscape).join(','),
+  ].join('\n')
+
+  const selectedBefore = await localAdmin.from('products').select('stock').eq('id', fixture.productId).single()
+  const primaryBefore = await localAdmin.from('products').select('stock').eq('id', fixture.sourceProductId).single()
+  if (selectedBefore.error || primaryBefore.error) throw selectedBefore.error || primaryBefore.error
+
+  await loginAsAdmin(page)
+  await unlockAdminPanel(page)
+  await page.goto(`/admin/inventory?inventory=${fixture.inventoryId}`)
+  await page.getByRole('button', { name: 'CSV' }).click()
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'secure-admin-products.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv),
+  })
+  await expect(page.getByText('2', { exact: true }).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Confirmar e Importar' }).click()
+  await expect(page.getByRole('heading', { name: '¡Importación Finalizada!' })).toBeVisible()
+  await expect(page.getByText('Errores: 1')).toBeVisible()
+
+  const selectedAfter = await localAdmin.from('products').select('stock').eq('id', fixture.productId).single()
+  const primaryAfter = await localAdmin.from('products').select('stock').eq('id', fixture.sourceProductId).single()
+  const invalidAfter = await localAdmin
+    .from('products')
+    .select('id', { count: 'exact', head: true })
+    .eq('inventory_id', fixture.inventoryId)
+    .eq('name', csvProductMarker)
+  if (selectedAfter.error || primaryAfter.error || invalidAfter.error) {
+    throw selectedAfter.error || primaryAfter.error || invalidAfter.error
+  }
+  expect(Number(selectedAfter.data.stock)).toBe(Number(selectedBefore.data.stock) + 1)
+  expect(Number(primaryAfter.data.stock)).toBe(Number(primaryBefore.data.stock))
+  expect(invalidAfter.count).toBe(0)
 })
