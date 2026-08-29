@@ -35,8 +35,15 @@ test('usuario estándar no puede abrir el panel administrativo', async ({ page }
 })
 
 test('el host local alternativo se normaliza a 127.0.0.1', async ({ page }) => {
-  await page.goto('http://localhost:3000/login?view=signup')
-  await expect(page).toHaveURL('http://127.0.0.1:3000/login?view=signup')
+  const configuredBaseUrl = new URL(process.env.PLAYWRIGHT_BASE_URL!)
+  const alternateHostUrl = new URL('/login?view=signup', configuredBaseUrl)
+  alternateHostUrl.hostname = 'localhost'
+
+  const canonicalUrl = new URL(alternateHostUrl)
+  canonicalUrl.hostname = '127.0.0.1'
+
+  await page.goto(alternateHostUrl.toString())
+  await expect(page).toHaveURL(canonicalUrl.toString())
 })
 
 test('admin puede abrir los formularios operativos sin warnings GoTrue', async ({ page }) => {

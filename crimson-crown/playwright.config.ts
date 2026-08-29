@@ -14,6 +14,9 @@ const webServerEnvironment = Object.fromEntries(
 
 export default defineConfig({
   testDir: './e2e',
+  // Las pruebas locales comparten usuarios y fixtures mutables de Supabase.
+  // Ejecutarlas en serie evita que un flujo invalide la sesión o los datos de otro.
+  workers: 1,
   timeout: 60_000,
   expect: { timeout: 10_000 },
   use: {
