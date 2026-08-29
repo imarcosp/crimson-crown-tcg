@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/assert-deployment-environment.mjs && next build",
+    "build": "node scripts/assert-deployment-environment.mjs && next build --webpack",
     "typecheck": "tsc --noEmit",
     "start": "next start",
     "lint": "eslint",
