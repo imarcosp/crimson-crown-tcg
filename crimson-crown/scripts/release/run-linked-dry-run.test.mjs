@@ -74,6 +74,15 @@ if ($command -eq 'migration') {
 
 if ($command -eq 'db') {
   if ($env:FAKE_SUPABASE_MODE -eq 'push-fail') { exit 43 }
+  if ($env:FAKE_SUPABASE_MODE -eq 'cleanup-race-after-push') {
+    $tempRoot = Split-Path -Parent $workdir
+    $raceDirectory = Join-Path $tempRoot 'race-subdir'
+    New-Item -ItemType Directory -Path $raceDirectory | Out-Null
+    for ($index = 0; $index -lt 2500; $index += 1) {
+      [IO.File]::WriteAllText((Join-Path $raceDirectory ("entry-{0:D4}.txt" -f $index)), 'fixture')
+    }
+    Set-Content -NoNewline -LiteralPath $env:FAKE_RACE_READY -Value $raceDirectory
+  }
   if ($env:FAKE_SUPABASE_MODE -eq 'root-junction-after-push') {
     $tempRoot = Split-Path -Parent $workdir
     Remove-Item -LiteralPath $tempRoot -Recurse -Force
@@ -97,6 +106,53 @@ exit 91
 
 const fakeCliLauncher = '@powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0fake-supabase-impl.ps1" %*\r\n'
 
+const cleanupAttackerSource = String.raw`param(
+  [Parameter(Mandatory = $true)][string]$ReadyPath,
+  [Parameter(Mandatory = $true)][string]$TempBase,
+  [Parameter(Mandatory = $true)][string]$SubdirectoryTarget,
+  [Parameter(Mandatory = $true)][string]$TempBaseTarget,
+  [Parameter(Mandatory = $true)][int]$InitialCount
+)
+$ErrorActionPreference = 'Stop'
+
+function Try-Replacement([string]$Path, [string]$Backup, [string]$Target) {
+  try {
+    Move-Item -LiteralPath $Path -Destination $Backup
+    New-Item -ItemType Junction -Path $Path -Target $Target | Out-Null
+    return 'substituted'
+  } catch {
+    return ("blocked:{0}" -f $_.Exception.GetType().Name)
+  }
+}
+
+$Deadline = [DateTime]::UtcNow.AddSeconds(30)
+$RaceDirectory = $null
+while ([DateTime]::UtcNow -lt $Deadline) {
+  if (Test-Path -LiteralPath $ReadyPath) {
+    $RaceDirectory = Get-Content -Raw -LiteralPath $ReadyPath
+    break
+  }
+  Start-Sleep -Milliseconds 5
+}
+if ($null -eq $RaceDirectory) {
+  ConvertTo-Json -Compress @{ subdirectory = 'missed-ready'; tempBase = 'missed-ready' }
+  exit 0
+}
+
+while ([DateTime]::UtcNow -lt $Deadline) {
+  try {
+    $Remaining = @(Get-ChildItem -LiteralPath $RaceDirectory -Force -ErrorAction Stop).Count
+    if ($Remaining -gt 0 -and $Remaining -lt $InitialCount) { break }
+  } catch {}
+  Start-Sleep -Milliseconds 1
+}
+
+$SubdirectoryResult = Try-Replacement $RaceDirectory ("{0}-attacker-backup" -f $RaceDirectory) $SubdirectoryTarget
+$TempBaseResult = Try-Replacement $TempBase ("{0}-attacker-backup" -f $TempBase) $TempBaseTarget
+
+ConvertTo-Json -Compress @{ subdirectory = $SubdirectoryResult; tempBase = $TempBaseResult }
+`
+
 const mutateManifestAfterBuildSource = `import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -113,17 +169,28 @@ export async function buildProjection(options) {
 }
 `
 
+function overrideProjectionSummarySource(value) {
+  return `import { buildProjection as buildRealProjection } from './build-supabase-projection-real.mjs'
+
+export async function buildProjection(options) {
+  await buildRealProjection(options)
+  return { forwardPendingCount: ${JSON.stringify(value)} }
+}
+`
+}
+
 async function git(rootDir, args) {
   await execFileAsync('git', ['-C', rootDir, ...args], { windowsHide: true })
 }
 
-async function makeFixture({ candidate = false, dirty = false, mutateManifestAfterBuild = false } = {}) {
+async function makeFixture({ candidate = false, dirty = false, mutateManifestAfterBuild = false, projectionSummaryOverride } = {}) {
   const fixtureParent = await mkdtemp(join(tmpdir(), 'crimson-wrapper-fixture-'))
   const rootDir = join(fixtureParent, 'repo')
   const releaseDir = join(rootDir, 'scripts', 'release')
   const migrationsDir = join(rootDir, 'supabase', 'migrations')
   const fakeCli = join(fixtureParent, 'fake-supabase.cmd')
   const fakeCliImplementation = join(fixtureParent, 'fake-supabase-impl.ps1')
+  const cleanupAttacker = join(fixtureParent, 'cleanup-attacker.ps1')
   const logPath = join(fixtureParent, 'fake-cli-log.jsonl')
   const tempBase = join(fixtureParent, 'temp')
   const sentinel = join(tempBase, 'keep-me.txt')
@@ -132,6 +199,7 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
   const tempBaseTarget = join(fixtureParent, 'temp-base-target')
   const tempBaseJunction = join(fixtureParent, 'temp-base-junction')
   const tempBaseSentinel = join(tempBaseTarget, 'must-survive.txt')
+  const raceReady = join(fixtureParent, 'race-ready.txt')
   const manifest = verifiedManifest()
 
   if (candidate) manifest.entries[0].equivalence = 'candidate'
@@ -142,9 +210,12 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
   await mkdir(junctionTarget)
   await mkdir(tempBaseTarget)
   await cp(sourceWrapper, join(releaseDir, 'run-linked-dry-run.ps1'))
-  if (mutateManifestAfterBuild) {
+  if (mutateManifestAfterBuild || projectionSummaryOverride !== undefined) {
     await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection-real.mjs'))
-    await writeFile(join(releaseDir, 'build-supabase-projection.mjs'), mutateManifestAfterBuildSource)
+    await writeFile(
+      join(releaseDir, 'build-supabase-projection.mjs'),
+      mutateManifestAfterBuild ? mutateManifestAfterBuildSource : overrideProjectionSummarySource(projectionSummaryOverride),
+    )
   } else {
     await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection.mjs'))
   }
@@ -155,6 +226,7 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
   await writeFile(join(migrationsDir, forwardFile), forwardSql)
   await writeFile(fakeCli, fakeCliLauncher)
   await writeFile(fakeCliImplementation, fakeCliSource)
+  await writeFile(cleanupAttacker, cleanupAttackerSource)
   await writeFile(sentinel, 'preserve\n')
   await writeFile(junctionSentinel, 'external preserve\n')
   await writeFile(tempBaseSentinel, 'temp base preserve\n')
@@ -178,6 +250,8 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
     tempBaseTarget,
     tempBaseJunction,
     tempBaseSentinel,
+    raceReady,
+    cleanupAttacker,
   }
 }
 
@@ -204,6 +278,7 @@ function runWrapper(fixture, mode = 'success', { tempBase = fixture.tempBase } =
         FAKE_SUPABASE_LOG: fixture.logPath,
         FAKE_SUPABASE_MODE: mode,
         FAKE_JUNCTION_TARGET: fixture.junctionTarget,
+        FAKE_RACE_READY: fixture.raceReady,
       },
       windowsHide: true,
     },
@@ -237,6 +312,51 @@ async function readCalls(logPath) {
 async function assertExactCleanup(fixture) {
   assert.equal(await readFile(fixture.sentinel, 'utf8'), 'preserve\n')
   assert.deepEqual((await readdir(fixture.tempBase)).sort(), ['keep-me.txt'])
+}
+
+function runCleanupAttacker(fixture) {
+  const child = spawn(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      fixture.cleanupAttacker,
+      '-ReadyPath',
+      fixture.raceReady,
+      '-TempBase',
+      fixture.tempBase,
+      '-SubdirectoryTarget',
+      fixture.junctionTarget,
+      '-TempBaseTarget',
+      fixture.tempBaseTarget,
+      '-InitialCount',
+      '2500',
+    ],
+    { windowsHide: true },
+  )
+
+  return new Promise((resolvePromise, reject) => {
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (chunk) => { stdout += chunk })
+    child.stderr.on('data', (chunk) => { stderr += chunk })
+    child.once('error', reject)
+    child.once('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`cleanup attacker failed (${code}): ${stderr}`))
+        return
+      }
+      try {
+        resolvePromise(JSON.parse(stdout.trim()))
+      } catch (error) {
+        reject(new Error(`cleanup attacker returned invalid JSON: ${error.message}`))
+      }
+    })
+  })
 }
 
 async function withFixture(options, callback) {
@@ -331,6 +451,18 @@ test('uses the materialized projection snapshot when the manifest changes after 
   })
 })
 
+for (const invalidSummary of ['1', true, 1.5, { count: 1 }]) {
+  test(`rejects non-integer projection summary ${JSON.stringify(invalidSummary)}`, async () => {
+    await withFixture({ projectionSummaryOverride: invalidSummary }, async (fixture) => {
+      const result = await runWrapper(fixture)
+
+      assert.notEqual(result.code, 0)
+      assert.deepEqual(await readCalls(fixture.logPath), [])
+      await assertExactCleanup(fixture)
+    })
+  })
+}
+
 test('removes a substituted temporary-root junction without traversing its external target', async (t) => {
   await withFixture({}, async (fixture) => {
     const junctionProbe = join(fixture.fixtureParent, 'junction-probe')
@@ -369,6 +501,21 @@ test('rejects a temporary base that is itself a junction', async (t) => {
   })
 })
 
+test('holds directory identities while a concurrent attacker attempts cleanup substitution', async () => {
+  await withFixture({}, async (fixture) => {
+    const attacker = runCleanupAttacker(fixture)
+    const result = await runWrapper(fixture, 'cleanup-race-after-push')
+    const attackResult = await attacker
+
+    assert.equal(result.code, 0, `${result.stderr}\nattack=${JSON.stringify(attackResult)}`)
+    assert.match(attackResult.subdirectory, /^blocked:/)
+    assert.match(attackResult.tempBase, /^blocked:/)
+    assert.equal(await readFile(fixture.junctionSentinel, 'utf8'), 'external preserve\n')
+    assert.equal(await readFile(fixture.tempBaseSentinel, 'utf8'), 'temp base preserve\n')
+    await assertExactCleanup(fixture)
+  })
+})
+
 for (const failure of [
   { mode: 'link-fail', expectedCalls: 1 },
   { mode: 'list-fail', expectedCalls: 2 },
@@ -393,4 +540,30 @@ test('contains no repair, dry-run bypass, or recursive Remove-Item shortcut', as
   assert.doesNotMatch(source, /migration\s+repair/i)
   assert.doesNotMatch(source, /\[switch\][^\r\n]*(?:dry.?run|push|live|apply)/i)
   assert.doesNotMatch(source, /Remove-Item[^\r\n]*-Recurse/i)
+})
+
+test('parses the Win32 identity-lock helper with Windows PowerShell 5.1', async () => {
+  const parserProbe = String.raw`if ($PSVersionTable.PSVersion.Major -ne 5) { exit 51 }
+$tokens = $null
+$errors = $null
+[System.Management.Automation.Language.Parser]::ParseFile($env:WRAPPER_UNDER_TEST, [ref]$tokens, [ref]$errors) | Out-Null
+if ($errors.Count -ne 0) { exit 52 }
+Write-Output 'powershell-5.1-parser-ok'
+`
+  const { stdout } = await execFileAsync(
+    'powershell.exe',
+    ['-NoProfile', '-Command', parserProbe],
+    {
+      env: { ...process.env, WRAPPER_UNDER_TEST: sourceWrapper },
+      timeout: 10_000,
+      windowsHide: true,
+    },
+  )
+  const source = await readFile(sourceWrapper, 'utf8')
+
+  assert.match(stdout, /powershell-5\.1-parser-ok/)
+  assert.match(source, /CreateFileW/)
+  assert.match(source, /GetFileInformationByHandle/)
+  assert.match(source, /FileFlagOpenReparsePoint/)
+  assert.doesNotMatch(source, /FileShareDelete/)
 })
