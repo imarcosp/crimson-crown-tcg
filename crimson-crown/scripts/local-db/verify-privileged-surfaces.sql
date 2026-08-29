@@ -13,8 +13,51 @@ begin
     raise exception 'expected_privileged_surfaces temp table is required';
   end if;
 
+  if to_regclass('pg_temp.expected_authenticated_definers') is null then
+    raise exception 'expected_authenticated_definers temp table is required';
+  end if;
+
   if (select count(*) from pg_temp.expected_privileged_surfaces) <> 24 then
     raise exception 'expected exactly 24 privileged surfaces';
+  end if;
+
+  if (select count(*) from pg_temp.expected_authenticated_definers) <> 25 then
+    raise exception 'expected exactly 25 authenticated SECURITY DEFINER functions';
+  end if;
+
+  if exists (
+    select 1
+    from pg_proc as p
+    join pg_namespace as n on n.oid = p.pronamespace
+    join pg_roles as runtime_role on runtime_role.rolname = 'anon'
+    where n.nspname = 'public'
+      and p.prosecdef
+      and has_function_privilege(runtime_role.oid, p.oid, 'EXECUTE')
+  ) then
+    raise exception 'unexpected anon SECURITY DEFINER privilege';
+  end if;
+
+  if exists (
+    with actual as (
+      select p.oid::regprocedure::text as signature
+      from pg_proc as p
+      join pg_namespace as n on n.oid = p.pronamespace
+      join pg_roles as runtime_role on runtime_role.rolname = 'authenticated'
+      where n.nspname = 'public'
+        and p.prosecdef
+        and has_function_privilege(runtime_role.oid, p.oid, 'EXECUTE')
+    ), delta as (
+      (select signature from actual
+       except
+       select signature from pg_temp.expected_authenticated_definers)
+      union all
+      (select signature from pg_temp.expected_authenticated_definers
+       except
+       select signature from actual)
+    )
+    select 1 from delta
+  ) then
+    raise exception 'unexpected authenticated SECURITY DEFINER set';
   end if;
 
   if not exists (

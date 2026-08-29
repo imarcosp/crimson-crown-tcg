@@ -80,6 +80,16 @@ test('la matriz cierra las 17 brechas y niega anon en las 25 firmas retenidas', 
       'update_profile_details(text,text,text)',
     ],
   })
+  assert.deepEqual(payload.jwtGuardProofs, {
+    decrementStock: {
+      standard: '42501:Sin permiso.',
+      admin: '22023:Cantidad inválida.',
+    },
+    releaseExpiredOrders: {
+      standard: '42501:Sin permiso.',
+      admin: 0,
+    },
+  })
   assert.deepEqual(payload.residuals, {
     buylistOrders: 0,
     creditTransactions: 0,

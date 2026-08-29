@@ -69,6 +69,34 @@ $expectedSignatures = @(
     'sync_product_prices()'
 )
 
+$expectedAuthenticatedDefiners = @(
+    'admin_create_or_restock_product(uuid,jsonb,text)',
+    'admin_delete_products(uuid,uuid[],text)',
+    'admin_update_product(uuid,uuid,jsonb,text)',
+    'append_import_order_user_note(bigint,text)',
+    'approve_buylist_transaction(uuid,numeric)',
+    'archive_inventory(uuid)',
+    'cancel_order_atomic(uuid,boolean,boolean)',
+    'create_inventory(text,text,text)',
+    'decrement_stock(integer,uuid)',
+    'delete_inventory_safely(uuid)',
+    'get_inventory_metrics(uuid)',
+    'is_admin()',
+    'is_commission_admin()',
+    'manage_credits(uuid,numeric,text,text,uuid)',
+    'place_order_atomic(jsonb,text,text,jsonb,boolean,text,text,text)',
+    'refund_order_atomic(uuid,boolean,numeric)',
+    'release_expired_orders_atomic(integer,text)',
+    'remove_order_item_atomic(uuid,integer,boolean)',
+    'restore_order_inventory_atomic(uuid,text)',
+    'restore_stock(uuid)',
+    'set_inventory_active(uuid,boolean)',
+    'submit_order_payment_proof(uuid,text)',
+    'transfer_credits(text,numeric,text)',
+    'update_profile_details(text,text,text)',
+    'user_accept_buylist_offer(uuid)'
+)
+
 $inventory = Get-Content -LiteralPath $inventoryFile -Raw | ConvertFrom-Json
 if ($inventory.Count -ne $expectedSignatures.Count) {
     throw 'El inventario privilegiado debe contener exactamente 24 firmas.'
@@ -106,6 +134,12 @@ if ($LASTEXITCODE -ne 0 -or $runningContainers.Count -ne 1 -or $runningContainer
 
 $verificationSql = Get-Content -LiteralPath $verificationFile -Raw
 $valuesSql = $rows -join ",`n  "
+$authenticatedValuesSql = ($expectedAuthenticatedDefiners | ForEach-Object {
+    if ($_ -notmatch '^[a-z_][a-z0-9_]*\((?:(?:bigint|integer|text|uuid(?:\[\])?|jsonb|numeric|boolean)(?:,)?)*\)$') {
+        throw 'El contrato de definers autenticadas contiene una firma SQL no permitida.'
+    }
+    "('$_')"
+}) -join ",`n  "
 $payload = @"
 begin;
 create temp table expected_privileged_surfaces (
@@ -114,6 +148,11 @@ create temp table expected_privileged_surfaces (
 ) on commit drop;
 insert into expected_privileged_surfaces (signature, allowed_roles) values
   $valuesSql;
+create temp table expected_authenticated_definers (
+  signature text primary key
+) on commit drop;
+insert into expected_authenticated_definers (signature) values
+  $authenticatedValuesSql;
 $verificationSql
 rollback;
 "@

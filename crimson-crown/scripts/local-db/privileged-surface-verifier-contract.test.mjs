@@ -18,6 +18,33 @@ const runner = path.join(appRoot, 'scripts', 'local-db', 'verify-privileged-surf
 const matrix = path.join(appRoot, 'scripts', 'local-db', 'security-matrix.mjs')
 const inventoryPath = path.join(appRoot, 'docs', 'security', 'crimson-security-definer-inventory.json')
 const verifierSqlPath = path.join(appRoot, 'scripts', 'local-db', 'verify-privileged-surfaces.sql')
+const authenticatedDefiners = [
+  'admin_create_or_restock_product(uuid,jsonb,text)',
+  'admin_delete_products(uuid,uuid[],text)',
+  'admin_update_product(uuid,uuid,jsonb,text)',
+  'append_import_order_user_note(bigint,text)',
+  'approve_buylist_transaction(uuid,numeric)',
+  'archive_inventory(uuid)',
+  'cancel_order_atomic(uuid,boolean,boolean)',
+  'create_inventory(text,text,text)',
+  'decrement_stock(integer,uuid)',
+  'delete_inventory_safely(uuid)',
+  'get_inventory_metrics(uuid)',
+  'is_admin()',
+  'is_commission_admin()',
+  'manage_credits(uuid,numeric,text,text,uuid)',
+  'place_order_atomic(jsonb,text,text,jsonb,boolean,text,text,text)',
+  'refund_order_atomic(uuid,boolean,numeric)',
+  'release_expired_orders_atomic(integer,text)',
+  'remove_order_item_atomic(uuid,integer,boolean)',
+  'restore_order_inventory_atomic(uuid,text)',
+  'restore_stock(uuid)',
+  'set_inventory_active(uuid,boolean)',
+  'submit_order_payment_proof(uuid,text)',
+  'transfer_credits(text,numeric,text)',
+  'update_profile_details(text,text,text)',
+  'user_accept_buylist_offer(uuid)',
+]
 
 function run(command, args, timeout = 120_000) {
   return spawnSync(command, args, {
@@ -97,6 +124,11 @@ create temp table expected_privileged_surfaces (
 ) on commit drop;
 insert into expected_privileged_surfaces (signature, allowed_roles) values
   ${values};
+create temp table expected_authenticated_definers (
+  signature text primary key
+) on commit drop;
+insert into expected_authenticated_definers (signature) values
+  ${authenticatedDefiners.map((signature) => `('${signature}')`).join(',\n  ')};
 ${verifierSql}
 rollback;
 `
@@ -113,7 +145,7 @@ rollback;
   })
 
   assert.notEqual(inheritedResult.status, 0, outputOf(inheritedResult))
-  assert.match(outputOf(inheritedResult), /unexpected effective runtime privilege for anon on assign_import_order_number\(\)/i)
+  assert.match(outputOf(inheritedResult), /unexpected anon SECURITY DEFINER privilege/i)
 
   const residue = run('docker', [
     'exec', 'supabase_db_crimson-crown',
@@ -122,6 +154,61 @@ rollback;
   ])
   assert.equal(residue.status, 0, outputOf(residue))
   assert.equal(residue.stdout.trim(), '', 'la fixture de rol heredado debe quedar revertida')
+})
+
+test('el verificador rechaza una definer authenticated número 26 heredada y revierte la fixture', () => {
+  const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'))
+  const verifierSql = readFileSync(verifierSqlPath, 'utf8')
+  const privilegedValues = inventory
+    .map(({ signature, allowedRoles }) => `('${signature}', array[${allowedRoles.map((role) => `'${role}'`).join(', ')}]::text[])`)
+    .sort()
+    .join(',\n  ')
+  const authenticatedValues = authenticatedDefiners.map((signature) => `('${signature}')`).join(',\n  ')
+  const payload = `
+begin;
+create role authenticated_definer_inherited_probe nologin;
+create function public.authenticated_definer_extra_probe()
+returns boolean language sql security definer set search_path = public, pg_temp
+as 'select true';
+revoke all on function public.authenticated_definer_extra_probe() from public, anon, authenticated, service_role;
+alter function public.authenticated_definer_extra_probe() owner to authenticated_definer_inherited_probe;
+grant authenticated_definer_inherited_probe to authenticated;
+create temp table expected_privileged_surfaces (
+  signature text primary key,
+  allowed_roles text[] not null
+) on commit drop;
+insert into expected_privileged_surfaces (signature, allowed_roles) values
+  ${privilegedValues};
+create temp table expected_authenticated_definers (
+  signature text primary key
+) on commit drop;
+insert into expected_authenticated_definers (signature) values
+  ${authenticatedValues};
+${verifierSql}
+rollback;
+`
+
+  const inheritedResult = spawnSync('docker', [
+    'exec', '-i', 'supabase_db_crimson-crown',
+    'psql', '-U', 'supabase_admin', '-d', 'postgres', '-X', '-v', 'ON_ERROR_STOP=1',
+  ], {
+    cwd: appRoot,
+    encoding: 'utf8',
+    input: payload,
+    timeout: 120_000,
+    windowsHide: true,
+  })
+
+  assert.notEqual(inheritedResult.status, 0, outputOf(inheritedResult))
+  assert.match(outputOf(inheritedResult), /unexpected authenticated SECURITY DEFINER set/i)
+
+  const residue = run('docker', [
+    'exec', 'supabase_db_crimson-crown',
+    'psql', '-U', 'supabase_admin', '-d', 'postgres', '-X', '-Atc',
+    "select coalesce(to_regprocedure('public.authenticated_definer_extra_probe()')::text, '') || '|' || coalesce((select rolname from pg_roles where rolname = 'authenticated_definer_inherited_probe'), '');",
+  ])
+  assert.equal(residue.status, 0, outputOf(residue))
+  assert.equal(residue.stdout.trim(), '|', 'la función y el rol heredado deben quedar revertidos')
 })
 
 test('42501 sólo acepta el objeto exacto de función o vista', () => {

@@ -145,6 +145,7 @@ async function main() {
   const buylistIds = []
   const positive = []
   const internalNegative = []
+  let jwtGuardProofs = null
 
   const adminOnlyProbes = [
     {
@@ -194,6 +195,28 @@ async function main() {
   ]
 
   try {
+    const standardDecrement = await standard.rpc('decrement_stock', { qty: 0, row_id: missingUuid })
+    expectError(standardDecrement, '42501', 'Sin permiso.', 'decrement stock standard JWT')
+    const adminDecrement = await admin.rpc('decrement_stock', { qty: 0, row_id: missingUuid })
+    expectError(adminDecrement, '22023', 'Cantidad inválida.', 'decrement stock admin JWT positive-auth')
+
+    const releaseArgs = { p_age_minutes: 15, p_payment_marker: marker }
+    const standardRelease = await standard.rpc('release_expired_orders_atomic', releaseArgs)
+    expectError(standardRelease, '42501', 'Sin permiso.', 'release expired standard JWT')
+    const adminRelease = await admin.rpc('release_expired_orders_atomic', releaseArgs)
+    assert.ifError(adminRelease.error)
+    assert.equal(adminRelease.data, 0, 'el admin JWT debe superar el guard sin encontrar órdenes')
+    jwtGuardProofs = {
+      decrementStock: {
+        standard: `${standardDecrement.error.code}:${standardDecrement.error.message}`,
+        admin: `${adminDecrement.error.code}:${adminDecrement.error.message}`,
+      },
+      releaseExpiredOrders: {
+        standard: `${standardRelease.error.code}:${standardRelease.error.message}`,
+        admin: adminRelease.data,
+      },
+    }
+
     for (const probe of adminOnlyProbes) {
       expectError(await standard.rpc(probe.name, probe.args), '42501', 'Sin permiso.', `${probe.name} negativo`)
       const authorized = await admin.rpc(probe.name, probe.args)
@@ -341,6 +364,7 @@ async function main() {
         'update_profile_details(text,text,text)',
       ],
     },
+    jwtGuardProofs,
     residuals: {
       buylistOrders: residualQueries[0].count ?? 0,
       creditTransactions: (residualQueries[1].data || []).filter((row) => !knownTransactionIds.has(row.id)).length,
