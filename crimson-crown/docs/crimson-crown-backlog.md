@@ -60,6 +60,7 @@ Actualizado: 2026-08-29. Este documento cubre únicamente Crimson Crown. SaaS y 
 - Prueba E2E de contacto completada: un fixture REST aislado verifica que `system_settings` actualiza el Footer y el enlace de WhatsApp sin modificar la base local compartida.
 - Mutaciones administrativas de productos completadas: creación/reposición concurrente exacta, edición con ajuste auditado, rechazo de borrado con historial, borrado seguro sin referencias y CSV parcial sin afectar otro inventario.
 - Playwright usa el puerto configurado y un solo trabajador porque los E2E locales comparten usuarios y fixtures mutables; la suite completa pasa 16/16 sin interferencias y termina sin residuos sintéticos.
+- La suscripción de autenticación del Navbar difiere las consultas de perfil fuera de `onAuthStateChange` y ya no se vuelve a crear al cambiar usuario/perfil; el ciclo usuario estándar/admin pasó 9/9 en repetición focalizada.
 
 ## P2 — calidad y operación
 

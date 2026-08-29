@@ -24,6 +24,7 @@ La migración aditiva preparada es `supabase/migrations/20260829021742_admin_pro
 | Checkout atómico | exit 0 |
 | Liberación atómica de stock | exit 0 |
 | Playwright completo | 16/16 con un trabajador |
+| Acceso estándar/admin repetido | 9/9 después de estabilizar `onAuthStateChange` |
 | `supabase db lint --local --schema public --level warning --fail-on error` | sin errores |
 | Next.js production build con entorno local validado | exit 0, 44 páginas estáticas generadas |
 | Lint focalizado de módulos nuevos | exit 0 |
@@ -43,6 +44,7 @@ El lint global no es un gate verde todavía: reporta 497 errores y 178 advertenc
 - Un producto vacío, sin referencias ni movimientos, sí se puede eliminar.
 - Las RPCs son `SECURITY DEFINER`, fijan `search_path`, niegan `anon` y conservan autorización interna con `is_admin()`.
 - No quedan escrituras directas a `products` dentro de la UI administrativa.
+- El callback de autenticación no inicia consultas a perfiles de forma reentrante; el refresco periódico vive en un efecto separado y conserva una sola suscripción estable.
 - El diff sólo contiene archivos de `crimson-crown/`; no contiene dumps, claves ni URLs de Supabase productivas. La referencia a `SUPABASE_SERVICE_ROLE_KEY` existe únicamente en la matriz local, protegida por validación estricta de loopback.
 
 ## Revisión manual recomendada antes de producción
