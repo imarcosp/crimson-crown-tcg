@@ -317,11 +317,17 @@ const validatedPngIntent = validateUploadIntent({
   mimeType: 'image/png',
 })
 
+const storedIdentity: Readonly<{ etag: string; version: string }> = Object.freeze({
+  etag: '"storage-etag-v1"',
+  version: 'storage-version-v1',
+})
+
 const validStoredMetadata: StoredObjectMetadata = Object.freeze({
   bucket: 'payment_proofs',
   path: orderPath,
   mimeType: 'image/png',
   size: pngBytes.byteLength,
+  ...storedIdentity,
 })
 
 function makeVerifyDependencies(
@@ -357,10 +363,11 @@ test('verifies exact metadata and leading bytes while imposing the 5 MiB read ce
         assert.equal(path, orderPath)
         return validStoredMetadata
       },
-      readObjectBytes: async (bucket, path, maxBytes) => {
+      readObjectBytes: async (bucket, path, identity, maxBytes) => {
         calls.push('read')
         assert.equal(bucket, 'payment_proofs')
         assert.equal(path, orderPath)
+        assert.deepEqual(identity, storedIdentity)
         assert.equal(maxBytes, 5 * MiB)
         return pngBytes
       },
@@ -514,7 +521,7 @@ test('removes only the exact expected object when stored MIME, size or path meta
   ]
 
   for (const metadata of invalidMetadata) {
-    const removals: Array<[string, string]> = []
+    const removals: Array<[string, string, typeof storedIdentity]> = []
     let read = false
     await assert.rejects(
       verifyUploadedObjectCore(
@@ -525,15 +532,43 @@ test('removes only the exact expected object when stored MIME, size or path meta
             read = true
             return pngBytes
           },
-          removeExactObject: async (bucket, path) => {
-            removals.push([bucket, path])
+          removeExactObject: async (bucket, path, identity) => {
+            removals.push([bucket, path, identity])
           },
         }),
       ),
       { name: 'Error', message: 'No se pudo verificar el archivo.' },
     )
     assert.equal(read, false)
-    assert.deepEqual(removals, [['payment_proofs', orderPath]])
+    assert.deepEqual(removals, [['payment_proofs', orderPath, storedIdentity]])
+  }
+})
+
+test('requires a non-empty etag and version before reading or removing an object', async () => {
+  for (const metadata of [
+    { ...validStoredMetadata, etag: '' },
+    { ...validStoredMetadata, version: '   ' },
+    { ...validStoredMetadata, etag: undefined },
+    { ...validStoredMetadata, version: null },
+  ]) {
+    const calls: string[] = []
+    await assert.rejects(
+      verifyUploadedObjectCore(
+        verifyInput(),
+        makeVerifyDependencies({
+          getStoredObjectMetadata: async () => metadata,
+          readObjectBytes: async () => {
+            calls.push('read')
+            return pngBytes
+          },
+          removeExactObject: async () => {
+            calls.push('remove')
+          },
+        }),
+      ),
+      { name: 'Error', message: 'No se pudo verificar el archivo.' },
+    )
+    assert.deepEqual(calls, [])
   }
 })
 
@@ -545,24 +580,45 @@ test('removes only the exact object when bytes exceed limits, disagree with size
   ]
 
   for (const bytes of byteFixtures) {
-    const removals: Array<[string, string]> = []
+    const removals: Array<[string, string, typeof storedIdentity]> = []
     await assert.rejects(
       verifyUploadedObjectCore(
         verifyInput(),
         makeVerifyDependencies({
-          readObjectBytes: async (_bucket, _path, maxBytes) => {
+          readObjectBytes: async (_bucket, _path, identity, maxBytes) => {
+            assert.deepEqual(identity, storedIdentity)
             assert.equal(maxBytes, 5 * MiB)
             return bytes
           },
-          removeExactObject: async (bucket, path) => {
-            removals.push([bucket, path])
+          removeExactObject: async (bucket, path, identity) => {
+            removals.push([bucket, path, identity])
           },
         }),
       ),
       { name: 'Error', message: 'No se pudo verificar el archivo.' },
     )
-    assert.deepEqual(removals, [['payment_proofs', orderPath]])
+    assert.deepEqual(removals, [['payment_proofs', orderPath, storedIdentity]])
   }
+})
+
+test('does not remove an object when the identity-conditional read fails', async () => {
+  const removals: string[] = []
+  await assert.rejects(
+    verifyUploadedObjectCore(
+      verifyInput(),
+      makeVerifyDependencies({
+        readObjectBytes: async (_bucket, _path, identity) => {
+          assert.deepEqual(identity, storedIdentity)
+          throw new Error('412 precondition failed')
+        },
+        removeExactObject: async () => {
+          removals.push('remove')
+        },
+      }),
+    ),
+    { name: 'Error', message: 'No se pudo verificar el archivo.' },
+  )
+  assert.deepEqual(removals, [])
 })
 
 test('treats a disappearance during bounded read as missing and does not remove anything', async () => {

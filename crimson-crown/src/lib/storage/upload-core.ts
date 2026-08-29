@@ -49,6 +49,13 @@ export type StoredObjectMetadata = {
   readonly path: string
   readonly mimeType: unknown
   readonly size: unknown
+  readonly etag: unknown
+  readonly version: unknown
+}
+
+export type StoredObjectIdentity = {
+  readonly etag: string
+  readonly version: string
 }
 
 export type VerifyUploadedObjectInput = {
@@ -67,9 +74,14 @@ export type VerifyUploadedObjectDependencies = {
   readonly readObjectBytes: (
     bucket: StorageBucket,
     path: string,
+    identity: StoredObjectIdentity,
     maxBytes: number,
   ) => Promise<Uint8Array | null>
-  readonly removeExactObject: (bucket: StorageBucket, path: string) => Promise<void>
+  readonly removeExactObject: (
+    bucket: StorageBucket,
+    path: string,
+    identity: StoredObjectIdentity,
+  ) => Promise<void>
 }
 
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024
@@ -283,13 +295,31 @@ async function rejectInvalidObject(
   dependencies: VerifyUploadedObjectDependencies,
   bucket: StorageBucket,
   path: string,
+  identity: StoredObjectIdentity,
 ): Promise<never> {
   try {
-    await dependencies.removeExactObject(bucket, path)
+    await dependencies.removeExactObject(bucket, path, identity)
   } catch {
     // Cleanup must never expose privileged Storage errors or alter the rejection shape.
   }
   throw verifyError()
+}
+
+function storedObjectIdentity(metadata: StoredObjectMetadata): StoredObjectIdentity | null {
+  if (
+    typeof metadata.etag !== 'string' ||
+    metadata.etag.trim().length === 0 ||
+    metadata.etag.length > 512 ||
+    /[\u0000-\u001f\u007f]/u.test(metadata.etag) ||
+    typeof metadata.version !== 'string' ||
+    metadata.version.trim().length === 0 ||
+    metadata.version.length > 512 ||
+    /[\u0000-\u001f\u007f]/u.test(metadata.version)
+  ) {
+    return null
+  }
+
+  return Object.freeze({ etag: metadata.etag, version: metadata.version })
 }
 
 export async function verifyUploadedObjectCore(
@@ -311,6 +341,9 @@ export async function verifyUploadedObjectCore(
     throw verifyError()
   }
 
+  const identity = storedObjectIdentity(metadata)
+  if (!identity) throw verifyError()
+
   const metadataIsValid =
     metadata.bucket === input.expectedBucket &&
     metadata.path === input.expectedPath &&
@@ -321,7 +354,7 @@ export async function verifyUploadedObjectCore(
     metadata.size === input.intent.size
 
   if (!metadataIsValid) {
-    return rejectInvalidObject(dependencies, input.expectedBucket, input.expectedPath)
+    return rejectInvalidObject(dependencies, input.expectedBucket, input.expectedPath, identity)
   }
 
   let bytes: Uint8Array | null
@@ -329,6 +362,7 @@ export async function verifyUploadedObjectCore(
     bytes = await dependencies.readObjectBytes(
       input.expectedBucket,
       input.expectedPath,
+      identity,
       MAX_UPLOAD_SIZE,
     )
   } catch {
@@ -345,6 +379,6 @@ export async function verifyUploadedObjectCore(
     bytes.byteLength !== input.intent.size ||
     !isAllowedFileSignature(bytes, input.intent.mimeType)
   ) {
-    return rejectInvalidObject(dependencies, input.expectedBucket, input.expectedPath)
+    return rejectInvalidObject(dependencies, input.expectedBucket, input.expectedPath, identity)
   }
 }

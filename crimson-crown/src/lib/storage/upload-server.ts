@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   verifyUploadedObjectCore,
   type StorageBucket,
+  type StoredObjectIdentity,
   type StoredObjectMetadata,
   type VerifyUploadedObjectDependencies,
   type VerifyUploadedObjectInput,
@@ -46,6 +47,19 @@ function isMissingError(error: unknown): boolean {
   return error.status === 404 || error.statusCode === '404'
 }
 
+function isValidIdentity(identity: StoredObjectIdentity): boolean {
+  return (
+    typeof identity?.etag === 'string' &&
+    identity.etag.trim().length > 0 &&
+    identity.etag.length <= 512 &&
+    !/[\u0000-\u001f\u007f]/u.test(identity.etag) &&
+    typeof identity.version === 'string' &&
+    identity.version.trim().length > 0 &&
+    identity.version.length <= 512 &&
+    !/[\u0000-\u001f\u007f]/u.test(identity.version)
+  )
+}
+
 function safeObjectUrl(baseUrl: URL, bucket: StorageBucket, path: string): URL {
   if (!STORAGE_BUCKETS.has(bucket) || typeof path !== 'string' || path.length > 512) {
     throw verifyError()
@@ -80,7 +94,14 @@ function safeObjectUrl(baseUrl: URL, bucket: StorageBucket, path: string): URL {
 
 function metadataFromInfo(data: unknown): StoredObjectMetadata {
   if (!isRecord(data)) {
-    return { bucket: '', path: '', mimeType: undefined, size: undefined }
+    return {
+      bucket: '',
+      path: '',
+      mimeType: undefined,
+      size: undefined,
+      etag: undefined,
+      version: undefined,
+    }
   }
 
   const metadata = isRecord(data.metadata) ? data.metadata : null
@@ -89,6 +110,50 @@ function metadataFromInfo(data: unknown): StoredObjectMetadata {
     path: typeof data.name === 'string' ? data.name : '',
     mimeType: data.contentType ?? metadata?.mimetype,
     size: data.size ?? metadata?.size,
+    etag: data.etag ?? metadata?.etag,
+    version: data.version ?? metadata?.version,
+  }
+}
+
+function contentLength(response: Response): number | null {
+  const rawValue = response.headers.get('content-length')
+  if (rawValue === null) return null
+  if (!/^(?:0|[1-9][0-9]{0,15})$/u.test(rawValue)) throw verifyError()
+
+  const value = Number(rawValue)
+  if (!Number.isSafeInteger(value) || value < 0) throw verifyError()
+  return value
+}
+
+function expectedPartialLength(response: Response, maxBytes: number): number {
+  const rawValue = response.headers.get('content-range')
+  if (rawValue === null || rawValue.length > 100) throw verifyError()
+
+  const match = /^bytes 0-([0-9]+)\/([0-9]+)$/u.exec(rawValue)
+  if (!match || (match[1]?.length ?? 0) > 16 || (match[2]?.length ?? 0) > 16) {
+    throw verifyError()
+  }
+
+  const end = Number(match[1])
+  const total = Number(match[2])
+  if (
+    !Number.isSafeInteger(end) ||
+    !Number.isSafeInteger(total) ||
+    end > maxBytes ||
+    total <= end ||
+    end !== Math.min(maxBytes, total - 1)
+  ) {
+    throw verifyError()
+  }
+
+  return end + 1
+}
+
+async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+  try {
+    await reader.cancel()
+  } catch {
+    // Cancellation is best-effort; callers still receive a bounded generic result.
   }
 }
 
@@ -99,39 +164,38 @@ async function readBoundedResponse(
   if (!response.body) throw verifyError()
 
   const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let totalBytes = 0
+  const bytes = new Uint8Array(maxBytes + 1)
+  const declaredLength = contentLength(response)
+  let offset = 0
+
+  if (declaredLength !== null && declaredLength > maxBytes) {
+    await cancelReader(reader)
+    return bytes
+  }
 
   try {
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
       if (!(value instanceof Uint8Array)) throw verifyError()
+      if (value.byteLength === 0) continue
 
-      if (value.byteLength > maxBytes - totalBytes) {
-        await reader.cancel()
-        return new Uint8Array(maxBytes + 1)
+      const writableBytes = Math.min(value.byteLength, bytes.byteLength - offset)
+      bytes.set(value.subarray(0, writableBytes), offset)
+      offset += writableBytes
+
+      if (offset === bytes.byteLength) {
+        await cancelReader(reader)
+        return bytes
       }
-
-      chunks.push(value)
-      totalBytes += value.byteLength
     }
   } catch {
-    try {
-      await reader.cancel()
-    } catch {
-      // Cancellation is best-effort; callers always receive one generic failure.
-    }
+    await cancelReader(reader)
     throw verifyError()
   }
 
-  const bytes = new Uint8Array(totalBytes)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return bytes
+  if (declaredLength !== null && declaredLength !== offset) throw verifyError()
+  return bytes.subarray(0, offset)
 }
 
 export function createUploadVerificationDependencies(
@@ -175,7 +239,7 @@ export function createUploadVerificationDependencies(
         }
       },
 
-      async readObjectBytes(bucket, path, maxBytes) {
+      async readObjectBytes(bucket, path, identity, maxBytes) {
         try {
           if (
             !Number.isSafeInteger(maxBytes) ||
@@ -184,6 +248,7 @@ export function createUploadVerificationDependencies(
           ) {
             throw verifyError()
           }
+          if (!isValidIdentity(identity)) throw verifyError()
 
           const objectUrl = safeObjectUrl(safeBaseUrl, bucket, path)
           const response = await fetchRequest(objectUrl, {
@@ -191,23 +256,52 @@ export function createUploadVerificationDependencies(
             headers: {
               apikey: serviceRoleKey,
               Authorization: `Bearer ${serviceRoleKey}`,
+              'If-Match': identity.etag,
               Range: `bytes=0-${maxBytes}`,
             },
             method: 'GET',
+            redirect: 'error',
           })
 
           if (response.status === 404) return null
-          if (!response.ok) throw verifyError()
-          return await readBoundedResponse(response, maxBytes)
+          if (response.status !== 200 && response.status !== 206) throw verifyError()
+
+          const expectedLength = response.status === 206
+            ? expectedPartialLength(response, maxBytes)
+            : null
+          const bytes = await readBoundedResponse(response, maxBytes)
+          if (expectedLength !== null && bytes.byteLength !== expectedLength) {
+            throw verifyError()
+          }
+          return bytes
         } catch {
           throw verifyError()
         }
       },
 
-      async removeExactObject(bucket, path) {
+      async removeExactObject(bucket, path, identity) {
         try {
           safeObjectUrl(safeBaseUrl, bucket, path)
-          const { error } = await admin.storage.from(bucket).remove([path])
+          if (!isValidIdentity(identity)) throw verifyError()
+
+          const bucketClient = admin.storage.from(bucket)
+          const current = await bucketClient.info(path)
+          if (current.error || current.data === null) throw verifyError()
+
+          const currentMetadata = metadataFromInfo(current.data)
+          if (
+            currentMetadata.bucket !== bucket ||
+            currentMetadata.path !== path ||
+            currentMetadata.etag !== identity.etag ||
+            currentMetadata.version !== identity.version
+          ) {
+            throw verifyError()
+          }
+
+          // Supabase Storage has no conditional DELETE. This recheck narrows, but cannot
+          // eliminate, the interval between info and remove; the operational gate below
+          // keeps the helper unused until direct UPDATE/DELETE is revoked in Task 7.
+          const { error } = await bucketClient.remove([path])
           if (error) throw verifyError()
         } catch {
           throw verifyError()
@@ -219,6 +313,11 @@ export function createUploadVerificationDependencies(
   }
 }
 
+/**
+ * Operational gate: do not add callsites before Task 7 revokes direct object
+ * UPDATE/DELETE. Storage exposes no conditional DELETE, so the identity recheck
+ * immediately before removal still leaves a residual replacement interval.
+ */
 export async function verifyTrustedUploadedObject(
   input: VerifyUploadedObjectInput,
 ): Promise<void> {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import * as nodeModule from 'node:module'
 import test from 'node:test'
 
@@ -44,6 +44,23 @@ const localEnvironment = Object.freeze({
   NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54621',
   SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
 })
+const storageIdentity: Readonly<{ etag: string; version: string }> = Object.freeze({
+  etag: '"storage-etag-v1"',
+  version: 'storage-version-v1',
+})
+
+function storedInfo(
+  path: string,
+  identity: Readonly<{ etag: string; version: string }> = storageIdentity,
+) {
+  return {
+    bucketId: 'payment_proofs',
+    name: path,
+    contentType: 'image/png',
+    size: 8,
+    ...identity,
+  }
+}
 
 function makeAdminClient(options: {
   info?: (path: string) => Promise<{ data: unknown; error: unknown }>
@@ -73,12 +90,7 @@ test('maps exact Supabase info metadata and treats only a 404 as missing', async
       info: async (path) => {
         paths.push(path)
         return {
-          data: {
-            bucketId: 'payment_proofs',
-            name: 'orders/user/order/object.png',
-            contentType: 'image/png',
-            size: 8,
-          },
+          data: storedInfo('orders/user/order/object.png'),
           error: null,
         }
       },
@@ -96,6 +108,7 @@ test('maps exact Supabase info metadata and treats only a 404 as missing', async
       path: 'orders/user/order/object.png',
       mimeType: 'image/png',
       size: 8,
+      ...storageIdentity,
     },
   )
   assert.deepEqual(buckets, ['payment_proofs'])
@@ -137,6 +150,7 @@ test('performs one authenticated, encoded and range-bounded streaming GET even w
   const bytes = await dependencies.readObjectBytes(
     'payment_proofs',
     'folder/card #1.png',
+    storageIdentity,
     4,
   )
 
@@ -151,10 +165,159 @@ test('performs one authenticated, encoded and range-bounded streaming GET even w
     headers: {
       apikey: 'test-service-role-key',
       Authorization: 'Bearer test-service-role-key',
+      'If-Match': storageIdentity.etag,
       Range: 'bytes=0-4',
     },
     method: 'GET',
+    redirect: 'error',
   })
+})
+
+test('rejects redirects, precondition failures and unexpected 2xx without following locations', async () => {
+  const statuses = [201, 204, 302, 412] as const
+
+  for (const status of statuses) {
+    const requests: RequestInit[] = []
+    const dependencies = createUploadVerificationDependencies({
+      environment: localEnvironment,
+      createAdminClient: () => makeAdminClient({}),
+      fetch: async (_input, init) => {
+        requests.push(init ?? {})
+        return new Response(status === 204 ? null : Uint8Array.from([1]), {
+          status,
+          headers: status === 302
+            ? { Location: 'https://attacker.example/steal' }
+            : undefined,
+        })
+      },
+    })
+
+    await assert.rejects(
+      dependencies.readObjectBytes(
+        'payment_proofs',
+        'orders/private.png',
+        storageIdentity,
+        8,
+      ),
+      { name: 'Error', message: 'No se pudo verificar el archivo.' },
+    )
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0]?.redirect, 'error')
+  }
+})
+
+test('requires a consistent Content-Range for 206 and preserves max-plus-one sentinel semantics', async () => {
+  const invalidRanges = [
+    null,
+    'bytes 1-4/10',
+    'bytes 0-5/10',
+    'bytes 0-3/3',
+    'bytes 0-2/4',
+  ]
+
+  for (const contentRange of invalidRanges) {
+    const dependencies = createUploadVerificationDependencies({
+      environment: localEnvironment,
+      createAdminClient: () => makeAdminClient({}),
+      fetch: async () => new Response(Uint8Array.from([1, 2, 3, 4]), {
+        status: 206,
+        headers: contentRange === null ? undefined : { 'Content-Range': contentRange },
+      }),
+    })
+
+    await assert.rejects(
+      dependencies.readObjectBytes(
+        'payment_proofs',
+        'folder/object.png',
+        storageIdentity,
+        4,
+      ),
+      { name: 'Error', message: 'No se pudo verificar el archivo.' },
+    )
+  }
+
+  for (const fixture of [
+    {
+      body: Uint8Array.from([1, 2, 3, 4]),
+      contentRange: 'bytes 0-3/4',
+      expectedLength: 4,
+    },
+    {
+      body: Uint8Array.from([1, 2, 3, 4, 5]),
+      contentRange: 'bytes 0-4/6',
+      expectedLength: 5,
+    },
+  ]) {
+    const dependencies = createUploadVerificationDependencies({
+      environment: localEnvironment,
+      createAdminClient: () => makeAdminClient({}),
+      fetch: async () => new Response(fixture.body, {
+        status: 206,
+        headers: { 'Content-Range': fixture.contentRange },
+      }),
+    })
+    const bytes = await dependencies.readObjectBytes(
+      'payment_proofs',
+      'folder/object.png',
+      storageIdentity,
+      4,
+    )
+    assert.equal(bytes?.byteLength, fixture.expectedLength)
+  }
+})
+
+test('uses one max-plus-one buffer, ignores empty chunks, and cancels known oversize bodies', async () => {
+  const streamed = createUploadVerificationDependencies({
+    environment: localEnvironment,
+    createAdminClient: () => makeAdminClient({}),
+    fetch: async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(0))
+        controller.enqueue(Uint8Array.from([1, 2]))
+        controller.enqueue(new Uint8Array(0))
+        controller.enqueue(Uint8Array.from([3]))
+        controller.close()
+      },
+    }), { status: 200 }),
+  })
+
+  const bytes = await streamed.readObjectBytes(
+    'payment_proofs',
+    'folder/object.png',
+    storageIdentity,
+    4,
+  )
+  assert.deepEqual(bytes, Uint8Array.from([1, 2, 3]))
+  assert.equal(bytes?.buffer.byteLength, 5)
+
+  let cancelled = false
+  let pulls = 0
+  const knownOversize = createUploadVerificationDependencies({
+    environment: localEnvironment,
+    createAdminClient: () => makeAdminClient({}),
+    fetch: async () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1
+        controller.enqueue(Uint8Array.from([1]))
+      },
+      cancel() {
+        cancelled = true
+      },
+    }), {
+      status: 200,
+      headers: { 'Content-Length': '6' },
+    }),
+  })
+
+  const sentinel = await knownOversize.readObjectBytes(
+    'payment_proofs',
+    'folder/object.png',
+    storageIdentity,
+    5,
+  )
+  assert.equal(sentinel?.byteLength, 6)
+  assert.equal(cancelled, true)
+  assert.ok(pulls <= 1)
 })
 
 test('cancels a chunked response as soon as it exceeds the limit', async () => {
@@ -173,13 +336,14 @@ test('cancels a chunked response as soon as it exceeds the limit', async () => {
           cancelled = true
         },
       }),
-      { status: 206 },
+      { status: 200 },
     ),
   })
 
   const bytes = await dependencies.readObjectBytes(
     'payment_proofs',
     'folder/object.png',
+    storageIdentity,
     5 * MiB,
   )
 
@@ -195,6 +359,7 @@ test('returns null for a download 404 and removes only the exact requested objec
     environment: localEnvironment,
     createAdminClient: () => makeAdminClient({
       buckets,
+      info: async (path) => ({ data: storedInfo(path), error: null }),
       remove: async (paths) => {
         removals.push(paths)
         return { data: [], error: null }
@@ -204,12 +369,52 @@ test('returns null for a download 404 and removes only the exact requested objec
   })
 
   assert.equal(
-    await dependencies.readObjectBytes('payment_proofs', 'orders/missing.png', 8),
+    await dependencies.readObjectBytes(
+      'payment_proofs',
+      'orders/missing.png',
+      storageIdentity,
+      8,
+    ),
     null,
   )
-  await dependencies.removeExactObject('payment_proofs', 'orders/exact.png')
-  assert.deepEqual(buckets, ['payment_proofs'])
+  await dependencies.removeExactObject(
+    'payment_proofs',
+    'orders/exact.png',
+    storageIdentity,
+  )
+  assert.ok(buckets.length >= 1)
+  assert.deepEqual([...new Set(buckets)], ['payment_proofs'])
   assert.deepEqual(removals, [['orders/exact.png']])
+})
+
+test('rechecks etag and version immediately before exact removal', async () => {
+  for (const currentIdentity of [
+    { ...storageIdentity, etag: '"replacement-etag"' },
+    { ...storageIdentity, version: 'replacement-version' },
+  ]) {
+    let removed = false
+    const dependencies = createUploadVerificationDependencies({
+      environment: localEnvironment,
+      createAdminClient: () => makeAdminClient({
+        info: async (path) => ({ data: storedInfo(path, currentIdentity), error: null }),
+        remove: async () => {
+          removed = true
+          return { data: [], error: null }
+        },
+      }),
+      fetch: async () => assert.fail('removal recheck must use Storage info'),
+    })
+
+    await assert.rejects(
+      dependencies.removeExactObject(
+        'payment_proofs',
+        'orders/exact.png',
+        storageIdentity,
+      ),
+      { name: 'Error', message: 'No se pudo verificar el archivo.' },
+    )
+    assert.equal(removed, false)
+  }
 })
 
 test('guards the runtime target and never leaks keys, paths or privileged errors', async () => {
@@ -237,14 +442,14 @@ test('guards the runtime target and never leaks keys, paths or privileged errors
       fetch: async () => {
         throw new Error(`${secret} ${privatePath}`)
       },
-    }).readObjectBytes('payment_proofs', privatePath, 8),
+    }).readObjectBytes('payment_proofs', privatePath, storageIdentity, 8),
     async () => createUploadVerificationDependencies({
       environment: localEnvironment,
       createAdminClient: () => makeAdminClient({
         remove: async () => ({ data: null, error: new Error(`${secret} ${privatePath}`) }),
       }),
       fetch: async () => new Response(null, { status: 200 }),
-    }).removeExactObject('payment_proofs', privatePath),
+    }).removeExactObject('payment_proofs', privatePath, storageIdentity),
   ]
 
   for (const failure of failures) {
@@ -266,7 +471,25 @@ test('is server-only and exposes a trusted helper rather than a public verificat
 
   assert.match(serverSource, /^import 'server-only'/u)
   assert.match(serverSource, /createAdminClient/u)
+  assert.match(serverSource, /conditional DELETE/u)
+  assert.match(serverSource, /Task 7/u)
   assert.doesNotMatch(serverSource, /^['"]use server['"]/u)
   assert.doesNotMatch(actionSource, /verifyTrustedUploadedObject|verifyUploadedObject/u)
   assert.equal(typeof verifyTrustedUploadedObject, 'function')
+
+  const relativeFiles = await readdir(sourceRoot, { recursive: true })
+  const trustedHelperCallsites: string[] = []
+  for (const relativeFile of relativeFiles) {
+    const normalized = relativeFile.replaceAll('\\', '/')
+    if (!/\.(?:ts|tsx)$/u.test(normalized)) continue
+    if (
+      normalized === 'lib/storage/upload-server.ts' ||
+      normalized === 'lib/storage/upload-server.test.ts'
+    ) {
+      continue
+    }
+    const source = await readFile(new URL(normalized, sourceRoot), 'utf8')
+    if (/verifyTrustedUploadedObject/u.test(source)) trustedHelperCallsites.push(normalized)
+  }
+  assert.deepEqual(trustedHelperCallsites, [])
 })
