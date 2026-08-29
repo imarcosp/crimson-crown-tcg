@@ -2,7 +2,7 @@
 
 ## Decision
 
-**Blocked.** The five stored production migration statements match the paired local files after the permitted normalization, but current production catalog signatures do not prove three of the five remote pairs and do not prove thirteen of the sixteen `baseline_present` entries. The release manifest therefore remains fail-closed with every remote pair at `equivalence: "candidate"`.
+**Blocked.** The five stored production migration statements match the paired local files after the permitted normalization, but current production catalog signatures do not prove three of the five remote pairs and do not prove fourteen of the sixteen `baseline_present` entries. The release manifest therefore remains fail-closed with every remote pair at `equivalence: "candidate"`.
 
 The real linked dry-run was not invoked. Running it would violate the Task 6 prerequisite that every pair and baseline exclusion be proven before the wrapper links a projection to production.
 
@@ -21,7 +21,7 @@ Statement normalization converts CRLF/CR to LF, removes trailing horizontal whit
 
 The anchors below hash canonical JSON with recursively sorted object keys and deterministically sorted catalog rows.
 
-The independently auditable [per-object evidence matrix](./crimson-migration-object-matrix-2026-08-29.json) records 160 object decisions underpinning all five remote pairs and all sixteen `baseline_present` results. Each row carries explicit expected and observed presence, an exact ordered signature, the ordered fields asserted by that decision, mismatched fields, and reciprocal source links. The matrix documents its canonical field and array ordering; it uses SHA-256 instead of plaintext for bodies, expressions, defaults, comments, and constraint definitions. Its committed byte-level SHA-256 is `5d9d123fb546be2b3fe1bf3e8a99cec5daf18c0e0c528fe52accca9e5817ea62`.
+The independently auditable [per-object evidence matrix](./crimson-migration-object-matrix-2026-08-29.json) records 160 object decisions underpinning all five remote pairs and all sixteen `baseline_present` results. Each row carries explicit expected and observed presence, an exact ordered signature, the ordered fields asserted by that decision, mismatched fields, and reciprocal source links. The matrix documents its canonical field and array ordering; it uses SHA-256 instead of plaintext for bodies, expressions, defaults, comments, and constraint definitions. Expressions, defaults, and constraint definitions are hashed after line-ending normalization and outer trim only; internal whitespace, case, qualification, casts, grouping, parentheses, and literal text are preserved. The matrix contains 66 PASS and 94 FAIL object decisions. Its committed byte-level SHA-256 is `5d504fa96958ac335cd890a59772318045af3f3b9224797e9978191647508ef4`.
 
 | Evidence set | Rows | SHA-256 |
 | --- | ---: | --- |
@@ -62,7 +62,7 @@ The independently auditable [per-object evidence matrix](./crimson-migration-obj
 - Local file: `20260827020755_create_multi_inventory_system.sql`
 - Normalized statement SHA-256, remote and local: `57756338624838ea95522141caef6d29597a6adc06d0f23edf4ad80a7bad8fec`
 - Statement comparison: **PASS**.
-- Current object comparison: **FAIL**. Both relations, all expected columns, all seven named indexes, the trigger, table grants, and all six function bodies are present. However, policy `Admins read inventory movements` is absent. The five expected named foreign-key/check constraints and `inventory_stock_movements_idempotency_unique` are also absent; an alternate unique constraint named `inventory_stock_movements_idempotency` is present and recorded as a distinct catalog signature rather than treated as equivalent.
+- Current object comparison: **FAIL**. Both relations, every expected column name, all seven named indexes, the trigger, table grants, and all six function bodies are present. Exact-text signatures nevertheless differ for the `inventories.kind` default, three indexes (`inventories_active_name_idx`, `inventories_one_primary_idx`, and `inventory_stock_movements_inventory_idx`), the two present inventory policies, and six present constraint definitions. Policy `Admins read inventory movements` is absent. Five expected named foreign-key/check constraints and `inventory_stock_movements_idempotency_unique` are also absent; an alternate unique constraint named `inventory_stock_movements_idempotency` is present and recorded as a distinct catalog signature rather than treated as equivalent.
 - Manifest decision: remain `candidate`.
 
 ### 20260827051604
@@ -93,7 +93,7 @@ The catalog check is deliberately signature-sensitive. Mere name presence is not
 | `20240701000000_search_functions.sql` | **FAIL** | Extension `unaccent` and functions `normalize_text`, `search_orders_v2`, and `search_imports_v2` are absent. |
 | `202606100001_commission_start_guard.sql` | **FAIL** | All five named backup relations and `commission_periods_start_period_chk` are absent. No historical delete/copy effect was inferred or queried. |
 | `202606100002_add_external_prices_catalog_support.sql` | **FAIL** | All column and index names exist, but at least `external_prices.color_identity` has a different type/default signature from the local definition. |
-| `20260615000300_add_admin_manual_buylist_quotes.sql` | **PASS** | Both columns, the `created_by_admin_id` foreign key, and both exact column comments are present. |
+| `20260615000300_add_admin_manual_buylist_quotes.sql` | **FAIL** | Both columns and exact comments are present, but the exact authored FK clause and current `pg_get_constraintdef` text hash differently. No syntax normalization is used to infer semantic equivalence. |
 | `20260823043500_production_compatibility_baseline.sql` | **FAIL** | Later definitions supersede this file and current `decrement_stock` does not match the final local definition, so supersession cannot be proven safe as a set. |
 | `20260823043637_local_security_baseline.sql` | **FAIL** | Expected policies are absent; several function `proconfig`/ACL signatures remain open or unset, and `admin_users` still exposes effective API-role privileges. |
 | `20260823044210_fix_merge_duplicate_products_lint.sql` | **FAIL** | `merge_duplicate_products` body and execute ACL differ from the local definition. |
@@ -106,7 +106,7 @@ The catalog check is deliberately signature-sensitive. Mere name presence is not
 | `20260823173257_create_place_order_atomic.sql` | **FAIL** | The function was superseded, but its final multi-inventory definition also differs from production. |
 | `20260823183638_create_release_expired_orders_atomic.sql` | **FAIL** | The function was superseded, but its final multi-inventory definition also differs from production. |
 
-Summary: 3 baseline entries pass and 13 fail.
+Summary: 2 baseline entries pass and 14 fail.
 
 ## Forward-only remediation
 

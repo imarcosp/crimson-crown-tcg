@@ -81,12 +81,18 @@
     },
     "hashes": {
       "bodySha256": "SHA-256 of the local dollar-quoted body or pg_proc.prosrc after CRLF/CR to LF, trailing horizontal whitespace removal, and outer whitespace trim.",
-      "expressionSha256": "SHA-256 after LF normalization, lowercase folding, public. removal, ::text removal, grouping-parenthesis removal while retaining empty function-call parentheses, whitespace collapse, comma normalization, and equals-spacing removal.",
-      "defaultSha256": "SHA-256 after LF normalization, trailing horizontal whitespace removal, outer trim, and whitespace collapse; null means no default.",
+      "expressionSha256": "SHA-256 after CRLF/CR to LF and outer whitespace trim only. Internal whitespace, case, schema qualification, casts, operator grouping, parentheses, and literal text are preserved exactly.",
+      "defaultSha256": "SHA-256 of the exact local DEFAULT payload or exact pg_catalog default expression after CRLF/CR to LF and outer whitespace trim only; null means no default. Internal whitespace, case, casts, parentheses, and literal text are preserved exactly.",
       "commentSha256": "SHA-256 after LF normalization, trailing horizontal whitespace removal, and outer trim; null means no comment.",
-      "definitionSha256": "Uses expressionSha256 canonicalization on the safe catalog definition."
+      "definitionSha256": "SHA-256 of the exact authored local constraint clause or exact pg_get_constraintdef text after CRLF/CR to LF and outer whitespace trim only. No case, qualification, cast, parenthesis, literal, or whitespace rewriting is performed."
     },
-    "grants": "Effective ACLs are exploded. Function comparison includes only EXECUTE for API roles. Relation comparison uses the exact per-role privilege object; owner privileges are excluded. For REVOKE-only baselines, unmentioned privileges are preserved from the observed capture and the explicit local deltas are applied to form expected."
+    "grants": "Effective ACLs are exploded. Function comparison includes only EXECUTE for API roles. Relation comparison uses the exact per-role privilege object; owner privileges are excluded. For REVOKE-only baselines, unmentioned privileges are preserved from the observed capture and the explicit local deltas are applied to form expected.",
+    "expressionCapture": {
+      "indexKey": "The structural outer key-list parentheses are located with a quote/comment/dollar-quote-aware balanced scanner; only the exact payload inside those delimiters is hashed.",
+      "indexPredicate": "The exact text after the top-level WHERE keyword is hashed.",
+      "policyUsing": "The structural USING parentheses are located with a quote/comment/dollar-quote-aware balanced scanner; only the exact payload inside those delimiters is hashed.",
+      "policyCheck": "The structural WITH CHECK parentheses are located with a quote/comment/dollar-quote-aware balanced scanner; only the exact payload inside those delimiters is hashed."
+    }
   },
   "summary": {
     "objectCount": 160,
@@ -101,16 +107,16 @@
       "trigger": 1
     },
     "resultCounts": {
-      "pass": 78,
-      "fail": 82
+      "pass": 66,
+      "fail": 94
     },
     "remotePairs": {
       "pass": 2,
       "fail": 3
     },
     "baselinePresent": {
-      "pass": 3,
-      "fail": 13
+      "pass": 2,
+      "fail": 14
     }
   },
   "coverage": {
@@ -299,7 +305,7 @@
       },
       {
         "file": "20260615000300_add_admin_manual_buylist_quotes.sql",
-        "status": "pass",
+        "status": "fail",
         "objectIds": [
           "column:public.buylist_orders.created_by_admin_id",
           "column:public.buylist_orders.sent_at",
@@ -1495,13 +1501,13 @@
       "id": "column:public.inventories.kind",
       "type": "column",
       "name": "public.inventories.kind",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
           "type": "pg_catalog.text",
           "nullable": false,
-          "defaultSha256": "fbb518bf99cadbf277101e52360cb94d30415d4ce846bb592bdadd85e4c8ff8d",
+          "defaultSha256": "b56ca0175191c0b7f881acc98f4a185b1498a78d6e6f3da1387bafc06187bd26",
           "commentSha256": null
         }
       },
@@ -1521,7 +1527,9 @@
           "defaultSha256",
           "commentSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "defaultSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -2341,7 +2349,7 @@
         "signature": {
           "type": "pg_catalog.text",
           "nullable": true,
-          "defaultSha256": "2726a4c8615a452b63d22e3194ced35d68e7eabc52db2fe71ab27cbe4fbd2483",
+          "defaultSha256": "daf2cf11e72818e0995e3f98e091d00dc7b319498c5692b669ddb0bcdff046e2",
           "commentSha256": null
         }
       },
@@ -2418,19 +2426,19 @@
       "id": "constraint:public.buylist_orders.buylist_orders_created_by_admin_id_fkey",
       "type": "constraint",
       "name": "public.buylist_orders.buylist_orders_created_by_admin_id_fkey",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "9ca0af2856d28a1c1143584b7085089895c7a63f659773c28469a577d7387f38"
+          "definitionSha256": "eae25b0bd137e66899c06b3636dd9960d9a8aec7fa514e38efc6cd6e66d1e50d"
         }
       },
       "observed": {
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "9ca0af2856d28a1c1143584b7085089895c7a63f659773c28469a577d7387f38"
+          "definitionSha256": "b927eafd29ce44a27714bfc67bbbda1c890183e03e342dcb6dcdf51fb6c6200c"
         }
       },
       "comparison": {
@@ -2438,7 +2446,9 @@
           "kind",
           "definitionSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "definitionSha256"
+        ]
       },
       "sources": {
         "remotePairs": [],
@@ -2457,7 +2467,7 @@
         "presence": "present",
         "signature": {
           "kind": "c",
-          "definitionSha256": "1d3e787dea8d1720a879313574ffe1db3d8939621c1127f6397fca3fb97bc4bf"
+          "definitionSha256": "6ab44e1fd4de5dd1604eb154ad4aa981b0fa281faa0e5f1bc5734feee71469dc"
         }
       },
       "observed": {
@@ -2485,19 +2495,19 @@
       "id": "constraint:public.inventories.inventories_kind_check",
       "type": "constraint",
       "name": "public.inventories.inventories_kind_check",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
           "kind": "c",
-          "definitionSha256": "6dcae7ce7ec770595c6f39e1531bc64184eedfcb510b45c1a3a81252a818c71e"
+          "definitionSha256": "4724a9e906efb508be5de53308efb6bb35c9d26c32a48c9cf97661c63e51e335"
         }
       },
       "observed": {
         "presence": "present",
         "signature": {
           "kind": "c",
-          "definitionSha256": "6dcae7ce7ec770595c6f39e1531bc64184eedfcb510b45c1a3a81252a818c71e"
+          "definitionSha256": "1479a4f0253e5e8a273e6ef8a8421c8583c83fb6f2a826076d1b038147ac67d8"
         }
       },
       "comparison": {
@@ -2505,7 +2515,9 @@
           "kind",
           "definitionSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "definitionSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -2519,19 +2531,19 @@
       "id": "constraint:public.inventories.inventories_pkey",
       "type": "constraint",
       "name": "public.inventories.inventories_pkey",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
           "kind": "p",
-          "definitionSha256": "db880e4cd3a149d0c030d866c2f6b9e2f83694d35433db6f61d3131c5f2a65d8"
+          "definitionSha256": "30173d8b12241d2e2cae9c7ddf17f03de4dc1b2140b0861d5034904ab9d16bd6"
         }
       },
       "observed": {
         "presence": "present",
         "signature": {
           "kind": "p",
-          "definitionSha256": "db880e4cd3a149d0c030d866c2f6b9e2f83694d35433db6f61d3131c5f2a65d8"
+          "definitionSha256": "8c8464f42472e42ee190fc91ca8db79b5351d3a4609040516578d229c56f6fa5"
         }
       },
       "comparison": {
@@ -2539,7 +2551,9 @@
           "kind",
           "definitionSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "definitionSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -2562,7 +2576,7 @@
         "presence": "present",
         "signature": {
           "kind": "u",
-          "definitionSha256": "00d8d7fb515358a9a63e12f67f8dbbb4d63ace5bae5cd293bed5c97772c861de"
+          "definitionSha256": "fff17a71b1b1f2b140e8e59c09e992d0128fab1b3c5dd2374c01eaabc42d7ad3"
         }
       },
       "comparison": {
@@ -2590,7 +2604,7 @@
         "presence": "present",
         "signature": {
           "kind": "u",
-          "definitionSha256": "00d8d7fb515358a9a63e12f67f8dbbb4d63ace5bae5cd293bed5c97772c861de"
+          "definitionSha256": "8648c260f2e9eff95cf60a6e5f632cfa6a2de83bd7cc4b8d2889fd9142c0a1c5"
         }
       },
       "observed": {
@@ -2623,7 +2637,7 @@
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "7e027b66dc1a3f5086ca78ef2efecd29b3912088318300679473bd539c5f67c8"
+          "definitionSha256": "4a23291b129ebc6e28a702855dbf52aac42e22214edeead6911e842ff53fa578"
         }
       },
       "observed": {
@@ -2656,7 +2670,7 @@
         "presence": "present",
         "signature": {
           "kind": "c",
-          "definitionSha256": "682831ffeec26ed23c8148499aaa82623cc1b7e3c405ae83507a3739c388f90d"
+          "definitionSha256": "6b868ca36b09d4ebc6e9ebe137f332e24e891e02062311fd0d2e482ded41a6f7"
         }
       },
       "observed": {
@@ -2689,7 +2703,7 @@
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "375ba81c4466a586ff14020f46a6d74a5af399b938278620e42cc8902a9f8354"
+          "definitionSha256": "14727e640c522aae989a094e45a48d45bfbb2d2246771499d6d1fddeb9000a4f"
         }
       },
       "observed": {
@@ -2722,7 +2736,7 @@
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "29039934bc8f01894ecbaf6aee70e9844413b3ab27171d6f8562f1db7f702cbc"
+          "definitionSha256": "b3e3da2b7c02613235a9fa932a63d55cffe71fcf779381a823dca5d79007ce3b"
         }
       },
       "observed": {
@@ -2750,19 +2764,19 @@
       "id": "constraint:public.inventory_stock_movements.inventory_stock_movements_pkey",
       "type": "constraint",
       "name": "public.inventory_stock_movements.inventory_stock_movements_pkey",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
           "kind": "p",
-          "definitionSha256": "db880e4cd3a149d0c030d866c2f6b9e2f83694d35433db6f61d3131c5f2a65d8"
+          "definitionSha256": "30173d8b12241d2e2cae9c7ddf17f03de4dc1b2140b0861d5034904ab9d16bd6"
         }
       },
       "observed": {
         "presence": "present",
         "signature": {
           "kind": "p",
-          "definitionSha256": "db880e4cd3a149d0c030d866c2f6b9e2f83694d35433db6f61d3131c5f2a65d8"
+          "definitionSha256": "8c8464f42472e42ee190fc91ca8db79b5351d3a4609040516578d229c56f6fa5"
         }
       },
       "comparison": {
@@ -2770,7 +2784,9 @@
           "kind",
           "definitionSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "definitionSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -2789,7 +2805,7 @@
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "90a79083d0fc2d458d39d53f7bae51be36d8aac655d6df004710d965ea3040c6"
+          "definitionSha256": "1463cd9381f146f8c429d1a7141dbaa1f97c4b84329a1f8c3ae684a75d6cad8d"
         }
       },
       "observed": {
@@ -2817,19 +2833,19 @@
       "id": "constraint:public.order_items.order_items_inventory_id_fkey",
       "type": "constraint",
       "name": "public.order_items.order_items_inventory_id_fkey",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "7e027b66dc1a3f5086ca78ef2efecd29b3912088318300679473bd539c5f67c8"
+          "definitionSha256": "c9a7ea689418b9761db442755f7dfa8fda70edc154d0b54d342fc803c02977af"
         }
       },
       "observed": {
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "7e027b66dc1a3f5086ca78ef2efecd29b3912088318300679473bd539c5f67c8"
+          "definitionSha256": "09fbf57733b104a1dbfdefec0345dd8a09fc0a7843dd88eafc4b22c18677a79b"
         }
       },
       "comparison": {
@@ -2837,7 +2853,9 @@
           "kind",
           "definitionSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "definitionSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -2851,19 +2869,19 @@
       "id": "constraint:public.products.products_inventory_id_fkey",
       "type": "constraint",
       "name": "public.products.products_inventory_id_fkey",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "7e027b66dc1a3f5086ca78ef2efecd29b3912088318300679473bd539c5f67c8"
+          "definitionSha256": "c9a7ea689418b9761db442755f7dfa8fda70edc154d0b54d342fc803c02977af"
         }
       },
       "observed": {
         "presence": "present",
         "signature": {
           "kind": "f",
-          "definitionSha256": "7e027b66dc1a3f5086ca78ef2efecd29b3912088318300679473bd539c5f67c8"
+          "definitionSha256": "09fbf57733b104a1dbfdefec0345dd8a09fc0a7843dd88eafc4b22c18677a79b"
         }
       },
       "comparison": {
@@ -2871,7 +2889,9 @@
           "kind",
           "definitionSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "definitionSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -5578,7 +5598,7 @@
       "id": "index:public.inventories_active_name_idx",
       "type": "index",
       "name": "public.inventories_active_name_idx",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
@@ -5588,7 +5608,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "9ecf808f8d99546e0043c3279a8a5ea4f3d514c592910ea698d17adab21eecb7",
+          "keyExpressionSha256": "8115960ad5508443231e9c0a35d6ab5ab75cfa954fd6ca9f10d915ff204d81ba",
           "predicateSha256": "59f0630f23e1809702dcadc7c5a9848e0bb9cf315e2592f9a3fff32fbfd6cdb0"
         }
       },
@@ -5601,8 +5621,8 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "9ecf808f8d99546e0043c3279a8a5ea4f3d514c592910ea698d17adab21eecb7",
-          "predicateSha256": "59f0630f23e1809702dcadc7c5a9848e0bb9cf315e2592f9a3fff32fbfd6cdb0"
+          "keyExpressionSha256": "8115960ad5508443231e9c0a35d6ab5ab75cfa954fd6ca9f10d915ff204d81ba",
+          "predicateSha256": "904181aca61707662601f9947c5078542191deeb012bc4b17b68a9ca034966be"
         }
       },
       "comparison": {
@@ -5616,7 +5636,9 @@
           "keyExpressionSha256",
           "predicateSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "predicateSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -5630,7 +5652,7 @@
       "id": "index:public.inventories_one_primary_idx",
       "type": "index",
       "name": "public.inventories_one_primary_idx",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
@@ -5641,7 +5663,7 @@
           "valid": true,
           "ready": true,
           "keyExpressionSha256": "0b27c158feb36ab18a10ff687909ec730ece6280581dd407e2672359be7725dd",
-          "predicateSha256": "bd4bf4388b54e8728ffa6160895161897d40ffad512dde63d16ae19eeff808e0"
+          "predicateSha256": "b04cb6bcca30c24d24e22307a84a1d4858b6a2be8918422bec96d47dc0e06964"
         }
       },
       "observed": {
@@ -5654,7 +5676,7 @@
           "valid": true,
           "ready": true,
           "keyExpressionSha256": "0b27c158feb36ab18a10ff687909ec730ece6280581dd407e2672359be7725dd",
-          "predicateSha256": "bd4bf4388b54e8728ffa6160895161897d40ffad512dde63d16ae19eeff808e0"
+          "predicateSha256": "f52d7eb4a497e77ac45786e787e392547f6a44e4b11623464a9182f3134748af"
         }
       },
       "comparison": {
@@ -5668,7 +5690,9 @@
           "keyExpressionSha256",
           "predicateSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "predicateSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -5682,7 +5706,7 @@
       "id": "index:public.inventory_stock_movements_inventory_idx",
       "type": "index",
       "name": "public.inventory_stock_movements_inventory_idx",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
@@ -5692,7 +5716,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "db7f133b847c57980550d56afece4e5bb75c77c12cf5c25cd11405ac21798991",
+          "keyExpressionSha256": "89a2801d9818630ff3d43feac2baa3705173137825e5f5e67f7118a5fa538872",
           "predicateSha256": null
         }
       },
@@ -5705,7 +5729,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "db7f133b847c57980550d56afece4e5bb75c77c12cf5c25cd11405ac21798991",
+          "keyExpressionSha256": "527d657474dec962e31d92430f5d0db91c098dc562e7ab442fd5dc1c524b3ea8",
           "predicateSha256": null
         }
       },
@@ -5720,7 +5744,9 @@
           "keyExpressionSha256",
           "predicateSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "keyExpressionSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -5744,7 +5770,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "4f13944d6bff37c38202d345f16af38ff507f116374753546ad4c0065a78dcec",
+          "keyExpressionSha256": "cdcb975ade53db187f4c5f7b9a28dbfd49b239950800fe442d79b8dcfef57efd",
           "predicateSha256": null
         }
       },
@@ -5757,7 +5783,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "4f13944d6bff37c38202d345f16af38ff507f116374753546ad4c0065a78dcec",
+          "keyExpressionSha256": "cdcb975ade53db187f4c5f7b9a28dbfd49b239950800fe442d79b8dcfef57efd",
           "predicateSha256": null
         }
       },
@@ -5796,7 +5822,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "4cf729acc7d544362f0452207427c6e4cc44543acc554a0c69fb40769fb54d3b",
+          "keyExpressionSha256": "8c7577078d8e16559e7da8d13659dbcf1e1244601e10b90831455202029109d1",
           "predicateSha256": null
         }
       },
@@ -5809,7 +5835,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "4cf729acc7d544362f0452207427c6e4cc44543acc554a0c69fb40769fb54d3b",
+          "keyExpressionSha256": "8c7577078d8e16559e7da8d13659dbcf1e1244601e10b90831455202029109d1",
           "predicateSha256": null
         }
       },
@@ -5848,7 +5874,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "091b84b6c507ca5202aa587ee01899ac16d881f879a46f85b1993146077bb1fc",
+          "keyExpressionSha256": "1fb91980b80752fc3ab001852e8162da79b77d7d4ae66850fac54056a5f5155f",
           "predicateSha256": "7e9545810e6e14cba0d8a2371392b4c4152efcb00767b2261d0396618de785a1"
         }
       },
@@ -5861,7 +5887,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "091b84b6c507ca5202aa587ee01899ac16d881f879a46f85b1993146077bb1fc",
+          "keyExpressionSha256": "1fb91980b80752fc3ab001852e8162da79b77d7d4ae66850fac54056a5f5155f",
           "predicateSha256": "7e9545810e6e14cba0d8a2371392b4c4152efcb00767b2261d0396618de785a1"
         }
       },
@@ -5900,7 +5926,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "18532f585a36a844a3b81c0cb71c814ca35a244e9e952166e16fc86e1fb65111",
+          "keyExpressionSha256": "cbd7e7d4ef1d4e1bbaf38e2716aedd7896afd4bc13c3a023d681f21a231f5985",
           "predicateSha256": null
         }
       },
@@ -5913,7 +5939,7 @@
           "primary": false,
           "valid": true,
           "ready": true,
-          "keyExpressionSha256": "18532f585a36a844a3b81c0cb71c814ca35a244e9e952166e16fc86e1fb65111",
+          "keyExpressionSha256": "cbd7e7d4ef1d4e1bbaf38e2716aedd7896afd4bc13c3a023d681f21a231f5985",
           "predicateSha256": null
         }
       },
@@ -5952,7 +5978,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -5995,8 +6021,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6038,8 +6064,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6082,7 +6108,7 @@
             "authenticated"
           ],
           "usingSha256": null,
-          "checkSha256": "3390040d062523359be05f2fe81843ab542e55108557848f929996af6baec6a4"
+          "checkSha256": "41bb580ee52fccb338f1d73e0564854b3374826c06f4738952cba5a01e322a69"
         }
       },
       "observed": {
@@ -6124,7 +6150,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "3390040d062523359be05f2fe81843ab542e55108557848f929996af6baec6a4",
+          "usingSha256": "41bb580ee52fccb338f1d73e0564854b3374826c06f4738952cba5a01e322a69",
           "checkSha256": null
         }
       },
@@ -6167,8 +6193,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6210,8 +6236,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fdf8b211d6e07bb9c493b5f463ceaadb039aaa3c502cef9a23f2251556413a11",
-          "checkSha256": "f33b545a26f58d4b326c4208885821b02f5b40c5cb1a748f9f98b2739dcbf23b"
+          "usingSha256": "1c74066f2cb103046b45d5788dc8adde5742fc9f7a1cbc2d6e18b90b3fd15959",
+          "checkSha256": "5d70f9eddccd318629cc7efb4ff9aa1583e486d76882d19744145a2239458e39"
         }
       },
       "observed": {
@@ -6254,7 +6280,7 @@
             "authenticated"
           ],
           "usingSha256": null,
-          "checkSha256": "ad7455f0ec57653ac3125d035ae4b61691272c9fd7f589b4bfc765ba1d8f2f5f"
+          "checkSha256": "4a98b4eccdd4fa33594b227a4d9724992e2b2d13a775338181449737640cef28"
         }
       },
       "observed": {
@@ -6296,7 +6322,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "ad7455f0ec57653ac3125d035ae4b61691272c9fd7f589b4bfc765ba1d8f2f5f",
+          "usingSha256": "4a98b4eccdd4fa33594b227a4d9724992e2b2d13a775338181449737640cef28",
           "checkSha256": null
         }
       },
@@ -6339,8 +6365,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6383,7 +6409,7 @@
             "anon",
             "authenticated"
           ],
-          "usingSha256": "a77903e4c0d8af53371be1992bcc14b3c2c40a4cdf63b84997566004c8f2e448",
+          "usingSha256": "515c053c1edf10e8ee4aa952a765fe980628d49f36e46acccc4dac003452f1c2",
           "checkSha256": null
         }
       },
@@ -6426,7 +6452,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -6469,8 +6495,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6512,8 +6538,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6555,7 +6581,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -6598,8 +6624,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6641,8 +6667,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6674,7 +6700,7 @@
       "id": "policy:public.inventories.Admins manage inventories",
       "type": "policy",
       "name": "public.inventories.Admins manage inventories",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
@@ -6684,8 +6710,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6710,7 +6736,10 @@
           "usingSha256",
           "checkSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "usingSha256",
+          "checkSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -6724,7 +6753,7 @@
       "id": "policy:public.inventories.Public reads active inventories",
       "type": "policy",
       "name": "public.inventories.Public reads active inventories",
-      "result": "pass",
+      "result": "fail",
       "expected": {
         "presence": "present",
         "signature": {
@@ -6735,7 +6764,7 @@
             "anon",
             "authenticated"
           ],
-          "usingSha256": "04f73731622878ea58c5721320c0d41d90920365140da4860798704e34590a84",
+          "usingSha256": "de15c04258b80c8b3ac53b452144f98d1df49a8dd656159ecc6459c94211b03a",
           "checkSha256": null
         }
       },
@@ -6749,7 +6778,7 @@
             "anon",
             "authenticated"
           ],
-          "usingSha256": "04f73731622878ea58c5721320c0d41d90920365140da4860798704e34590a84",
+          "usingSha256": "7d24bbde4962a6c7e305a8b5d841243b07e6dd84edfa378066040b632eef8a91",
           "checkSha256": null
         }
       },
@@ -6762,7 +6791,9 @@
           "usingSha256",
           "checkSha256"
         ],
-        "mismatchedFields": []
+        "mismatchedFields": [
+          "usingSha256"
+        ]
       },
       "sources": {
         "remotePairs": [
@@ -6786,7 +6817,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -6830,7 +6861,7 @@
             "authenticated"
           ],
           "usingSha256": null,
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -6872,7 +6903,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -6915,7 +6946,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -6958,7 +6989,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -7001,7 +7032,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -7044,8 +7075,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -7087,8 +7118,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -7130,8 +7161,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -7173,7 +7204,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -7216,8 +7247,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -7259,7 +7290,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "e43f1ea4c0947e1ae84d58bfa0d2870be7b5422f9de6d854e1971c1dacf05717",
+          "usingSha256": "080a1612d3624c03a79c8f53f24af983580caf02b49c491bc2ccdc09acdf51f8",
           "checkSha256": null
         }
       },
@@ -7302,7 +7333,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
@@ -7345,8 +7376,8 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
-          "checkSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea"
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
+          "checkSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef"
         }
       },
       "observed": {
@@ -7388,7 +7419,7 @@
           "roles": [
             "authenticated"
           ],
-          "usingSha256": "fd69c4925a244d275290af2da10e755b1a222090c875823103aee6d450552aea",
+          "usingSha256": "f30c576aa720f145c0fd84acbdbfea505c516c64a8971120d0d549ba734b8aef",
           "checkSha256": null
         }
       },
