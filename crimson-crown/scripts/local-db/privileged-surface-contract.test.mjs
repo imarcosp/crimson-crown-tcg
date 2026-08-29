@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, realpath } from 'node:fs/promises'
 import { test } from 'node:test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -41,6 +41,43 @@ const requiredSearchPathSignatures = [
 ]
 
 const authenticatedSignature = 'is_commission_admin()'
+
+async function assertEvidenceIsVerifiable(evidence) {
+  assert.ok(['repository', 'catalog'].includes(evidence.kind), `kind inválido: ${evidence.location}`)
+  assert.ok(typeof evidence.detail === 'string' && evidence.detail.length > 0)
+
+  if (evidence.kind === 'catalog') {
+    assert.match(evidence.location, /^catalog:(local|production):[a-z_]+$/)
+    assert.ok(evidence.object.length > 0, `objeto de catálogo ausente: ${evidence.location}`)
+    assert.equal('line' in evidence, false, `evidencia de catálogo no debe fingir línea: ${evidence.location}`)
+    assert.equal('anchor' in evidence, false, `evidencia de catálogo no debe fingir anchor: ${evidence.location}`)
+    return
+  }
+
+  assert.ok(!path.isAbsolute(evidence.location), `evidencia absoluta prohibida: ${evidence.location}`)
+  const lexicalPath = path.resolve(appRoot, evidence.location)
+  const lexicalRelative = path.relative(appRoot, lexicalPath)
+  assert.ok(
+    lexicalRelative.length > 0 && !lexicalRelative.startsWith('..') && !path.isAbsolute(lexicalRelative),
+    `evidencia fuera del repo: ${evidence.location}`,
+  )
+
+  const [realRoot, realEvidencePath] = await Promise.all([realpath(appRoot), realpath(lexicalPath)])
+  const realRelative = path.relative(realRoot, realEvidencePath)
+  assert.ok(
+    realRelative.length > 0 && !realRelative.startsWith('..') && !path.isAbsolute(realRelative),
+    `evidencia resuelve fuera del repo: ${evidence.location}`,
+  )
+  assert.ok(Number.isInteger(evidence.line) && evidence.line > 0)
+  assert.ok(typeof evidence.anchor === 'string' && evidence.anchor.length > 0)
+
+  const lines = (await readFile(realEvidencePath, 'utf8')).split(/\r?\n/)
+  assert.ok(evidence.line <= lines.length, `línea fuera de rango: ${evidence.location}:${evidence.line}`)
+  assert.ok(
+    lines[evidence.line - 1].includes(evidence.anchor),
+    `anchor ausente: ${evidence.location}:${evidence.line} -> ${evidence.anchor}`,
+  )
+}
 
 async function loadSingleMigration(suffix) {
   const matches = (await readdir(migrationRoot))
@@ -93,7 +130,7 @@ test('el inventario clasifica exactamente las 24 superficies reportadas', async 
     assert.ok(Array.isArray(entry.evidence) && entry.evidence.length > 0)
     for (const evidence of entry.evidence) {
       assert.ok(evidence.location.length > 0)
-      assert.ok(Number.isInteger(evidence.line) && evidence.line > 0)
+      await assertEvidenceIsVerifiable(evidence)
     }
 
     const expectedRoles = entry.signature === authenticatedSignature

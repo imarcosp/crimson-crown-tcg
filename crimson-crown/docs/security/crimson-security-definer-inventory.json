@@ -10,8 +10,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 123, "detail": "definición de la función"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2096, "detail": "trigger trg_assign_import_order_number"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.assign_import_order_number()", "detail": "definición de la función"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.import_orders.trg_assign_import_order_number", "detail": "trigger trg_assign_import_order_number"}
     ]
   },
   {
@@ -25,9 +25,9 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 159, "detail": "definición del total"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 901, "detail": "consumo desde refresh_commission_period"},
-      {"location": "src/app/actions/commissions.ts", "line": 256, "detail": "Server Action con cliente service-role"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.calculate_import_order_total(bigint)", "detail": "definición del total"},
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.refresh_commission_period(text, numeric, numeric, boolean) -> public.calculate_import_order_total(bigint)", "detail": "consumo desde refresh_commission_period"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 256, "anchor": "admin.rpc('refresh_commission_period'", "detail": "Server Action con cliente service-role"}
     ]
   },
   {
@@ -41,9 +41,9 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "scripts/cleanup-stock-zero.mjs", "line": 5, "detail": "requiere service-role"},
-      {"location": "scripts/cleanup-stock-zero.mjs", "line": 27, "detail": "llamada RPC"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 196, "detail": "operación DELETE en lote"}
+      {"kind": "repository", "location": "scripts/cleanup-stock-zero.mjs", "line": 5, "anchor": "SUPABASE_SERVICE_ROLE_KEY", "detail": "requiere service-role"},
+      {"kind": "repository", "location": "scripts/cleanup-stock-zero.mjs", "line": 27, "anchor": "rpc('delete_trash_products'", "detail": "llamada RPC"},
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.delete_trash_products(integer)", "detail": "operación DELETE en lote"}
     ]
   },
   {
@@ -57,8 +57,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 210, "detail": "implementación local con public.is_admin()"},
-      {"location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 310, "detail": "ACL local residual"}
+      {"kind": "repository", "location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 210, "anchor": "function public.find_orders_by_id_part", "detail": "implementación local con public.is_admin()"},
+      {"kind": "repository", "location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 310, "anchor": "revoke all on function public.find_orders_by_id_part", "detail": "ACL local residual"}
     ]
   },
   {
@@ -72,8 +72,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 245, "detail": "definición de la función"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2092, "detail": "trigger set_import_order_number"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.generate_import_order_number()", "detail": "definición de la función"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.import_orders.set_import_order_number", "detail": "trigger set_import_order_number"}
     ]
   },
   {
@@ -87,8 +87,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 259, "detail": "lectura y bloqueo de numeración"},
-      {"location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 312, "detail": "ACL local service-only"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.generate_next_import_order_number()", "detail": "lectura y bloqueo de numeración"},
+      {"kind": "repository", "location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 312, "anchor": "revoke all on function public.generate_next_import_order_number", "detail": "ACL local service-only"}
     ]
   },
   {
@@ -102,7 +102,7 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 295, "detail": "agregación de stock por precio"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.get_inventory_valuation()", "detail": "agregación de stock por precio"}
     ]
   },
   {
@@ -116,7 +116,7 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 307, "detail": "definición del helper de limpieza"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.get_trash_products(integer)", "detail": "definición del helper de limpieza"}
     ]
   },
   {
@@ -130,9 +130,9 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 342, "detail": "creación de profile desde Auth"},
-      {"location": "catalog:production pg_trigger", "line": 1, "detail": "auth.users.on_auth_user_created; ausente en pg_trigger local"},
-      {"location": "supabase/migrations/20260823050711_local_write_surface_hardening.sql", "line": 19, "detail": "ACL local service-only"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.handle_new_user()", "detail": "creación de profile desde Auth"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "auth.users.on_auth_user_created -> public.handle_new_user()", "detail": "ausente en pg_trigger local"},
+      {"kind": "repository", "location": "supabase/migrations/20260823050711_local_write_surface_hardening.sql", "line": 19, "anchor": "revoke all on function public.handle_new_user", "detail": "ACL local service-only"}
     ]
   },
   {
@@ -146,9 +146,9 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 453, "detail": "función local delega en public.is_admin()"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2365, "detail": "primera de cinco políticas de comisiones"},
-      {"location": "supabase/migrations/20260823050711_local_write_surface_hardening.sql", "line": 29, "detail": "revoca PUBLIC y anon"}
+      {"kind": "repository", "location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 453, "anchor": "function public.is_commission_admin", "detail": "función local delega en public.is_admin()"},
+      {"kind": "catalog", "location": "catalog:production:pg_policy", "object": "commission_* readable by admins -> public.is_commission_admin()", "detail": "cinco políticas de comisiones"},
+      {"kind": "repository", "location": "supabase/migrations/20260823050711_local_write_surface_hardening.sql", "line": 29, "anchor": "revoke execute on function public.is_commission_admin", "detail": "revoca PUBLIC y anon"}
     ]
   },
   {
@@ -162,9 +162,9 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "scripts/cleanup-duplicates.mjs", "line": 5, "detail": "requiere service-role"},
-      {"location": "scripts/cleanup-duplicates.mjs", "line": 27, "detail": "llamada RPC"},
-      {"location": "supabase/migrations/20260823044210_fix_merge_duplicate_products_lint.sql", "line": 10, "detail": "guard interno service-role/admin"}
+      {"kind": "repository", "location": "scripts/cleanup-duplicates.mjs", "line": 5, "anchor": "SUPABASE_SERVICE_ROLE_KEY", "detail": "requiere service-role"},
+      {"kind": "repository", "location": "scripts/cleanup-duplicates.mjs", "line": 27, "anchor": "rpc('merge_duplicate_products'", "detail": "llamada RPC"},
+      {"kind": "repository", "location": "supabase/migrations/20260823044210_fix_merge_duplicate_products_lint.sql", "line": 15, "anchor": "auth.role()", "detail": "guard interno service-role/admin"}
     ]
   },
   {
@@ -178,8 +178,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 473, "detail": "definición SECURITY DEFINER"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2068, "detail": "trigger on_buylist_change"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.notify_buylist_manager()", "detail": "definición SECURITY DEFINER"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.buylist_orders.on_buylist_change", "detail": "trigger on_buylist_change"}
     ]
   },
   {
@@ -193,8 +193,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 508, "detail": "definición SECURITY DEFINER"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2072, "detail": "trigger on_credit_change"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.notify_credit_change()", "detail": "definición SECURITY DEFINER"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.profiles.on_credit_change", "detail": "trigger on_credit_change"}
     ]
   },
   {
@@ -208,8 +208,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 543, "detail": "definición SECURITY DEFINER"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2080, "detail": "trigger on_import_change"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.notify_import_manager()", "detail": "definición SECURITY DEFINER"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.import_orders.on_import_change", "detail": "trigger on_import_change"}
     ]
   },
   {
@@ -223,8 +223,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 583, "detail": "definición SECURITY DEFINER"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2084, "detail": "trigger on_order_change"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.notify_order_manager()", "detail": "definición SECURITY DEFINER"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.orders.on_order_change", "detail": "trigger on_order_change"}
     ]
   },
   {
@@ -238,8 +238,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 624, "detail": "definición SECURITY DEFINER"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2088, "detail": "trigger on_product_restock"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.notify_stock_alert()", "detail": "definición SECURITY DEFINER"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.products.on_product_restock", "detail": "trigger on_product_restock"}
     ]
   },
   {
@@ -253,8 +253,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 656, "detail": "función y dependencia de recálculo"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2100, "detail": "trigger de ajustes"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.on_commission_adjustments_change() -> public.recalculate_commission_period_status(uuid)", "detail": "función y dependencia de recálculo"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.commission_adjustments.trg_commission_adjustments_change", "detail": "trigger de ajustes"}
     ]
   },
   {
@@ -268,8 +268,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 674, "detail": "función y dependencia de recálculo"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2104, "detail": "trigger de asignaciones"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.on_commission_allocations_change() -> public.recalculate_commission_period_status(uuid)", "detail": "función y dependencia de recálculo"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.commission_payment_allocations.trg_commission_allocations_change", "detail": "trigger de asignaciones"}
     ]
   },
   {
@@ -283,10 +283,10 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "src/app/actions/commissions.ts", "line": 268, "detail": "guard requireCommissionAdmin"},
-      {"location": "src/app/actions/commissions.ts", "line": 277, "detail": "cliente service-role"},
-      {"location": "src/app/actions/commissions.ts", "line": 305, "detail": "llamada RPC"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 692, "detail": "actualización del estado del período"}
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 271, "anchor": "requireCommissionAdmin(true)", "detail": "guard requireCommissionAdmin"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 278, "anchor": "createServiceRoleClient()", "detail": "cliente service-role"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 305, "anchor": "rpc('recalculate_commission_period_status'", "detail": "llamada RPC"},
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.recalculate_commission_period_status(uuid)", "detail": "actualización del estado del período"}
     ]
   },
   {
@@ -300,10 +300,10 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "src/app/actions/commissions.ts", "line": 252, "detail": "guard requireCommissionAdmin"},
-      {"location": "src/app/actions/commissions.ts", "line": 255, "detail": "cliente service-role"},
-      {"location": "src/app/actions/commissions.ts", "line": 256, "detail": "llamada RPC"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 741, "detail": "wrapper del overload completo"}
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 252, "anchor": "requireCommissionAdmin()", "detail": "guard requireCommissionAdmin"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 255, "anchor": "createServiceRoleClient()", "detail": "cliente service-role"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 256, "anchor": "rpc('refresh_commission_period'", "detail": "llamada RPC"},
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.refresh_commission_period(text) -> public.refresh_commission_period(text, numeric, numeric, boolean)", "detail": "wrapper del overload completo"}
     ]
   },
   {
@@ -317,9 +317,9 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 744, "detail": "wrapper llama al overload completo"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 756, "detail": "implementación completa"},
-      {"location": "src/app/actions/commissions.ts", "line": 256, "detail": "entrada service-only"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.refresh_commission_period(text) -> public.refresh_commission_period(text, numeric, numeric, boolean)", "detail": "wrapper llama al overload completo"},
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.refresh_commission_period(text, numeric, numeric, boolean)", "detail": "implementación completa"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 256, "anchor": "rpc('refresh_commission_period'", "detail": "entrada service-only"}
     ]
   },
   {
@@ -333,8 +333,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 968, "detail": "función de elegibilidad"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2108, "detail": "trigger de importaciones"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.set_import_order_commission_eligible()", "detail": "función de elegibilidad"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.import_orders.trg_import_orders_set_commission_eligible", "detail": "trigger de importaciones"}
     ]
   },
   {
@@ -348,8 +348,8 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 1018, "detail": "función de elegibilidad"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2112, "detail": "trigger de órdenes"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.set_order_commission_eligible()", "detail": "función de elegibilidad"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.orders.trg_orders_set_commission_eligible", "detail": "trigger de órdenes"}
     ]
   },
   {
@@ -363,9 +363,9 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 1048, "detail": "función de sincronización"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2076, "detail": "trigger on_external_price_update"},
-      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2116, "detail": "trigger_sync_product_prices"}
+      {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.sync_product_prices()", "detail": "función de sincronización"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.external_prices.on_external_price_update", "detail": "trigger on_external_price_update"},
+      {"kind": "catalog", "location": "catalog:production:pg_trigger", "object": "public.external_prices.trigger_sync_product_prices", "detail": "trigger_sync_product_prices"}
     ]
   }
 ]

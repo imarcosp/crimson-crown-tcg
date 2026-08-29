@@ -16,10 +16,12 @@ Fecha de captura: 2026-08-29. Alcance: las 24 firmas reportadas por el advisor d
 | --- | --- | --- | --- |
 | Trigger-only | `assign_import_order_number()`, `generate_import_order_number()`, `handle_new_user()`, cinco `notify_*()`, ambos `on_commission_*_change()`, ambos `set_*_commission_eligible()`, `sync_product_prices()` | `service_role` | Trigger exacto en `pg_trigger`; sin llamadas de navegador. El propietario conserva la ejecución de trigger. |
 | Server Action de comisiones | ambos `refresh_commission_period(...)`, `recalculate_commission_period_status(uuid)` | `service_role` | `src/app/actions/commissions.ts:252-305`: `requireCommissionAdmin()` antes de `createServiceRoleClient()` y de las RPC. |
-| Mantenimiento/lectura interna | `calculate_import_order_total(bigint)`, `delete_trash_products(integer)`, `find_orders_by_id_part(text)`, ambos generadores auxiliares, ambos helpers de limpieza/inventario y `merge_duplicate_products(integer)` | `service_role` | Sin consumidor browser. Los dos scripts operacionales exigen `SUPABASE_SERVICE_ROLE_KEY`; los demás son helpers internos o dependencias de comisiones. |
+| Mantenimiento/lectura interna | `calculate_import_order_total(bigint)`, `delete_trash_products(integer)`, `find_orders_by_id_part(text)`, `generate_next_import_order_number()`, `get_inventory_valuation()`, `get_trash_products(integer)` y `merge_duplicate_products(integer)` | `service_role` | Sin consumidor browser. Los dos scripts operacionales exigen `SUPABASE_SERVICE_ROLE_KEY`; los demás son helpers internos o dependencias de comisiones. |
 | Predicado RLS | `is_commission_admin()` | `authenticated`, `service_role` | Cinco políticas SELECT lo evalúan. La versión local delega en `public.is_admin()` (`20260823043637_local_security_baseline.sql:453`). `PUBLIC` y `anon` no son roles objetivo. |
 
 Las funciones trigger no se consideran “sin consumidor” por no aparecer en TypeScript: la consulta de `pg_trigger` prueba la dependencia de base. Igualmente, las dependencias internas observadas fueron idénticas local/producción: ambos `on_commission_*_change()` llaman a `recalculate_commission_period_status(uuid)` y el overload completo de `refresh_commission_period` llama tanto al recálculo como a `calculate_import_order_total(bigint)`.
+
+Cada evidencia `repository` del JSON se valida contra un archivo real confinado al repositorio, una línea y un texto ancla. Las evidencias `catalog` usan un identificador no-file explícito y nunca declaran una línea ficticia.
 
 ## Diferencias local/producción que bloquean una equivalencia asumida
 
