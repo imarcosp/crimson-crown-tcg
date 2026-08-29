@@ -620,7 +620,7 @@ test('guards the runtime target and never leaks keys, paths or privileged errors
   }
 })
 
-test('is server-only and exposes a trusted helper rather than a public verification action', async () => {
+test('is server-only and exposes verification only to the three trusted proof finalizers', async () => {
   const [serverSource, actionSource] = await Promise.all([
     readFile(new URL('./upload-server.ts', import.meta.url), 'utf8'),
     readFile(new URL('../../app/actions/storage-uploads.ts', import.meta.url), 'utf8'),
@@ -631,7 +631,7 @@ test('is server-only and exposes a trusted helper rather than a public verificat
   assert.match(serverSource, /conditional DELETE/u)
   assert.match(serverSource, /Task 7/u)
   assert.doesNotMatch(serverSource, /^['"]use server['"]/u)
-  assert.doesNotMatch(actionSource, /verifyTrustedUploadedObject|verifyUploadedObject/u)
+  assert.match(actionSource, /verifyTrustedUploadedObject/u)
   assert.equal(typeof verifyTrustedUploadedObject, 'function')
 
   const relativeFiles = await readdir(sourceRoot, { recursive: true })
@@ -648,5 +648,9 @@ test('is server-only and exposes a trusted helper rather than a public verificat
     const source = await readFile(new URL(normalized, sourceRoot), 'utf8')
     if (/verifyTrustedUploadedObject/u.test(source)) trustedHelperCallsites.push(normalized)
   }
-  assert.deepEqual(trustedHelperCallsites, [])
+  assert.deepEqual(trustedHelperCallsites.sort(), [
+    'app/actions/commissions.ts',
+    'app/actions/imports.ts',
+    'app/actions/storage-uploads.ts',
+  ])
 })

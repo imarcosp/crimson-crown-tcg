@@ -12,6 +12,8 @@ import { deleteImportItemAction, approveImportQuoteAction, rejectImportQuoteActi
 import { siteConfig } from '@/config/site'
 import { useContactWhatsapp } from '@/hooks/useContactWhatsapp'
 import { buildWhatsAppUrl } from '@/lib/contact-whatsapp'
+import { createUploadTicketAction } from '@/app/actions/storage-uploads'
+import { uploadWithTicket } from '@/lib/storage/upload-client'
 
 // Componente visual para la barra de progreso
 function OrderTimeline({ status }: { status: string }) {
@@ -286,35 +288,46 @@ export default function UserOrderDetailPage() {
 
       setUploading(true)
       try {
-          let publicUrl = null
+          let proof = null
 
           if (file) {
-              const ext = file.name.split('.').pop()
-              const fileName = `import_${order.id}_${Date.now()}.${ext}`
-              const { error: uploadError } = await supabase.storage.from('payment_proofs').upload(fileName, file)
-              if (uploadError) throw uploadError
-              
-              const { data } = supabase.storage.from('payment_proofs').getPublicUrl(fileName)
-              publicUrl = data.publicUrl
+              const uploadName = file.type === 'image/png'
+                  ? 'proof.png'
+                  : file.type === 'image/webp'
+                    ? 'proof.webp'
+                    : 'proof.jpg'
+              const ticket = await createUploadTicketAction({
+                  kind: 'import-proof',
+                  recordId: String(order.id),
+                  name: uploadName,
+                  size: file.size,
+                  mimeType: file.type,
+              })
+              const uploaded = await uploadWithTicket(file, ticket)
+              proof = {
+                  bucket: uploaded.bucket,
+                  path: uploaded.path,
+                  name: uploadName,
+                  size: file.size,
+                  mimeType: file.type,
+              }
           }
 
-          // Usamos el Server Action para saltar el RLS de la base de datos y descontar créditos
-          const res = await approveImportQuoteAction(order.id, publicUrl, creditsToUse)
+          const res = await approveImportQuoteAction(String(order.id), proof, creditsToUse)
           
           if (!res.success) {
-              console.error("Error Action:", res.error)
               alert('Error al actualizar la orden: ' + res.error)
               return
           }
           
-          const isFullyPaidWithCredits = creditsToUse > 0 && !publicUrl
+          const isFullyPaidWithCredits = creditsToUse > 0 && !res.proofPath
 
           // Actualización optimista inmediata en la UI
           setOrder((prev: any) => ({
               ...prev,
               status: 'Cotización Aprobada',
               payment_status: isFullyPaidWithCredits ? 'paid' : 'verifying',
-              payment_proof_url: publicUrl,
+              payment_proof_path: res.proofPath,
               credits_used: creditsToUse
           }))
           

@@ -28,7 +28,7 @@ export type ValidatedUploadIntent = {
   readonly mimeType: SupportedUploadMimeType
 }
 
-type ProofUploadKind = 'order-proof' | 'import-proof' | 'commission-proof'
+export type ProofUploadKind = 'order-proof' | 'import-proof' | 'commission-proof'
 
 export type StoragePathInput =
   | {
@@ -148,6 +148,12 @@ function normalizePositivePostgresBigint(value: unknown): string {
   return value
 }
 
+export function normalizeProofRecordId(kind: ProofUploadKind, value: unknown): string {
+  return kind === 'import-proof'
+    ? normalizePositivePostgresBigint(value)
+    : normalizeUuid(value)
+}
+
 function extensionFromSafeName(name: unknown): AllowedUploadExtension {
   if (
     typeof name !== 'string' ||
@@ -217,17 +223,17 @@ export function buildStoragePath(input: StoragePathInput): string {
       return `site/${objectId}.${extension}`
     case 'order-proof': {
       const userId = normalizeUuid(input.userId)
-      const recordId = normalizeUuid(input.recordId)
+      const recordId = normalizeProofRecordId(input.kind, input.recordId)
       return `orders/${userId}/${recordId}/${objectId}.${extension}`
     }
     case 'import-proof': {
       const userId = normalizeUuid(input.userId)
-      const recordId = normalizePositivePostgresBigint(input.recordId)
+      const recordId = normalizeProofRecordId(input.kind, input.recordId)
       return `imports/${userId}/${recordId}/${objectId}.${extension}`
     }
     case 'commission-proof': {
       const userId = normalizeUuid(input.userId)
-      const recordId = normalizeUuid(input.recordId)
+      const recordId = normalizeProofRecordId(input.kind, input.recordId)
       return `commissions/${recordId}/${userId}/${objectId}.${extension}`
     }
   }

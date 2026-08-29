@@ -12,9 +12,15 @@ import {
   type UploadActor,
   type UploadTicket,
 } from '@/lib/storage/upload-core'
+import {
+  finalizePaymentProofCore,
+  parseProofUploadReference,
+} from '@/lib/storage/proof-finalization-core'
 import type { UploadKind } from '@/lib/storage/upload-policy'
+import { verifyTrustedUploadedObject } from '@/lib/storage/upload-server'
 
 const CREATE_ERROR_MESSAGE = 'No se pudo autorizar la carga.'
+const FINALIZE_ERROR_MESSAGE = 'No se pudo finalizar el comprobante.'
 
 function parseUploadInput(rawInput: unknown): CreateUploadTicketInput {
   if (!rawInput || typeof rawInput !== 'object' || Array.isArray(rawInput)) {
@@ -149,5 +155,64 @@ export async function createUploadTicketAction(input: unknown): Promise<UploadTi
     return await createUploadTicketCore(parseUploadInput(input), createDependencies())
   } catch {
     throw new Error(CREATE_ERROR_MESSAGE)
+  }
+}
+
+export async function finalizeOrderProofAction(
+  orderId: unknown,
+  proofInput: unknown,
+): Promise<Readonly<{ success: true; proofPath: string }> | Readonly<{ success: false; error: string }>> {
+  try {
+    if (typeof orderId !== 'string') throw new Error(FINALIZE_ERROR_MESSAGE)
+    const proof = parseProofUploadReference(proofInput)
+    const result = await finalizePaymentProofCore(
+      { kind: 'order-proof', recordId: orderId, proof },
+      {
+        authorize: async (_kind, normalizedOrderId) => {
+          const supabase = await createServerClient()
+          const {
+            data: { user },
+            error: authError,
+          } = await supabase.auth.getUser()
+          if (authError || !user) throw new Error(FINALIZE_ERROR_MESSAGE)
+
+          const admin = createAdminClient()
+          const { data: order, error } = await admin
+            .from('orders')
+            .select('id, user_id, status')
+            .eq('id', normalizedOrderId)
+            .maybeSingle()
+          if (
+            error ||
+            !order ||
+            order.user_id !== user.id ||
+            !['pending_payment', 'verifying_payment'].includes(String(order.status))
+          ) {
+            throw new Error(FINALIZE_ERROR_MESSAGE)
+          }
+
+          return Object.freeze({
+            actorUserId: user.id,
+            proofRequired: true,
+            context: Object.freeze({ orderId: normalizedOrderId }),
+          })
+        },
+        verify: verifyTrustedUploadedObject,
+        persist: async ({ orderId: authorizedOrderId }, proofPath) => {
+          if (!proofPath) throw new Error(FINALIZE_ERROR_MESSAGE)
+          const admin = createAdminClient()
+          const { error } = await admin.rpc('submit_order_payment_proof_path', {
+            order_id_input: authorizedOrderId,
+            proof_path_input: proofPath,
+          })
+          if (error) throw new Error(FINALIZE_ERROR_MESSAGE)
+        },
+      },
+    )
+
+    if (!result.proofPath) throw new Error(FINALIZE_ERROR_MESSAGE)
+    return Object.freeze({ success: true, proofPath: result.proofPath })
+  } catch {
+    return Object.freeze({ success: false, error: FINALIZE_ERROR_MESSAGE })
   }
 }

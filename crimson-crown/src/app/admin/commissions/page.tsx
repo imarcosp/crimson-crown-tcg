@@ -8,6 +8,8 @@ import { useAuth } from '@/context/AuthContext'
 import { OWNER_ADMIN_EMAIL, STAFF_ADMIN_EMAIL } from '@/lib/constants'
 import { clampCommissionMonthKey, COMMISSION_START_PERIOD_KEY, formatArs, formatCommissionPeriodLabel, formatUsd, getClientPayableCommissionMonthKey, getCurrentCommissionMonthKey, isPastCommissionMonth, shiftCommissionMonthKey } from '@/lib/commissions'
 import { confirmCommissionPaymentAction, createCommissionAdjustmentAction, lockCommissionPeriodAction, refreshCommissionPeriodAction, rejectCommissionPaymentAction, reportCommissionPaymentAction } from '@/app/actions/commissions'
+import { createUploadTicketAction } from '@/app/actions/storage-uploads'
+import { uploadWithTicket } from '@/lib/storage/upload-client'
 
 type CommissionPeriod = {
   id: string
@@ -65,6 +67,7 @@ type CommissionPayment = {
   reference: string | null
   notes: string | null
   proof_url: string | null
+  proof_path: string | null
   rejection_reason: string | null
   unapplied_usd?: number
   paid_at: string
@@ -329,19 +332,32 @@ export default function AdminCommissionsPage() {
 
   const uploadProofIfNeeded = async () => {
     if (!proofFile) return null
+    if (!period) throw new Error('No se pudo autorizar la carga.')
 
     setUploadingProof(true)
     try {
-      const sanitizedName = proofFile.name.replace(/[^a-zA-Z0-9._-]/g, '-')
-      const fileName = `commission-payments/${selectedMonth}/${Date.now()}-${sanitizedName}`
-      const { error: uploadError } = await supabase.storage
-        .from('payment_proofs')
-        .upload(fileName, proofFile)
-
-      if (uploadError) throw uploadError
-
-      const { data } = supabase.storage.from('payment_proofs').getPublicUrl(fileName)
-      return data.publicUrl
+      const uploadName = proofFile.type === 'application/pdf'
+        ? 'proof.pdf'
+        : proofFile.type === 'image/png'
+          ? 'proof.png'
+          : proofFile.type === 'image/webp'
+            ? 'proof.webp'
+            : 'proof.jpg'
+      const ticket = await createUploadTicketAction({
+        kind: 'commission-proof',
+        recordId: period.id,
+        name: uploadName,
+        size: proofFile.size,
+        mimeType: proofFile.type,
+      })
+      const uploaded = await uploadWithTicket(proofFile, ticket)
+      return Object.freeze({
+        bucket: uploaded.bucket,
+        path: uploaded.path,
+        name: uploadName,
+        size: proofFile.size,
+        mimeType: proofFile.type,
+      })
     } finally {
       setUploadingProof(false)
     }
@@ -355,7 +371,7 @@ export default function AdminCommissionsPage() {
     setError('')
 
     try {
-      const proofUrl = await uploadProofIfNeeded()
+      const proof = await uploadProofIfNeeded()
       const result = await reportCommissionPaymentAction({
         periodId: period.id,
         currency: paymentForm.currency,
@@ -364,7 +380,7 @@ export default function AdminCommissionsPage() {
         paymentMethod: paymentForm.paymentMethod,
         reference: paymentForm.reference,
         notes: paymentForm.notes,
-        proofUrl,
+        proof,
         paidAt: paymentForm.paidAt,
       })
 

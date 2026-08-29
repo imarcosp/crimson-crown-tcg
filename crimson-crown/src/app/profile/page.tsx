@@ -9,6 +9,8 @@ import { Package, Banknote, Clock, CheckCircle, AlertCircle, Truck, ExternalLink
 import ProfileSettings from '@/components/profile/ProfileSettings'
 import { useContactWhatsapp } from '@/hooks/useContactWhatsapp'
 import { buildWhatsAppUrl } from '@/lib/contact-whatsapp'
+import { createUploadTicketAction, finalizeOrderProofAction } from '@/app/actions/storage-uploads'
+import { uploadWithTicket } from '@/lib/storage/upload-client'
 
 function ProfileContent() {
   const [user, setUser] = useState<any>(null)
@@ -53,7 +55,7 @@ function ProfileContent() {
 
     // Agregados campos de detalle al fetch de orders
     const { data: ordersData } = await supabase.from('orders')
-        .select('id, created_at, total_amount, status, tracking_number, delivery_notes, payment_proof_url, order_items(*, products(*))')
+        .select('id, created_at, total_amount, status, tracking_number, delivery_notes, payment_proof_url, payment_proof_path, order_items(*, products(*))')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
     setOrders(ordersData || [])
@@ -139,23 +141,34 @@ function ProfileContent() {
 
       setUploadingId(orderId)
       try {
-          const ext = file.name.split('.').pop()
-          const fileName = `stock_${orderId}_${Date.now()}.${ext}`
-          const { error: uploadError } = await supabase.storage.from('payment_proofs').upload(fileName, file)
-          
-          if (uploadError) throw uploadError
-          
-          const { data: { publicUrl } } = supabase.storage.from('payment_proofs').getPublicUrl(fileName)
-
-          const { error } = await supabase.rpc('submit_order_payment_proof', {
-              order_id_input: orderId,
-              proof_url_input: publicUrl,
+          const uploadName = file.type === 'image/png'
+              ? 'proof.png'
+              : file.type === 'image/webp'
+                ? 'proof.webp'
+                : 'proof.jpg'
+          const ticket = await createUploadTicketAction({
+              kind: 'order-proof',
+              recordId: orderId,
+              name: uploadName,
+              size: file.size,
+              mimeType: file.type,
           })
-          
-          if (error) throw error
+          const uploaded = await uploadWithTicket(file, ticket)
+          const result = await finalizeOrderProofAction(orderId, {
+              bucket: uploaded.bucket,
+              path: uploaded.path,
+              name: uploadName,
+              size: file.size,
+              mimeType: file.type,
+          })
+          if (!result.success) throw new Error(result.error)
           
           // Actualizar estado local
-          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'verifying_payment', payment_proof_url: publicUrl } : o))
+          setOrders(prev => prev.map(o => o.id === orderId ? {
+              ...o,
+              status: 'verifying_payment',
+              payment_proof_path: result.proofPath,
+          } : o))
 
           alert('¡Comprobante subido! Lo revisaremos a la brevedad.')
       } catch (error: any) {

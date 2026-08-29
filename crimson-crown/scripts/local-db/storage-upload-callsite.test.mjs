@@ -10,6 +10,23 @@ const browserWriters = [
   'src/app/admin/banners/page.tsx',
   'src/app/admin/imports/[id]/page.tsx',
 ]
+const proofWriters = [
+  {
+    file: 'src/app/profile/page.tsx',
+    kind: 'order-proof',
+    finalizer: 'finalizeOrderProofAction',
+  },
+  {
+    file: 'src/app/profile/imports/[id]/page.tsx',
+    kind: 'import-proof',
+    finalizer: 'approveImportQuoteAction',
+  },
+  {
+    file: 'src/app/admin/commissions/page.tsx',
+    kind: 'commission-proof',
+    finalizer: 'reportCommissionPaymentAction',
+  },
+]
 
 async function source(file) {
   return readFile(path.join(root, file), 'utf8')
@@ -81,6 +98,47 @@ test('uploadToSignedUrl remains isolated to the browser upload helper', async ()
   }
 
   assert.deepEqual(matches, ['src/lib/storage/upload-client.ts'])
+})
+
+test('payment proof writers upload with a ticket before their server finalizer', async () => {
+  for (const { file, kind, finalizer } of proofWriters) {
+    const contents = await source(file)
+    const ticketIndex = contents.indexOf('await createUploadTicketAction')
+    const uploadIndex = contents.indexOf('await uploadWithTicket', ticketIndex)
+    const finalizerIndex = contents.indexOf(`await ${finalizer}`, uploadIndex)
+
+    assert.notEqual(ticketIndex, -1, file)
+    assert.ok(uploadIndex > ticketIndex, file)
+    assert.ok(finalizerIndex > uploadIndex, file)
+    assert.match(contents, new RegExp(`kind:\\s*['"]${kind}['"]`, 'u'), file)
+    assert.doesNotMatch(contents, /\.storage\s*\.from\([^)]*payment_proofs[^)]*\)\s*\.upload\s*\(/u, file)
+    assert.doesNotMatch(contents, /getPublicUrl\s*\(/u, file)
+    assert.doesNotMatch(contents, /(?:service_role|SUPABASE_SERVICE_ROLE_KEY|@\/lib\/supabase\/admin)/u, file)
+    assert.doesNotMatch(contents, /console\.[a-z]+\([^\n]*(?:ticket\.token|signedToken|signed_token)/u, file)
+  }
+})
+
+test('proof finalizers persist canonical paths without changing legacy URL fields', async () => {
+  const storageAction = await source('src/app/actions/storage-uploads.ts')
+  const importsAction = await source('src/app/actions/imports.ts')
+  const commissionsAction = await source('src/app/actions/commissions.ts')
+
+  assert.match(storageAction, /verifyTrustedUploadedObject/u)
+  assert.match(storageAction, /submit_order_payment_proof_path/u)
+  assert.match(storageAction, /createAdminClient\(\)[\s\S]*?\.rpc\(['"]submit_order_payment_proof_path['"]/u)
+  assert.doesNotMatch(storageAction, /submit_order_payment_proof(?!_path)/u)
+
+  assert.match(importsAction, /verifyTrustedUploadedObject/u)
+  assert.match(importsAction, /payment_proof_path/u)
+  assert.match(importsAction, /\.eq\(['"]user_id['"],\s*context\.userId\)/u)
+  assert.doesNotMatch(importsAction, /payment_proof_url\s*:/u)
+
+  assert.match(commissionsAction, /verifyTrustedUploadedObject/u)
+  assert.match(commissionsAction, /proof_path/u)
+  assert.match(commissionsAction, /requireCommissionAdmin\(\)/u)
+  assert.doesNotMatch(commissionsAction, /proof_url\s*:/u)
+  assert.doesNotMatch(commissionsAction, /Comprobante:<\/strong>[\s\S]*?href=/u)
+  assert.match(commissionsAction, /\/admin\/commissions/u)
 })
 
 test('admin import modal routes every open and close through image upload cleanup', async () => {

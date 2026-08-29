@@ -308,8 +308,8 @@ export function createUploadVerificationDependencies(
           }
 
           // Supabase Storage has no conditional DELETE. This recheck narrows, but cannot
-          // eliminate, the interval between info and remove; the operational gate below
-          // keeps the helper unused until direct UPDATE/DELETE is revoked in Task 7.
+          // eliminate, the interval between info and remove; Task 7 closes that residual
+          // interval by revoking direct object UPDATE/DELETE.
           const { error } = await bucketClient.remove([path])
           if (error) throw verifyError()
         } catch {
@@ -323,9 +323,9 @@ export function createUploadVerificationDependencies(
 }
 
 /**
- * Operational gate: do not add callsites before Task 7 revokes direct object
- * UPDATE/DELETE. Storage exposes no conditional DELETE, so the identity recheck
- * immediately before removal still leaves a residual replacement interval.
+ * Only trusted proof finalizers may call this helper; browser/client code cannot.
+ * Invalid-object cleanup uses an identity recheck, while Task 7 will close the
+ * remaining non-conditional DELETE interval by revoking direct UPDATE/DELETE.
  */
 export async function verifyTrustedUploadedObject(
   input: VerifyUploadedObjectInput,

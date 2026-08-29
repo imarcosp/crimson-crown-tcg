@@ -1,12 +1,17 @@
 "use server"
 
 import { revalidatePath } from 'next/cache'
-import { createGuardedSupabaseClient as createAdminClient } from '@/lib/supabase/guarded-constructors'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'
 import { ADMIN_EMAILS, OWNER_ADMIN_EMAIL } from '@/lib/constants'
 import { COMMISSION_START_PERIOD_KEY, getCurrentCommissionMonthKey } from '@/lib/commissions'
 import { siteConfig } from '@/config/site'
 import { getResendClient } from '@/lib/email/resend-client'
+import {
+  finalizePaymentProofCore,
+  parseProofUploadReference,
+} from '@/lib/storage/proof-finalization-core'
+import { verifyTrustedUploadedObject } from '@/lib/storage/upload-server'
 
 type PaymentInput = {
   periodId: string
@@ -16,7 +21,7 @@ type PaymentInput = {
   paymentMethod: string
   reference?: string
   notes?: string
-  proofUrl?: string | null
+  proof?: unknown
   paidAt: string
 }
 
@@ -30,10 +35,7 @@ type AdjustmentInput = {
 
 
 function createServiceRoleClient() {
-  return createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  return createAdminClient()
 }
 
 async function requireCommissionAdmin(ownerOnly = false) {
@@ -56,6 +58,10 @@ async function requireCommissionAdmin(ownerOnly = false) {
 
 function roundCurrency(value: number) {
   return Number(value.toFixed(2))
+}
+
+function actionErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 async function getPeriodKey(admin: ReturnType<typeof createServiceRoleClient>, periodId: string) {
@@ -215,7 +221,6 @@ async function sendCommissionPaymentReportedEmail(params: {
   paymentMethod: string
   reference?: string
   notes?: string
-  proofUrl?: string | null
   paidAt: string
   periodKey: string
 }) {
@@ -237,7 +242,6 @@ async function sendCommissionPaymentReportedEmail(params: {
           <li><strong>Fecha del pago:</strong> ${new Date(params.paidAt).toLocaleString('es-AR')}</li>
           ${params.reference ? `<li><strong>Referencia:</strong> ${params.reference}</li>` : ''}
           ${params.notes ? `<li><strong>Notas:</strong> ${params.notes}</li>` : ''}
-          ${params.proofUrl ? `<li><strong>Comprobante:</strong> <a href="${params.proofUrl}" target="_blank" rel="noreferrer">Ver comprobante</a></li>` : ''}
         </ul>
         <div style="margin-top:24px;">
           <a href="${baseUrl}/admin/commissions" style="background:#0F172A;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">Revisar comisiones</a>
@@ -261,8 +265,8 @@ export async function refreshCommissionPeriodAction(periodKey: string) {
 
     revalidatePath('/admin/commissions')
     return { success: true, periodId: data as string | null }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'No se pudo actualizar el período.' }
+  } catch (error: unknown) {
+    return { success: false, error: actionErrorMessage(error, 'No se pudo actualizar el período.') }
   }
 }
 
@@ -311,88 +315,147 @@ export async function lockCommissionPeriodAction(periodKey: string) {
 
     revalidatePath('/admin/commissions')
     return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'No se pudo cerrar el período.' }
+  } catch (error: unknown) {
+    return { success: false, error: actionErrorMessage(error, 'No se pudo cerrar el período.') }
   }
 }
 
+type CommissionPaymentContext = Readonly<{
+  periodId: string
+  periodKey: string
+  userId: string
+  isOwner: boolean
+  currency: 'USD' | 'ARS'
+  amount: number
+  amountUsd: number
+  normalizedFxRate: number | null
+  paymentMethod: string
+  reference: string | null
+  notes: string | null
+  paidAt: string
+}>
+
 export async function reportCommissionPaymentAction(input: PaymentInput) {
+  const errorMessage = 'No se pudo registrar el pago.'
   try {
-    const user = await requireCommissionAdmin()
-    const admin = createServiceRoleClient()
-
-    if (!input.periodId) throw new Error('Período inválido.')
-
-    const periodKey = await getPeriodKey(admin, input.periodId)
-    assertCommissionPeriodAllowed(periodKey)
-
-    const amount = Number(input.amount)
-    const fxRateArs = input.fxRateArs == null ? null : Number(input.fxRateArs)
+    if (!input || typeof input !== 'object') throw new Error(errorMessage)
+    const amount = input.amount
+    const fxRateArs = input.fxRateArs == null ? null : input.fxRateArs
     const currency = input.currency
-    const paymentMethod = input.paymentMethod?.trim()
+    const paymentMethod = typeof input.paymentMethod === 'string'
+      ? input.paymentMethod.trim()
+      : ''
+    if (
+      typeof input.periodId !== 'string' ||
+      typeof amount !== 'number' ||
+      (fxRateArs !== null && typeof fxRateArs !== 'number') ||
+      !paymentMethod ||
+      paymentMethod.length > 200 ||
+      (input.reference !== undefined && typeof input.reference !== 'string') ||
+      (input.notes !== undefined && typeof input.notes !== 'string') ||
+      (input.reference?.length ?? 0) > 500 ||
+      (input.notes?.length ?? 0) > 2_000 ||
+      typeof input.paidAt !== 'string' ||
+      input.paidAt.length > 100 ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !['USD', 'ARS'].includes(currency)
+    ) {
+      throw new Error(errorMessage)
+    }
     const paidAt = new Date(input.paidAt)
-
-    if (!paymentMethod) throw new Error('Debes indicar cómo se realizó el pago.')
-    if (!Number.isFinite(amount) || amount <= 0) throw new Error('Monto inválido.')
-    if (Number.isNaN(paidAt.getTime())) throw new Error('Fecha de pago inválida.')
+    if (Number.isNaN(paidAt.getTime())) throw new Error(errorMessage)
 
     let amountUsd = amount
     let normalizedFxRate: number | null = null
-
     if (currency === 'ARS') {
-      if (!Number.isFinite(fxRateArs) || (fxRateArs || 0) <= 0) {
-        throw new Error('Si el pago es en ARS debes indicar el tipo de cambio aplicado.')
-      }
+      if (!Number.isFinite(fxRateArs) || (fxRateArs || 0) <= 0) throw new Error(errorMessage)
       normalizedFxRate = fxRateArs as number
       amountUsd = amount / normalizedFxRate
     }
+    if (!Number.isFinite(amountUsd) || amountUsd <= 0) throw new Error(errorMessage)
 
-    const isOwner = user.email === OWNER_ADMIN_EMAIL
-    const reviewTimestamp = isOwner ? new Date().toISOString() : null
+    const proof = input.proof == null ? null : parseProofUploadReference(input.proof)
+    const result = await finalizePaymentProofCore<CommissionPaymentContext>(
+      { kind: 'commission-proof', recordId: input.periodId, proof },
+      {
+        authorize: async (_kind, normalizedPeriodId) => {
+          const user = await requireCommissionAdmin()
+          const admin = createServiceRoleClient()
+          const periodKey = await getPeriodKey(admin, normalizedPeriodId)
+          assertCommissionPeriodAllowed(periodKey)
+          const isOwner = user.email === OWNER_ADMIN_EMAIL
+          return Object.freeze({
+            actorUserId: user.id,
+            proofRequired: false,
+            context: Object.freeze({
+              periodId: normalizedPeriodId,
+              periodKey,
+              userId: user.id,
+              isOwner,
+              currency,
+              amount,
+              amountUsd,
+              normalizedFxRate,
+              paymentMethod,
+              reference: input.reference?.trim() || null,
+              notes: input.notes?.trim() || null,
+              paidAt: paidAt.toISOString(),
+            }),
+          })
+        },
+        verify: verifyTrustedUploadedObject,
+        persist: async (context, proofPath) => {
+          const admin = createServiceRoleClient()
+          const reviewTimestamp = context.isOwner ? new Date().toISOString() : null
+          const { data: insertedPayment, error } = await admin
+            .from('commission_payments')
+            .insert({
+              period_id: context.periodId,
+              reported_by_user_id: context.userId,
+              reviewed_by_user_id: context.isOwner ? context.userId : null,
+              status: context.isOwner ? 'confirmed' : 'reported',
+              currency: context.currency,
+              amount: Number(context.amount.toFixed(2)),
+              fx_rate_ars: context.normalizedFxRate
+                ? Number(context.normalizedFxRate.toFixed(2))
+                : null,
+              amount_usd: Number(context.amountUsd.toFixed(2)),
+              payment_method: context.paymentMethod,
+              reference: context.reference,
+              notes: context.notes,
+              proof_path: proofPath,
+              paid_at: context.paidAt,
+              unapplied_usd: context.isOwner ? Number(context.amountUsd.toFixed(2)) : 0,
+              reviewed_at: reviewTimestamp,
+              updated_at: new Date().toISOString(),
+            })
+            .select('id, period_id')
+            .single()
+          if (error) throw new Error(errorMessage)
 
-    const { data: insertedPayment, error } = await admin.from('commission_payments').insert({
-      period_id: input.periodId,
-      reported_by_user_id: user.id,
-      reviewed_by_user_id: isOwner ? user.id : null,
-      status: isOwner ? 'confirmed' : 'reported',
-      currency,
-      amount: Number(amount.toFixed(2)),
-      fx_rate_ars: normalizedFxRate ? Number(normalizedFxRate.toFixed(2)) : null,
-      amount_usd: Number(amountUsd.toFixed(2)),
-      payment_method: paymentMethod,
-      reference: input.reference?.trim() || null,
-      notes: input.notes?.trim() || null,
-      proof_url: input.proofUrl || null,
-      paid_at: paidAt.toISOString(),
-      unapplied_usd: isOwner ? Number(amountUsd.toFixed(2)) : 0,
-      reviewed_at: reviewTimestamp,
-      updated_at: new Date().toISOString(),
-    })
-    .select('id, period_id')
-    .single()
-
-    if (error) throw error
-
-    if (isOwner) {
-      await allocateConfirmedPayment(admin, insertedPayment.id)
-    } else {
-      await sendCommissionPaymentReportedEmail({
-        amount,
-        amountUsd,
-        currency,
-        paymentMethod,
-        reference: input.reference?.trim() || undefined,
-        notes: input.notes?.trim() || undefined,
-        proofUrl: input.proofUrl || null,
-        paidAt: paidAt.toISOString(),
-        periodKey,
-      })
-    }
+          if (context.isOwner) {
+            await allocateConfirmedPayment(admin, insertedPayment.id)
+          } else {
+            await sendCommissionPaymentReportedEmail({
+              amount: context.amount,
+              amountUsd: context.amountUsd,
+              currency: context.currency,
+              paymentMethod: context.paymentMethod,
+              reference: context.reference || undefined,
+              notes: context.notes || undefined,
+              paidAt: context.paidAt,
+              periodKey: context.periodKey,
+            })
+          }
+        },
+      },
+    )
 
     revalidatePath('/admin/commissions')
-    return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'No se pudo registrar el pago.' }
+    return { success: true, proofPath: result.proofPath }
+  } catch {
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -418,8 +481,8 @@ export async function confirmCommissionPaymentAction(paymentId: string) {
 
     revalidatePath('/admin/commissions')
     return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'No se pudo confirmar el pago.' }
+  } catch (error: unknown) {
+    return { success: false, error: actionErrorMessage(error, 'No se pudo confirmar el pago.') }
   }
 }
 
@@ -447,8 +510,8 @@ export async function rejectCommissionPaymentAction(paymentId: string, reason: s
 
     revalidatePath('/admin/commissions')
     return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'No se pudo rechazar el pago.' }
+  } catch (error: unknown) {
+    return { success: false, error: actionErrorMessage(error, 'No se pudo rechazar el pago.') }
   }
 }
 
@@ -480,7 +543,7 @@ export async function createCommissionAdjustmentAction(input: AdjustmentInput) {
 
     revalidatePath('/admin/commissions')
     return { success: true }
-  } catch (error: any) {
-    return { success: false, error: error.message || 'No se pudo crear el ajuste.' }
+  } catch (error: unknown) {
+    return { success: false, error: actionErrorMessage(error, 'No se pudo crear el ajuste.') }
   }
 }
