@@ -176,4 +176,8 @@ export async function buildProjection({ rootDir, outputDir, allowCandidates = fa
     }
     await writeExclusive(join(projectedMigrationsPath, entry.file), forwardBytes)
   }
+
+  return Object.freeze({
+    forwardPendingCount: manifest.entries.filter((entry) => entry.class === 'forward_pending').length,
+  })
 }

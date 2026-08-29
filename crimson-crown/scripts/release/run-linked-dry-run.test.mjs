@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { execFile, spawn } from 'node:child_process'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import test from 'node:test'
@@ -74,6 +74,16 @@ if ($command -eq 'migration') {
 
 if ($command -eq 'db') {
   if ($env:FAKE_SUPABASE_MODE -eq 'push-fail') { exit 43 }
+  if ($env:FAKE_SUPABASE_MODE -eq 'root-junction-after-push') {
+    $tempRoot = Split-Path -Parent $workdir
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    try {
+      $junction = New-Item -ItemType Junction -Path $tempRoot -Target $env:FAKE_JUNCTION_TARGET -ErrorAction Stop
+    } catch {
+      exit 44
+    }
+    if (($junction.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { exit 45 }
+  }
   if ($env:FAKE_SUPABASE_MODE -eq 'up-to-date') {
     Write-Output 'Remote database is up to date.'
   } else {
@@ -87,11 +97,27 @@ exit 91
 
 const fakeCliLauncher = '@powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0fake-supabase-impl.ps1" %*\r\n'
 
+const mutateManifestAfterBuildSource = `import { readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+import { buildProjection as buildRealProjection } from './build-supabase-projection-real.mjs'
+
+export async function buildProjection(options) {
+  const summary = await buildRealProjection(options)
+  const manifestPath = join(options.rootDir, 'scripts', 'release', 'migration-manifest.json')
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  const forward = manifest.entries.find((entry) => entry.class === 'forward_pending')
+  forward.class = 'baseline_present'
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\\n')
+  return summary
+}
+`
+
 async function git(rootDir, args) {
   await execFileAsync('git', ['-C', rootDir, ...args], { windowsHide: true })
 }
 
-async function makeFixture({ candidate = false, dirty = false } = {}) {
+async function makeFixture({ candidate = false, dirty = false, mutateManifestAfterBuild = false } = {}) {
   const fixtureParent = await mkdtemp(join(tmpdir(), 'crimson-wrapper-fixture-'))
   const rootDir = join(fixtureParent, 'repo')
   const releaseDir = join(rootDir, 'scripts', 'release')
@@ -101,6 +127,11 @@ async function makeFixture({ candidate = false, dirty = false } = {}) {
   const logPath = join(fixtureParent, 'fake-cli-log.jsonl')
   const tempBase = join(fixtureParent, 'temp')
   const sentinel = join(tempBase, 'keep-me.txt')
+  const junctionTarget = join(fixtureParent, 'external-junction-target')
+  const junctionSentinel = join(junctionTarget, 'must-survive.txt')
+  const tempBaseTarget = join(fixtureParent, 'temp-base-target')
+  const tempBaseJunction = join(fixtureParent, 'temp-base-junction')
+  const tempBaseSentinel = join(tempBaseTarget, 'must-survive.txt')
   const manifest = verifiedManifest()
 
   if (candidate) manifest.entries[0].equivalence = 'candidate'
@@ -108,8 +139,15 @@ async function makeFixture({ candidate = false, dirty = false } = {}) {
   await mkdir(releaseDir, { recursive: true })
   await mkdir(migrationsDir, { recursive: true })
   await mkdir(tempBase)
+  await mkdir(junctionTarget)
+  await mkdir(tempBaseTarget)
   await cp(sourceWrapper, join(releaseDir, 'run-linked-dry-run.ps1'))
-  await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection.mjs'))
+  if (mutateManifestAfterBuild) {
+    await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection-real.mjs'))
+    await writeFile(join(releaseDir, 'build-supabase-projection.mjs'), mutateManifestAfterBuildSource)
+  } else {
+    await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection.mjs'))
+  }
   await cp(join(sourceRoot, 'scripts', 'release', 'migration-manifest.mjs'), join(releaseDir, 'migration-manifest.mjs'))
   await writeFile(join(releaseDir, 'migration-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
   await writeFile(join(rootDir, 'supabase', 'config.toml'), '[db.migrations]\nenabled = false\n')
@@ -118,6 +156,8 @@ async function makeFixture({ candidate = false, dirty = false } = {}) {
   await writeFile(fakeCli, fakeCliLauncher)
   await writeFile(fakeCliImplementation, fakeCliSource)
   await writeFile(sentinel, 'preserve\n')
+  await writeFile(junctionSentinel, 'external preserve\n')
+  await writeFile(tempBaseSentinel, 'temp base preserve\n')
 
   await git(rootDir, ['init', '--quiet'])
   await git(rootDir, ['config', 'user.email', 'offline-fixture@example.invalid'])
@@ -126,10 +166,22 @@ async function makeFixture({ candidate = false, dirty = false } = {}) {
   await git(rootDir, ['commit', '--quiet', '-m', 'fixture'])
   if (dirty) await writeFile(join(rootDir, 'dirty.txt'), 'dirty\n')
 
-  return { fixtureParent, rootDir, fakeCli, logPath, tempBase, sentinel }
+  return {
+    fixtureParent,
+    rootDir,
+    fakeCli,
+    logPath,
+    tempBase,
+    sentinel,
+    junctionTarget,
+    junctionSentinel,
+    tempBaseTarget,
+    tempBaseJunction,
+    tempBaseSentinel,
+  }
 }
 
-function runWrapper(fixture, mode = 'success') {
+function runWrapper(fixture, mode = 'success', { tempBase = fixture.tempBase } = {}) {
   const path = `${dirname(process.execPath)};${process.env.PATH ?? ''}`
   const child = spawn(
     'powershell.exe',
@@ -147,10 +199,11 @@ function runWrapper(fixture, mode = 'success') {
       env: {
         ...process.env,
         PATH: path,
-        TEMP: fixture.tempBase,
-        TMP: fixture.tempBase,
+        TEMP: tempBase,
+        TMP: tempBase,
         FAKE_SUPABASE_LOG: fixture.logPath,
         FAKE_SUPABASE_MODE: mode,
+        FAKE_JUNCTION_TARGET: fixture.junctionTarget,
       },
       windowsHide: true,
     },
@@ -264,6 +317,58 @@ test('blocks an up-to-date result when the verified manifest has a forward migra
   })
 })
 
+test('uses the materialized projection snapshot when the manifest changes after build', async () => {
+  await withFixture({ mutateManifestAfterBuild: true }, async (fixture) => {
+    const result = await runWrapper(fixture, 'up-to-date')
+    const calls = await readCalls(fixture.logPath)
+    const changedManifest = JSON.parse(await readFile(join(fixture.rootDir, 'scripts', 'release', 'migration-manifest.json'), 'utf8'))
+
+    assert.equal(changedManifest.entries.some((entry) => entry.class === 'forward_pending'), false)
+    assert.notEqual(result.code, 0)
+    assert.equal(calls.length, 3)
+    assert.equal(result.stdout, '')
+    await assertExactCleanup(fixture)
+  })
+})
+
+test('removes a substituted temporary-root junction without traversing its external target', async (t) => {
+  await withFixture({}, async (fixture) => {
+    const junctionProbe = join(fixture.fixtureParent, 'junction-probe')
+    try {
+      await symlink(fixture.junctionTarget, junctionProbe, 'junction')
+      await rm(junctionProbe)
+    } catch (error) {
+      t.skip(`junction unavailable on this host: ${error.code ?? 'unknown error'}`)
+      return
+    }
+
+    const result = await runWrapper(fixture, 'root-junction-after-push')
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(await readFile(fixture.junctionSentinel, 'utf8'), 'external preserve\n')
+    assert.deepEqual(await readdir(fixture.junctionTarget), ['must-survive.txt'])
+    await assertExactCleanup(fixture)
+  })
+})
+
+test('rejects a temporary base that is itself a junction', async (t) => {
+  await withFixture({}, async (fixture) => {
+    try {
+      await symlink(fixture.tempBaseTarget, fixture.tempBaseJunction, 'junction')
+    } catch (error) {
+      t.skip(`junction unavailable on this host: ${error.code ?? 'unknown error'}`)
+      return
+    }
+
+    const result = await runWrapper(fixture, 'success', { tempBase: fixture.tempBaseJunction })
+
+    assert.notEqual(result.code, 0)
+    assert.deepEqual(await readCalls(fixture.logPath), [])
+    assert.equal(await readFile(fixture.tempBaseSentinel, 'utf8'), 'temp base preserve\n')
+    assert.deepEqual(await readdir(fixture.tempBaseTarget), ['must-survive.txt'])
+  })
+})
+
 for (const failure of [
   { mode: 'link-fail', expectedCalls: 1 },
   { mode: 'list-fail', expectedCalls: 2 },
@@ -282,9 +387,10 @@ for (const failure of [
   })
 }
 
-test('contains no repair command or switch capable of bypassing dry-run', async () => {
+test('contains no repair, dry-run bypass, or recursive Remove-Item shortcut', async () => {
   const source = await readFile(sourceWrapper, 'utf8')
 
   assert.doesNotMatch(source, /migration\s+repair/i)
   assert.doesNotMatch(source, /\[switch\][^\r\n]*(?:dry.?run|push|live|apply)/i)
+  assert.doesNotMatch(source, /Remove-Item[^\r\n]*-Recurse/i)
 })

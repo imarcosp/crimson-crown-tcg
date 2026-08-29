@@ -148,6 +148,15 @@ test('builds a migration-only projection from a verified manifest', async () => 
   })
 })
 
+test('returns an immutable forward summary from the validated manifest snapshot', async () => {
+  await withFixture(async ({ rootDir, outputDir }) => {
+    const summary = await buildProjection({ rootDir, outputDir })
+
+    assert.deepEqual(summary, { forwardPendingCount: 1 })
+    assert.equal(Object.isFrozen(summary), true)
+  })
+})
+
 test('rejects a projection destination inside the repository outside release evidence', async () => {
   await withFixture(async ({ rootDir }) => {
     await assert.rejects(
