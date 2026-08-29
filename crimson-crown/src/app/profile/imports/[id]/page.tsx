@@ -14,6 +14,7 @@ import { useContactWhatsapp } from '@/hooks/useContactWhatsapp'
 import { buildWhatsAppUrl } from '@/lib/contact-whatsapp'
 import { createUploadTicketAction } from '@/app/actions/storage-uploads'
 import { uploadWithTicket } from '@/lib/storage/upload-client'
+import { getPaymentProofUrlAction } from '@/app/actions/payment-proof-access'
 
 // Componente visual para la barra de progreso
 function OrderTimeline({ status }: { status: string }) {
@@ -185,6 +186,8 @@ export default function UserOrderDetailPage() {
   const [useCredits, setUseCredits] = useState<boolean>(false)
   const [loading, setLoading] = useState(true)
   const [zoomedImage, setZoomedImage] = useState<string | null>(null)
+  const [proofUrl, setProofUrl] = useState<string | null>(null)
+  const [proofLoading, setProofLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -346,6 +349,18 @@ export default function UserOrderDetailPage() {
       }
   }
 
+  const handleViewProof = async () => {
+      setProofLoading(true)
+      try {
+          const result = await getPaymentProofUrlAction({ domain: 'import', recordId: String(order.id) })
+          setProofUrl(result.url)
+      } catch {
+          alert('No se pudo abrir el comprobante. Intenta nuevamente.')
+      } finally {
+          setProofLoading(false)
+      }
+  }
+
   const copyToClipboard = (text: string) => {
       navigator.clipboard.writeText(text)
       alert('Copiado al portapapeles: ' + text)
@@ -404,6 +419,13 @@ export default function UserOrderDetailPage() {
         </div>
       )}
 
+      {proofUrl && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 animate-in fade-in duration-200" onClick={() => setProofUrl(null)}>
+             <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 cursor-pointer z-50"><X size={32} /></button>
+             <iframe src={proofUrl} title="Comprobante" className="w-full max-w-4xl h-[85vh] rounded-lg bg-white" onClick={(event) => event.stopPropagation()} />
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -417,14 +439,27 @@ export default function UserOrderDetailPage() {
                 <p className="text-sm text-slate-500">Fecha: {new Date(order.created_at).toLocaleDateString()}</p>
             </div>
           </div>
-          <a 
-            href={buildWhatsAppUrl(whatsapp, `Hola ${siteConfig.shortName}, me gustaría información sobre la orden de importación #${order.order_number}`)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-lg shadow-sm transition-colors text-sm"
-          >
-            Soporte WhatsApp
-          </a>
+          <div className="flex flex-wrap items-center gap-2">
+            {(order.payment_proof_path || order.payment_proof_url) && (
+                <button
+                    type="button"
+                    onClick={handleViewProof}
+                    disabled={proofLoading}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-slate-200 bg-white text-slate-700 font-bold rounded-lg shadow-sm transition-colors text-sm disabled:opacity-50"
+                >
+                    {proofLoading ? <Loader2 size={16} className="animate-spin" /> : <ExternalLink size={16} />}
+                    Ver comprobante
+                </button>
+            )}
+            <a
+              href={buildWhatsAppUrl(whatsapp, `Hola ${siteConfig.shortName}, me gustaría información sobre la orden de importación #${order.order_number}`)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-lg shadow-sm transition-colors text-sm"
+            >
+              Soporte WhatsApp
+            </a>
+          </div>
       </div>
 
       {/* STATUS BAR */}

@@ -5,8 +5,8 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Loader2, Save, Eye, Trash2, PackageCheck, Package, Search, Filter, ArrowLeft, ArrowRight, X, FileText, Check } from 'lucide-react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { cancelOrder } from '@/app/actions/admin-order-fulfillment'
+import { getPaymentProofUrlAction } from '@/app/actions/payment-proof-access'
 
 // ... (Resto de imports y constantes igual) ...
 const ITEMS_PER_PAGE = 20
@@ -21,7 +21,8 @@ interface Order {
   user_id: string
   credits_used?: number
   is_packed: boolean
-  payment_proof_url?: string
+  payment_proof_url?: string | null
+  payment_proof_path?: string | null
   contact_name?: string
   contact_lastname?: string
   profiles?: { email: string, first_name?: string, last_name?: string }
@@ -32,6 +33,7 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [proofImage, setProofImage] = useState<string | null>(null)
+  const [proofLoadingId, setProofLoadingId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -45,6 +47,18 @@ export default function AdminOrdersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()
+
+  const handleViewProof = async (orderId: string) => {
+    setProofLoadingId(orderId)
+    try {
+      const result = await getPaymentProofUrlAction({ domain: 'order', recordId: orderId })
+      setProofImage(result.url)
+    } catch {
+      alert('No se pudo abrir el comprobante. Intenta nuevamente.')
+    } finally {
+      setProofLoadingId(null)
+    }
+  }
 
   // ... (Efectos y lógica de fetch igual) ...
   useEffect(() => {
@@ -324,9 +338,7 @@ export default function AdminOrdersPage() {
       {proofImage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 animate-in fade-in duration-200" onClick={() => setProofImage(null)}>
              <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 cursor-pointer z-50"><X size={32} /></button>
-             <div className="relative w-full max-w-2xl h-[80vh]">
-                <Image src={proofImage} alt="Comprobante" fill className="object-contain rounded-lg" unoptimized />
-             </div>
+              <iframe src={proofImage} title="Comprobante" className="w-full max-w-4xl h-[85vh] rounded-lg bg-white" />
         </div>
       )}
 
@@ -457,14 +469,14 @@ export default function AdminOrdersPage() {
                     </td>
                     <td className="p-4 text-right whitespace-nowrap">
                         <div className="flex justify-end items-center gap-2">
-                            {/* CAMBIO: Mostrar SIEMPRE si hay url, sin importar el estado */}
-                            {order.payment_proof_url && (
+                            {(order.payment_proof_path || order.payment_proof_url) && (
                                 <button 
-                                     onClick={() => setProofImage(order.payment_proof_url ?? null)}
-                                    className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 transition-colors cursor-pointer"
+                                    onClick={() => handleViewProof(order.id)}
+                                    disabled={proofLoadingId === order.id}
+                                    className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 transition-colors cursor-pointer disabled:opacity-50"
                                     title="Ver Comprobante"
                                 >
-                                    <FileText size={16}/>
+                                    {proofLoadingId === order.id ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16}/>}
                                 </button>
                             )}
                             

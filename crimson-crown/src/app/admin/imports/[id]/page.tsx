@@ -10,6 +10,7 @@ import { mutateAdminImportItemAction } from '@/app/actions/imports'
 import { getAdminInventories, type Inventory } from '@/app/actions/admin-inventories'
 import { createUploadTicketAction } from '@/app/actions/storage-uploads'
 import { uploadWithTicket } from '@/lib/storage/upload-client'
+import { getPaymentProofUrlAction } from '@/app/actions/payment-proof-access'
 import {
   createImportImageUploadState,
   replaceImportImageUploadFile,
@@ -34,6 +35,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [editItem, setEditItem] = useState<any>(null)
   const [zoomedImage, setZoomedImage] = useState<string | null>(null)
   const [proofImage, setProofImage] = useState<string | null>(null)
+  const [proofLoading, setProofLoading] = useState(false)
   
   // FORMULARIO ITEM
   const [mode, setMode] = useState<'Buscador' | 'Manual'>('Buscador')
@@ -64,6 +66,18 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     collector_number: '',
     product_url: ''
   })
+
+  const handleViewProof = async () => {
+      setProofLoading(true)
+      try {
+          const result = await getPaymentProofUrlAction({ domain: 'import', recordId: String(id) })
+          setProofImage(result.url)
+      } catch {
+          alert('No se pudo abrir el comprobante. Intenta nuevamente.')
+      } finally {
+          setProofLoading(false)
+      }
+  }
 
   // HELPER PARA OBTENER IMAGEN
   const getCardImage = (c: any) => {
@@ -428,10 +442,17 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 pb-20">
       
       {/* MODAL ZOOM */}
-      {(zoomedImage || proofImage) && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/90 animate-in fade-in duration-200" onClick={() => {setZoomedImage(null); setProofImage(null)}}>
+      {zoomedImage && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/90 animate-in fade-in duration-200" onClick={() => setZoomedImage(null)}>
              <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 cursor-pointer"><X size={32} /></button>
-             <img src={zoomedImage || proofImage || ''} alt="Zoom" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+             <img src={zoomedImage} alt="Zoom" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+        </div>
+      )}
+
+      {proofImage && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/90 animate-in fade-in duration-200" onClick={() => setProofImage(null)}>
+             <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 cursor-pointer"><X size={32} /></button>
+             <iframe src={proofImage} title="Comprobante" className="w-full max-w-4xl h-[85vh] rounded-lg bg-white" onClick={(event) => event.stopPropagation()} />
         </div>
       )}
 
@@ -472,9 +493,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
         </div>
         <div className="flex items-center gap-2">
             {/* CAMBIO: Botón Comprobante (si existe) */}
-            {order.payment_proof_url && (
-                <button onClick={() => setProofImage(order.payment_proof_url)} className="px-4 py-2 bg-yellow-50 text-yellow-700 font-bold rounded-lg hover:bg-yellow-100 flex items-center gap-2 border border-yellow-200 cursor-pointer">
-                    <FileText size={18}/> <span className="hidden sm:inline">Ver Pago</span>
+            {(order.payment_proof_path || order.payment_proof_url) && (
+                <button onClick={handleViewProof} disabled={proofLoading} className="px-4 py-2 bg-yellow-50 text-yellow-700 font-bold rounded-lg hover:bg-yellow-100 flex items-center gap-2 border border-yellow-200 cursor-pointer disabled:opacity-50">
+                    {proofLoading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18}/>} <span className="hidden sm:inline">Ver Pago</span>
                 </button>
             )}
 

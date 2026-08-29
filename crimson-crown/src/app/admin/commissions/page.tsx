@@ -10,6 +10,7 @@ import { clampCommissionMonthKey, COMMISSION_START_PERIOD_KEY, formatArs, format
 import { confirmCommissionPaymentAction, createCommissionAdjustmentAction, lockCommissionPeriodAction, refreshCommissionPeriodAction, rejectCommissionPaymentAction, reportCommissionPaymentAction } from '@/app/actions/commissions'
 import { createUploadTicketAction } from '@/app/actions/storage-uploads'
 import { uploadWithTicket } from '@/lib/storage/upload-client'
+import { getPaymentProofUrlAction } from '@/app/actions/payment-proof-access'
 
 type CommissionPeriod = {
   id: string
@@ -117,6 +118,7 @@ export default function AdminCommissionsPage() {
   const [periods, setPeriods] = useState<CommissionPeriod[]>([])
   const [lines, setLines] = useState<CommissionLine[]>([])
   const [payments, setPayments] = useState<CommissionPayment[]>([])
+  const [proofLoadingId, setProofLoadingId] = useState<string | null>(null)
   const [adjustments, setAdjustments] = useState<CommissionAdjustment[]>([])
   const [allocations, setAllocations] = useState<CommissionAllocation[]>([])
   const [loading, setLoading] = useState(true)
@@ -149,6 +151,22 @@ export default function AdminCommissionsPage() {
   const isPreviewingClientView = isOwner && viewMode === 'epi'
   const showOwnerView = isOwner && !isPreviewingClientView
   const showClientView = isStaff || isPreviewingClientView
+
+  const handleViewProof = async (paymentId: string) => {
+    const proofWindow = window.open('about:blank', '_blank')
+    if (proofWindow) proofWindow.opener = null
+    setProofLoadingId(paymentId)
+    try {
+      const result = await getPaymentProofUrlAction({ domain: 'commission', recordId: paymentId })
+      if (!proofWindow) throw new Error('popup-blocked')
+      proofWindow.location.replace(result.url)
+    } catch {
+      proofWindow?.close()
+      alert('No se pudo abrir el comprobante. Intenta nuevamente.')
+    } finally {
+      setProofLoadingId(null)
+    }
+  }
 
   const loadPeriod = useCallback(async (monthKey: string, sync = true) => {
     const normalizedMonthKey = clampCommissionMonthKey(monthKey)
@@ -1195,16 +1213,16 @@ export default function AdminCommissionsPage() {
                       )}
 
                       <div className="flex flex-wrap items-center gap-2">
-                        {payment.proof_url && (
-                          <a
-                            href={payment.proof_url}
-                            target="_blank"
-                            rel="noreferrer"
+                        {(payment.proof_path || payment.proof_url) && (
+                          <button
+                            type="button"
+                            onClick={() => handleViewProof(payment.id)}
+                            disabled={proofLoadingId === payment.id}
                             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
                           >
-                            <ExternalLink size={14} />
+                            {proofLoadingId === payment.id ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                             Ver comprobante
-                          </a>
+                          </button>
                         )}
 
                         {showOwnerView && payment.status === 'reported' && (

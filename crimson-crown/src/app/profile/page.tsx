@@ -11,6 +11,7 @@ import { useContactWhatsapp } from '@/hooks/useContactWhatsapp'
 import { buildWhatsAppUrl } from '@/lib/contact-whatsapp'
 import { createUploadTicketAction, finalizeOrderProofAction } from '@/app/actions/storage-uploads'
 import { uploadWithTicket } from '@/lib/storage/upload-client'
+import { getPaymentProofUrlAction } from '@/app/actions/payment-proof-access'
 
 function ProfileContent() {
   const [user, setUser] = useState<any>(null)
@@ -25,6 +26,8 @@ function ProfileContent() {
   
   // Estado para Zoom
   const [zoomedImage, setZoomedImage] = useState<string | null>(null)
+  const [proofUrl, setProofUrl] = useState<string | null>(null)
+  const [proofLoadingId, setProofLoadingId] = useState<string | null>(null)
 
   // Estados para Transferencia
   const [showTransferModal, setShowTransferModal] = useState(false)
@@ -178,6 +181,18 @@ function ProfileContent() {
       }
   }
 
+  const handleViewProof = async (orderId: string) => {
+      setProofLoadingId(orderId)
+      try {
+          const result = await getPaymentProofUrlAction({ domain: 'order', recordId: orderId })
+          setProofUrl(result.url)
+      } catch {
+          alert('No se pudo abrir el comprobante. Intenta nuevamente.')
+      } finally {
+          setProofLoadingId(null)
+      }
+  }
+
   const formatDualPrice = (amountUsd: number) => {
       const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amountUsd)
       const ars = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(amountUsd * rate)
@@ -298,6 +313,13 @@ function ProfileContent() {
         </div>
       )}
 
+      {proofUrl && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 animate-in fade-in duration-200" onClick={() => setProofUrl(null)}>
+             <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 cursor-pointer z-50"><X size={32} /></button>
+             <iframe src={proofUrl} title="Comprobante" className="w-full max-w-4xl h-[85vh] rounded-lg bg-white" onClick={(event) => event.stopPropagation()} />
+        </div>
+      )}
+
       <h1 className="text-3xl font-bold mb-8 text-slate-800">Mi Cuenta</h1>
 
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-8 text-white shadow-xl mb-10 flex flex-col md:flex-row justify-between items-center">
@@ -374,6 +396,17 @@ function ProfileContent() {
                         <div className="font-bold text-slate-900">{formatDualPrice(order.total_amount)}</div>
                     </div>
                     {getStatusBadge(order.status)}
+                    {(order.payment_proof_path || order.payment_proof_url) && (
+                        <button
+                            type="button"
+                            onClick={() => handleViewProof(order.id)}
+                            disabled={proofLoadingId === order.id}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"
+                        >
+                            {proofLoadingId === order.id ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+                            Ver comprobante
+                        </button>
+                    )}
                   </div>
                 </div>
 

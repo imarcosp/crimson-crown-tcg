@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Plus, Search, Plane, User, Loader2, X, Check, ArrowLeft, ArrowRight, Filter, Calendar, Trash2, Edit, DollarSign, Eye } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
+import { getPaymentProofUrlAction } from '@/app/actions/payment-proof-access'
 
 const ITEMS_PER_PAGE = 20
 
@@ -30,6 +30,7 @@ export default function AdminImportsPage() {
   
   // Estado para Zoom de Comprobante
   const [proofImage, setProofImage] = useState<string | null>(null)
+  const [proofLoadingId, setProofLoadingId] = useState<string | null>(null)
 
   // Paginación y Filtros
   const [page, setPage] = useState(1)
@@ -50,6 +51,18 @@ export default function AdminImportsPage() {
   const [isSearching, setIsSearching] = useState(false)
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [creating, setCreating] = useState(false)
+
+  const handleViewProof = async (orderId: string) => {
+    setProofLoadingId(orderId)
+    try {
+      const result = await getPaymentProofUrlAction({ domain: 'import', recordId: String(orderId) })
+      setProofImage(result.url)
+    } catch {
+      alert('No se pudo abrir el comprobante. Intenta nuevamente.')
+    } finally {
+      setProofLoadingId(null)
+    }
+  }
 
   const fetchOrders = useCallback(async () => {
     setLoading(true)
@@ -222,9 +235,7 @@ export default function AdminImportsPage() {
       {proofImage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 animate-in fade-in duration-200" onClick={() => setProofImage(null)}>
              <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 cursor-pointer z-50"><X size={32} /></button>
-             <div className="relative w-full max-w-2xl h-[80vh]">
-                <Image src={proofImage} alt="Comprobante" fill className="object-contain rounded-lg" unoptimized />
-             </div>
+             <iframe src={proofImage} title="Comprobante" className="w-full max-w-4xl h-[85vh] rounded-lg bg-white" />
         </div>
       )}
 
@@ -308,13 +319,14 @@ export default function AdminImportsPage() {
                                                 </button>
                                                 
                                                 {/* OJO PARA VER COMPROBANTE CON ZOOM */}
-                                                {order.payment_proof_url && (
+                                                {(order.payment_proof_path || order.payment_proof_url) && (
                                                     <button 
-                                                        onClick={() => setProofImage(order.payment_proof_url)}
-                                                        className="p-2 bg-slate-100 text-blue-600 rounded-full hover:bg-blue-50 cursor-pointer"
+                                                        onClick={() => handleViewProof(order.id)}
+                                                        disabled={proofLoadingId === String(order.id)}
+                                                        className="p-2 bg-slate-100 text-blue-600 rounded-full hover:bg-blue-50 cursor-pointer disabled:opacity-50"
                                                         title="Ver Comprobante"
                                                     >
-                                                        <Eye size={16}/>
+                                                        {proofLoadingId === String(order.id) ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16}/>}
                                                     </button>
                                                 )}
                                             </div>
