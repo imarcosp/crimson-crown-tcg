@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { MIN_PRODUCT_PRICE_USD } from '@/lib/pricing/constants'
 import { X, Search, Loader2, Image as ImageIcon, Plus, Trash2, AlertTriangle } from 'lucide-react'
-import { processWishlistNotifications } from '@/app/actions/wishlist'
+import { saveAdminProduct } from '@/app/actions/admin-products'
 import {
   finishKeyToLabel,
   finishKeyToValue,
@@ -341,22 +341,25 @@ export default function ProductForm({ inventoryId, initial, onClose, onSaved }: 
     }
     if (normalizedSubcategory) nextMetadata.subcategory = normalizedSubcategory
     else delete nextMetadata.subcategory
-    const payload: any = { 
-        ...formData, 
-        inventory_id: inventoryId,
-        name: normalize(formData.name),
-        set_name: normalize(formData.set_name),
-        tcg: normalizedCategory,
-        language: normalize(formData.language),
-        condition: normalize(formData.condition),
-        finish: normalize(formData.finish),
-        scryfall_id: formData.scryfall_id || null,
-        image_url: mainImage,
-        metadata: nextMetadata,
+    const payload: any = {
+      name: normalize(formData.name),
+      set_name: normalize(formData.set_name),
+      collector_number: normalize(formData.collector_number) || null,
+      tcg: normalizedCategory,
+      price_usd: Number(formData.price_usd),
+      stock: Number(formData.stock),
+      condition: normalize(formData.condition),
+      finish: normalize(formData.finish),
+      rarity: normalize(formData.rarity),
+      image_url: mainImage,
+      scryfall_id: formData.scryfall_id || null,
+      is_manual_price: Boolean(formData.is_manual_price),
+      language: normalize(formData.language),
+      metadata: nextMetadata,
     }
     if (mode === 'Other') {
-      payload.scryfall_id = undefined
-      payload.collector_number = undefined
+      payload.scryfall_id = null
+      payload.collector_number = null
     } else if (payload.scryfall_id) {
       const externalContext = await fetchExternalFinishContext(payload.scryfall_id)
       const resolvedFinish = resolveMagicFinishSelection(payload.finish, availableFinishes, externalContext)
@@ -372,45 +375,20 @@ export default function ProductForm({ inventoryId, initial, onClose, onSaved }: 
         }
       }
     }
-    let shouldNotify = false
-    let productId = ''
-    const isVariantChange = initial && (formData.finish !== initial.finish || formData.condition !== initial.condition || formData.language !== initial.language)
-    if (initial?.id && !isVariantChange) {
-      const oldStock = Number(initial.stock || 0)
-      const newStock = Number(formData.stock || 0)
-      if (oldStock === 0 && newStock > 0) payload.restocked_at = new Date().toISOString()
-      const { data, error } = await supabase.from('products').update(payload).eq('id', initial.id).eq('inventory_id', inventoryId).select().single()
-      if (!error) {
-        onSaved(data)
-        if (oldStock === 0 && newStock > 0) { shouldNotify = true; productId = initial.id }
-      } else alert('Error: ' + error.message)
+    const result = await saveAdminProduct({
+      inventoryId,
+      productId: initial?.id || null,
+      operationKey: `form:${crypto.randomUUID()}`,
+      product: payload,
+    })
+    if (result.success) {
+      if (result.data.mutationKind === 'restocked') {
+        alert(`Variante existente. Stock actualizado de ${result.data.previousStock} a ${result.data.currentStock}.`)
+      }
+      onSaved(result.data.product)
     } else {
-      let query = supabase.from('products').select('id, stock').eq('inventory_id', inventoryId).eq('finish', payload.finish).eq('condition', payload.condition).eq('language', payload.language).eq('tcg', payload.tcg)
-      if (payload.scryfall_id) query = query.eq('scryfall_id', payload.scryfall_id)
-      else {
-        query = query.ilike('name', payload.name).ilike('set_name', payload.set_name)
-        if (payload.collector_number) query = query.eq('collector_number', payload.collector_number)
-      }
-      const { data: existingArr } = await query.order('created_at', { ascending: false }).limit(1)
-      const existing = Array.isArray(existingArr) ? existingArr[0] : null
-      if (existing) {
-        const oldStock = Number(existing.stock || 0)
-        const newStock = oldStock + Number(payload.stock || 0)
-        const updateData: any = { stock: newStock, image_url: payload.image_url, metadata: payload.metadata }
-        if (oldStock === 0 && newStock > 0) updateData.restocked_at = new Date().toISOString()
-        const { data, error } = await supabase.from('products').update(updateData).eq('id', existing.id).eq('inventory_id', inventoryId).select().single()
-        if (!error) {
-          alert(`Variante existente. Stock actualizado a ${newStock}.`)
-          onSaved(data)
-          if (oldStock === 0 && Number(payload.stock) > 0) { shouldNotify = true; productId = existing.id }
-        } else alert('Error fusionando: ' + error.message)
-      } else {
-        payload.restocked_at = new Date().toISOString()
-        const { data, error } = await supabase.from('products').insert([payload]).select().single()
-        if (!error) { onSaved(data); if (Number(payload.stock) > 0) { shouldNotify = true; productId = data.id } } else alert('Error creando: ' + error.message)
-      }
+      alert(result.error)
     }
-    if (shouldNotify && productId) processWishlistNotifications([{ id: productId, name: formData.name }])
     setSaving(false)
   }
 

@@ -81,7 +81,12 @@ test('save rechaza a un usuario no administrador antes de invocar la RPC', async
 })
 
 test('save devuelve la transición de stock confirmada por la base', async () => {
-  const core = createAdminProductActionCore(gateway())
+  const notifications: Array<Array<{ id: string; name: string }>> = []
+  const core = createAdminProductActionCore(gateway({
+    async notifyStockArrivals(items) {
+      notifications.push(items)
+    },
+  }))
 
   const result = await core.save(validRequest)
 
@@ -94,6 +99,7 @@ test('save devuelve la transición de stock confirmada por la base', async () =>
       currentStock: 5,
     },
   })
+  assert.deepEqual(notifications, [[{ id: PRODUCT_ID, name: 'Black Lotus' }]])
 })
 
 test('save valida el producto antes de invocar la RPC', async () => {

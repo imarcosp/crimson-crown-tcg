@@ -129,7 +129,20 @@ export function createAdminProductActionCore(gateway: AdminProductGateway): {
       } catch (error) {
         return { success: false, error: stableError(error, 'Acceso denegado.') }
       }
-      return saveAuthorized(input)
+      const result = await saveAuthorized(input)
+      if (result.success && result.data.currentStock > result.data.previousStock) {
+        const id = String(result.data.product.id || '')
+        const name = String(result.data.product.name || '')
+        if (isUuid(id)) {
+          try {
+            await gateway.notifyStockArrivals([{ id, name }])
+          } catch {
+            // El producto ya fue confirmado por la base; la alerta se puede
+            // reintentar sin presentar la mutación como fallida.
+          }
+        }
+      }
+      return result
     },
 
     async importRows(input) {

@@ -7,6 +7,7 @@ import CsvUploader from '@/components/admin/CsvUploader'
 import { Search, Package, DollarSign, Trash2, Edit, ChevronLeft, ChevronRight, Filter, Tag, EyeOff, Eye } from 'lucide-react'
 import InventorySelector from '@/components/admin/InventorySelector'
 import type { Inventory } from '@/app/actions/admin-inventories'
+import { deleteAdminProducts } from '@/app/actions/admin-products'
 
 const ITEMS_PER_PAGE = 25
 
@@ -30,6 +31,8 @@ export default function InventoryPage() {
   const [showManualOnly, setShowManualOnly] = useState(false) 
   const [showOutOfStock, setShowOutOfStock] = useState(false) 
   const [zoomedImage, setZoomedImage] = useState<string | null>(null)
+  const [mutationMessage, setMutationMessage] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const loadInventories = async () => {
     const { data, error } = await supabase
@@ -168,9 +171,22 @@ export default function InventoryPage() {
 
   const confirmDelete = async () => {
     if (!productToDelete) return
-    const { error } = await supabase.from('products').delete().eq('id', productToDelete).eq('inventory_id', selectedInventoryId)
-    if (!error) load()
+    setDeleting(true)
+    setMutationMessage(null)
+    const result = await deleteAdminProducts({
+      inventoryId: selectedInventoryId,
+      productIds: [productToDelete],
+      operationKey: `delete:${crypto.randomUUID()}`,
+    })
+    if (result.success) {
+      setSelectedIds((current) => Array.from(new Set([...current, ...result.data.rejectedIds])))
+      if (result.data.rejectedIds.length > 0) setMutationMessage('No se eliminaron productos con historial.')
+      if (result.data.deletedIds.length > 0) await load()
+    } else {
+      setMutationMessage(result.error)
+    }
     setProductToDelete(null)
+    setDeleting(false)
   }
 
   const toggleSelectedId = (id: string) => {
@@ -196,12 +212,22 @@ export default function InventoryPage() {
 
   const confirmBulkDelete = async () => {
     if (selectedIds.length === 0) return
-    const { error } = await supabase.from('products').delete().in('id', selectedIds).eq('inventory_id', selectedInventoryId)
-    if (!error) {
-      setSelectedIds([])
-      setBulkDeleteOpen(false)
-      load()
+    setDeleting(true)
+    setMutationMessage(null)
+    const result = await deleteAdminProducts({
+      inventoryId: selectedInventoryId,
+      productIds: selectedIds,
+      operationKey: `delete:${crypto.randomUUID()}`,
+    })
+    if (result.success) {
+      setSelectedIds(result.data.rejectedIds)
+      if (result.data.rejectedIds.length > 0) setMutationMessage('No se eliminaron productos con historial.')
+      if (result.data.deletedIds.length > 0) await load()
+    } else {
+      setMutationMessage(result.error)
     }
+    setBulkDeleteOpen(false)
+    setDeleting(false)
   }
 
   return (
@@ -233,6 +259,12 @@ export default function InventoryPage() {
           </div>
         </div>
       </div>
+
+      {mutationMessage && (
+        <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          {mutationMessage}
+        </div>
+      )}
 
       <div className="flex flex-col xl:flex-row gap-4 bg-white p-3 rounded-lg border border-slate-200">
         <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-md shrink-0">
@@ -430,7 +462,7 @@ export default function InventoryPage() {
             <p className="text-sm text-slate-600 mb-6">Estás a punto de borrar <span className="font-bold text-slate-900">\"{items.find((i) => i.id === productToDelete)?.name}\"</span>. Esta acción no se puede deshacer.</p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setProductToDelete(null)} className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors">Cancelar</button>
-              <button onClick={confirmDelete} className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-900/20">Sí, eliminar</button>
+              <button onClick={confirmDelete} disabled={deleting} className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-50 transition-colors shadow-lg shadow-red-900/20">Sí, eliminar</button>
             </div>
           </div>
         </div>
@@ -445,7 +477,7 @@ export default function InventoryPage() {
             </p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setBulkDeleteOpen(false)} className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors">Cancelar</button>
-              <button onClick={confirmBulkDelete} className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-900/20">Sí, eliminar</button>
+              <button onClick={confirmBulkDelete} disabled={deleting} className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-50 transition-colors shadow-lg shadow-red-900/20">Sí, eliminar</button>
             </div>
           </div>
         </div>

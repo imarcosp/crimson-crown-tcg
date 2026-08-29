@@ -15,8 +15,11 @@ let fixture: {
   inventoryId: string
   inventoryName: string
   productId: string
+  productName: string
   orderId: string
 } | null = null
+
+const manualProductMarker = `Playwright Producto Seguro ${Date.now()}`
 
 let externalLibraryCard: {
   scryfall_id: string
@@ -131,11 +134,27 @@ test.beforeAll(async () => {
     })
   if (itemError) throw itemError
 
-  fixture = { inventoryId: inventory.id, inventoryName: inventory.name, productId: clonedProduct.id, orderId: order.id }
+  fixture = {
+    inventoryId: inventory.id,
+    inventoryName: inventory.name,
+    productId: clonedProduct.id,
+    productName: String(sourceProduct.name),
+    orderId: order.id,
+  }
 })
 
 test.afterAll(async () => {
   if (!fixture) return
+  const { data: manualProducts } = await localAdmin
+    .from('products')
+    .select('id')
+    .eq('inventory_id', fixture.inventoryId)
+    .like('name', `${manualProductMarker}%`)
+  const manualProductIds = (manualProducts || []).map((product) => product.id)
+  if (manualProductIds.length > 0) {
+    await localAdmin.from('inventory_stock_movements').delete().in('product_id', manualProductIds)
+    await localAdmin.from('products').delete().in('id', manualProductIds)
+  }
   await localAdmin.from('inventory_stock_movements').delete().eq('inventory_id', fixture.inventoryId)
   await localAdmin.from('order_items').delete().eq('order_id', fixture.orderId)
   await localAdmin.from('orders').delete().eq('id', fixture.orderId)
@@ -212,4 +231,74 @@ test('el buscador administrativo sugiere cartas de external_prices aunque no exi
   await expect(productModal.locator('input').nth(1)).toHaveValue(externalLibraryCard.name)
   await productModal.locator('input[type="number"]').first().fill('10.50')
   await expect(page.getByText('MANUAL', { exact: true })).toBeVisible()
+})
+
+test('las mutaciones manuales conservan auditoría y reportan productos con historial', async ({ page }) => {
+  if (!fixture) throw new Error('Fixture E2E no inicializado.')
+  const editableName = `${manualProductMarker} Editable`
+  const deletableName = `${manualProductMarker} Sin Historial`
+
+  await loginAsAdmin(page)
+  await unlockAdminPanel(page)
+  await page.goto(`/admin/inventory?inventory=${fixture.inventoryId}`)
+
+  const createManualProduct = async (name: string, stock: number) => {
+    await page.getByRole('button', { name: 'Nuevo Producto' }).click()
+    const modal = page.locator('div.fixed.inset-0').filter({ hasText: 'Cargar Producto' })
+    await modal.getByRole('button', { name: /Otros TCG|Accesorios/ }).click()
+    await modal.locator('label').filter({ hasText: /^Nombre$/ }).locator('..').locator('input').fill(name)
+    await modal.locator('label').filter({ hasText: /^Set \/ Expansión$/ }).locator('..').locator('input').fill('Playwright Set')
+    await modal.getByPlaceholder('Ej: Magic, Pokémon, Accesorios...').fill('Accesorios')
+    const numericInputs = modal.locator('input[type="number"]')
+    await numericInputs.nth(0).fill('10.50')
+    await numericInputs.nth(1).fill(String(stock))
+    await modal.getByRole('button', { name: 'Guardar Producto' }).click()
+    await expect(modal).toBeHidden()
+  }
+
+  await createManualProduct(editableName, 2)
+  await page.getByPlaceholder('Buscar...').fill(editableName)
+  const editableRow = page.locator('tbody tr').filter({ hasText: editableName })
+  await expect(editableRow).toBeVisible()
+
+  const { data: editableProduct, error: editableError } = await localAdmin
+    .from('products')
+    .select('id,stock,inventory_id')
+    .eq('inventory_id', fixture.inventoryId)
+    .eq('name', editableName)
+    .single()
+  if (editableError || !editableProduct) throw editableError || new Error('No se creó el producto manual.')
+  expect(Number(editableProduct.stock)).toBe(2)
+
+  await editableRow.getByTitle('Editar').click()
+  const editModal = page.locator('div.fixed.inset-0').filter({ hasText: 'Editar Producto' })
+  await editModal.locator('input[type="number"]').nth(1).fill('5')
+  await editModal.getByRole('button', { name: 'Guardar Producto' }).click()
+  await expect(editModal).toBeHidden()
+
+  const { data: adjustmentMovements, error: adjustmentError } = await localAdmin
+    .from('inventory_stock_movements')
+    .select('quantity_delta,movement_type')
+    .eq('product_id', editableProduct.id)
+    .eq('movement_type', 'adjustment')
+  if (adjustmentError) throw adjustmentError
+  expect(adjustmentMovements).toEqual([{ quantity_delta: 3, movement_type: 'adjustment' }])
+
+  await page.getByPlaceholder('Buscar...').fill(fixture.productName)
+  const referencedRow = page.locator('tbody tr').filter({ hasText: fixture.productName }).first()
+  await expect(referencedRow).toBeVisible()
+  await referencedRow.getByTitle('Eliminar').click()
+  await page.getByRole('button', { name: 'Sí, eliminar' }).click()
+  await expect(page.getByText('No se eliminaron productos con historial.')).toBeVisible()
+  await expect(referencedRow).toBeVisible()
+
+  await page.getByPlaceholder('Buscar...').fill('')
+  await createManualProduct(deletableName, 0)
+  await page.getByText('Ver Sin Stock', { exact: true }).click()
+  await page.getByPlaceholder('Buscar...').fill(deletableName)
+  const deletableRow = page.locator('tbody tr').filter({ hasText: deletableName })
+  await expect(deletableRow).toBeVisible()
+  await deletableRow.getByTitle('Eliminar').click()
+  await page.getByRole('button', { name: 'Sí, eliminar' }).click()
+  await expect(deletableRow).toHaveCount(0)
 })
