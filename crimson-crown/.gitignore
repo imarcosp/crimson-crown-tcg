@@ -38,6 +38,7 @@ yarn-error.log*
 # Local Supabase safety
 # Production-derived artifacts are forbidden inside this worktree even when ignored.
 supabase/.temp/
+/local-artifacts/release-evidence/
 local-artifacts/
 *.backup
 *.dump
