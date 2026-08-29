@@ -39,6 +39,35 @@ public sealed class CrimsonDirectoryIdentityLock : IDisposable
     private const uint FileFlagOpenReparsePoint = 0x00200000;
     private const uint FileAttributeDirectory = 0x00000010;
     private const uint FileAttributeReparsePoint = 0x00000400;
+    private const uint FileCreate = 2;
+    private const uint FileDirectoryFile = 0x00000001;
+    private const uint ObjectCaseInsensitive = 0x00000040;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UnicodeString
+    {
+        public ushort Length;
+        public ushort MaximumLength;
+        public IntPtr Buffer;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ObjectAttributes
+    {
+        public int Length;
+        public IntPtr RootDirectory;
+        public IntPtr ObjectName;
+        public uint Attributes;
+        public IntPtr SecurityDescriptor;
+        public IntPtr SecurityQualityOfService;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoStatusBlock
+    {
+        public IntPtr Status;
+        public UIntPtr Information;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct ByHandleFileInformation
@@ -69,6 +98,23 @@ public sealed class CrimsonDirectoryIdentityLock : IDisposable
     private static extern bool GetFileInformationByHandle(
         SafeFileHandle file,
         out ByHandleFileInformation information);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtCreateFile(
+        out SafeFileHandle fileHandle,
+        uint desiredAccess,
+        ref ObjectAttributes objectAttributes,
+        out IoStatusBlock ioStatusBlock,
+        IntPtr allocationSize,
+        uint fileAttributes,
+        uint shareAccess,
+        uint createDisposition,
+        uint createOptions,
+        IntPtr eaBuffer,
+        uint eaLength);
+
+    [DllImport("ntdll.dll")]
+    private static extern uint RtlNtStatusToDosError(int status);
 
     private SafeFileHandle handle;
 
@@ -116,6 +162,87 @@ public sealed class CrimsonDirectoryIdentityLock : IDisposable
         }
 
         return new CrimsonDirectoryIdentityLock(handle, information);
+    }
+
+    private static string ToNtPath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        if (fullPath.StartsWith(@"\\?\", StringComparison.Ordinal))
+        {
+            fullPath = fullPath.Substring(4);
+        }
+        if (fullPath.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            return @"\??\UNC\" + fullPath.Substring(2);
+        }
+        return @"\??\" + fullPath;
+    }
+
+    public static CrimsonDirectoryIdentityLock Create(string path)
+    {
+        string ntPath = ToNtPath(path);
+        if (ntPath.Length > 32766)
+        {
+            throw new PathTooLongException();
+        }
+
+        IntPtr nameBuffer = Marshal.StringToHGlobalUni(ntPath);
+        IntPtr namePointer = IntPtr.Zero;
+        SafeFileHandle handle = null;
+        try
+        {
+            UnicodeString name = new UnicodeString();
+            name.Length = checked((ushort)(ntPath.Length * 2));
+            name.MaximumLength = checked((ushort)((ntPath.Length + 1) * 2));
+            name.Buffer = nameBuffer;
+            namePointer = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(UnicodeString)));
+            Marshal.StructureToPtr(name, namePointer, false);
+
+            ObjectAttributes attributes = new ObjectAttributes();
+            attributes.Length = Marshal.SizeOf(typeof(ObjectAttributes));
+            attributes.ObjectName = namePointer;
+            attributes.Attributes = ObjectCaseInsensitive;
+
+            IoStatusBlock ioStatus;
+            int status = NtCreateFile(
+                out handle,
+                DeleteAccess | FileListDirectory | FileReadAttributes,
+                ref attributes,
+                out ioStatus,
+                IntPtr.Zero,
+                FileAttributeDirectory,
+                FileShareRead | FileShareWrite,
+                FileCreate,
+                FileDirectoryFile,
+                IntPtr.Zero,
+                0);
+            if (status < 0)
+            {
+                if (handle != null) handle.Dispose();
+                throw new Win32Exception(unchecked((int)RtlNtStatusToDosError(status)));
+            }
+
+            ByHandleFileInformation information;
+            if (!GetFileInformationByHandle(handle, out information))
+            {
+                int error = Marshal.GetLastWin32Error();
+                handle.Dispose();
+                throw new Win32Exception(error);
+            }
+            if (
+                (information.FileAttributes & FileAttributeDirectory) == 0 ||
+                (information.FileAttributes & FileAttributeReparsePoint) != 0)
+            {
+                handle.Dispose();
+                throw new IOException("The created object is not a physical directory.");
+            }
+            return new CrimsonDirectoryIdentityLock(handle, information);
+        }
+        finally
+        {
+            if (namePointer != IntPtr.Zero) Marshal.FreeHGlobal(namePointer);
+            Marshal.FreeHGlobal(nameBuffer);
+        }
     }
 
     public bool MatchesPath(string path)
@@ -183,6 +310,19 @@ function Open-DirectoryIdentityLock {
     return [CrimsonDirectoryIdentityLock]::Open($LiteralPath)
   } catch {
     throw 'No se pudo bloquear la identidad del directorio temporal.'
+  }
+}
+
+function New-DirectoryIdentityLock {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$LiteralPath
+  )
+
+  try {
+    return [CrimsonDirectoryIdentityLock]::Create($LiteralPath)
+  } catch {
+    throw 'No se pudo crear y bloquear el directorio temporal.'
   }
 }
 
@@ -529,8 +669,7 @@ try {
   $TempRoot = Join-Path $TempBase ("crimson-release-{0}" -f [Guid]::NewGuid().ToString('N'))
   $CreationBaseLock = Open-SafeTempBaseLock
   try {
-    New-Item -ItemType Directory -Path $TempRoot -ErrorAction Stop | Out-Null
-    $TempRootUseLock = Open-DirectoryIdentityLock -LiteralPath $TempRoot
+    $TempRootUseLock = New-DirectoryIdentityLock -LiteralPath $TempRoot
     if ($TempRootUseLock.IsReparsePoint) {
       $TempRootUseLock.Dispose()
       $TempRootUseLock = $null

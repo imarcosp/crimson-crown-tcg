@@ -392,6 +392,7 @@ async function makeFixture({
   dirty = false,
   forceIdentityFailureBeforeLink = false,
   mutateManifestAfterBuild = false,
+  pauseAtCreationIdentityBoundary = false,
   projectionSummaryOverride,
   zeroForward = false,
 } = {}) {
@@ -417,6 +418,8 @@ async function makeFixture({
   const raceReady = join(fixtureParent, 'race-ready.txt')
   const useLockReady = join(fixtureParent, 'use-lock-ready.txt')
   const useLockDone = join(fixtureParent, 'use-lock-done.txt')
+  const creationLockReady = join(fixtureParent, 'creation-lock-ready.txt')
+  const creationLockDone = join(fixtureParent, 'creation-lock-done.txt')
   const manifest = verifiedManifest({ zeroForward })
 
   if (candidate) {
@@ -440,6 +443,28 @@ async function makeFixture({
       fixtureWrapper,
       wrapperSource.replace(identityGate, "throw 'Fallo de identidad temporal simulado.'\n  $LinkOutput"),
     )
+  }
+  if (pauseAtCreationIdentityBoundary) {
+    const wrapperSource = await readFile(fixtureWrapper, 'utf8')
+    const vulnerableBoundary = "New-Item -ItemType Directory -Path $TempRoot -ErrorAction Stop | Out-Null\n    $TempRootUseLock = Open-DirectoryIdentityLock -LiteralPath $TempRoot"
+    const atomicBoundary = '$TempRootUseLock = New-DirectoryIdentityLock -LiteralPath $TempRoot'
+    const pauseSource = String.raw`Set-Content -NoNewline -LiteralPath $env:FAKE_CREATION_LOCK_READY -Value $TempRoot
+    $CreationHookDeadline = [DateTime]::UtcNow.AddSeconds(30)
+    while (-not (Test-Path -LiteralPath $env:FAKE_CREATION_LOCK_DONE)) {
+      if ([DateTime]::UtcNow -ge $CreationHookDeadline) { throw 'Hook de creación agotado.' }
+      Start-Sleep -Milliseconds 5
+    }`
+    let hookedSource
+    if (wrapperSource.includes(vulnerableBoundary)) {
+      hookedSource = wrapperSource.replace(
+        vulnerableBoundary,
+        `New-Item -ItemType Directory -Path $TempRoot -ErrorAction Stop | Out-Null\n    ${pauseSource}\n    $TempRootUseLock = Open-DirectoryIdentityLock -LiteralPath $TempRoot`,
+      )
+    } else {
+      assert.equal(wrapperSource.includes(atomicBoundary), true)
+      hookedSource = wrapperSource.replace(atomicBoundary, `${atomicBoundary}\n    ${pauseSource}`)
+    }
+    await writeFile(fixtureWrapper, hookedSource)
   }
   if (mutateManifestAfterBuild || projectionSummaryOverride !== undefined) {
     await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection-real.mjs'))
@@ -489,6 +514,8 @@ async function makeFixture({
     raceReady,
     useLockReady,
     useLockDone,
+    creationLockReady,
+    creationLockDone,
     cleanupAttacker,
     zeroForward,
   }
@@ -525,6 +552,8 @@ function runWrapper(fixture, mode = 'success', {
         FAKE_RACE_READY: fixture.raceReady,
         FAKE_USE_LOCK_READY: fixture.useLockReady,
         FAKE_USE_LOCK_DONE: fixture.useLockDone,
+        FAKE_CREATION_LOCK_READY: fixture.creationLockReady,
+        FAKE_CREATION_LOCK_DONE: fixture.creationLockDone,
       },
       windowsHide: true,
     },
@@ -542,12 +571,12 @@ function runWrapper(fixture, mode = 'success', {
   })
 }
 
-async function runUseLockAttacker(fixture) {
+async function runRootReplacementAttacker(fixture, readyPath, donePath) {
   const deadline = Date.now() + 30_000
   let tempRoot
   while (Date.now() < deadline) {
     try {
-      tempRoot = (await readFile(fixture.useLockReady, 'utf8')).trim()
+      tempRoot = (await readFile(readyPath, 'utf8')).trim()
       break
     } catch (error) {
       if (error.code !== 'ENOENT') throw error
@@ -584,7 +613,7 @@ async function runUseLockAttacker(fixture) {
     pathExistsAfter = true
     isReparseAfter = state.isSymbolicLink()
   } catch {}
-  await writeFile(fixture.useLockDone, 'done\n')
+  await writeFile(donePath, 'done\n')
 
   return {
     reachedActiveWindow: true,
@@ -595,6 +624,14 @@ async function runUseLockAttacker(fixture) {
     pathExistsAfter,
     isReparseAfter,
   }
+}
+
+function runUseLockAttacker(fixture) {
+  return runRootReplacementAttacker(fixture, fixture.useLockReady, fixture.useLockDone)
+}
+
+function runCreationBoundaryAttacker(fixture) {
+  return runRootReplacementAttacker(fixture, fixture.creationLockReady, fixture.creationLockDone)
 }
 
 async function readCalls(logPath) {
@@ -1118,6 +1155,27 @@ test('holds the exact temporary-root identity throughout projection use and reje
   })
 })
 
+test('creates the temporary root with its non-delete-sharing handle already held', async () => {
+  await withFixture({ pauseAtCreationIdentityBoundary: true }, async (fixture) => {
+    const [result, attackResult] = await Promise.all([
+      runWrapper(fixture),
+      runCreationBoundaryAttacker(fixture),
+    ])
+
+    assert.equal(attackResult.reachedActiveWindow, true, JSON.stringify(attackResult))
+    assert.equal(attackResult.moveSucceeded, false, JSON.stringify(attackResult))
+    assert.ok(['EPERM', 'EACCES', 'EBUSY'].includes(attackResult.moveErrorCode), JSON.stringify(attackResult))
+    assert.equal(attackResult.junctionAttempted, false, JSON.stringify(attackResult))
+    assert.equal(attackResult.junctionCreated, false, JSON.stringify(attackResult))
+    assert.equal(attackResult.pathExistsAfter, true, JSON.stringify(attackResult))
+    assert.equal(attackResult.isReparseAfter, false, JSON.stringify(attackResult))
+    assertNormalizedSuccess(result)
+    assert.equal((await readCalls(fixture.logPath)).length, 4)
+    assert.equal(await readFile(fixture.junctionSentinel, 'utf8'), 'external preserve\n')
+    await assertExactCleanup(fixture)
+  })
+})
+
 test('runs no linked command after the pre-link identity gate fails', async () => {
   await withFixture({ forceIdentityFailureBeforeLink: true }, async (fixture) => {
     const result = await runWrapper(fixture)
@@ -1159,10 +1217,13 @@ test('opens the use lock under the creation-base lock and revalidates identity b
   const source = await readFile(sourceWrapper, 'utf8')
   const creationStart = source.indexOf('$CreationBaseLock = Open-SafeTempBaseLock')
   const creationEnd = source.indexOf('$CreationBaseLock.Dispose()', creationStart)
-  const useLockOpen = source.indexOf('$TempRootUseLock = Open-DirectoryIdentityLock', creationStart)
+  const useLockOpen = source.indexOf('$TempRootUseLock = New-DirectoryIdentityLock', creationStart)
 
   assert.ok(creationStart >= 0)
   assert.ok(useLockOpen > creationStart && useLockOpen < creationEnd)
+  assert.doesNotMatch(source.slice(creationStart, creationEnd), /New-Item\s+-ItemType\s+Directory\s+-Path\s+\$TempRoot/i)
+  assert.match(source, /NtCreateFile/)
+  assert.match(source, /FileCreate/)
   assert.match(source, /if \(\$TempRootUseLock\.IsReparsePoint\)/)
   for (const phase of ['projection-build', 'link', 'linked-ref-read', 'migration-list', 'dry-run', 'cleanup']) {
     assert.match(source, new RegExp(`Assert-TempRootUseIdentity -Phase '${phase}'`))

@@ -419,8 +419,64 @@ test('rejects an external-looking output whose junction parent resolves inside t
 
     await assert.rejects(
       () => buildProjection({ rootDir, outputDir: join(junctionParent, 'projection') }),
-      /directorio de proyección dentro del repositorio no permitido/,
+      /identidad del directorio de proyección inválida/,
     )
+  })
+})
+
+test('rejects a stable external junction as the immediate output parent', async (t) => {
+  await withFixture(async ({ rootDir, outputParent }) => {
+    const outsideTarget = await mkdtemp(join(tmpdir(), 'crimson-release-projection-stable-junction-'))
+    const outsideSentinel = join(outsideTarget, 'must-survive.txt')
+    const junctionParent = join(outputParent, 'external-alias')
+    await writeFile(outsideSentinel, 'preserve\n')
+
+    try {
+      try {
+        await symlink(outsideTarget, junctionParent, 'junction')
+      } catch (error) {
+        t.skip(`junction unavailable on this host: ${error.code ?? 'unknown error'}`)
+        return
+      }
+
+      await assert.rejects(
+        () => buildProjection({ rootDir, outputDir: join(junctionParent, 'projection') }),
+        (error) => error.message === 'identidad del directorio de proyección inválida',
+      )
+      assert.equal(await readFile(outsideSentinel, 'utf8'), 'preserve\n')
+      assert.deepEqual(await readdir(outsideTarget), ['must-survive.txt'])
+    } finally {
+      await rm(outsideTarget, { recursive: true, force: true })
+    }
+  })
+})
+
+test('rejects a stable junction in an ancestor component of the output parent', async (t) => {
+  await withFixture(async ({ rootDir, outputParent }) => {
+    const outsideTarget = await mkdtemp(join(tmpdir(), 'crimson-release-projection-stable-ancestor-'))
+    const outsideSentinel = join(outsideTarget, 'must-survive.txt')
+    const junctionAncestor = join(outputParent, 'external-alias')
+    const nestedParent = join(outsideTarget, 'nested-parent')
+    await mkdir(nestedParent)
+    await writeFile(outsideSentinel, 'preserve\n')
+
+    try {
+      try {
+        await symlink(outsideTarget, junctionAncestor, 'junction')
+      } catch (error) {
+        t.skip(`junction unavailable on this host: ${error.code ?? 'unknown error'}`)
+        return
+      }
+
+      await assert.rejects(
+        () => buildProjection({ rootDir, outputDir: join(junctionAncestor, 'nested-parent', 'projection') }),
+        (error) => error.message === 'identidad del directorio de proyección inválida',
+      )
+      assert.equal(await readFile(outsideSentinel, 'utf8'), 'preserve\n')
+      assert.deepEqual(await readdir(nestedParent), [])
+    } finally {
+      await rm(outsideTarget, { recursive: true, force: true })
+    }
   })
 })
 
@@ -443,7 +499,7 @@ test('rejects a release-evidence junction that expands the internal exception', 
     )
     await assert.rejects(
       () => buildProjection({ rootDir, outputDir: join(evidenceAlias, 'redirected-output') }),
-      /directorio de proyección dentro del repositorio no permitido/,
+      /identidad del directorio de proyección inválida/,
     )
   })
 })

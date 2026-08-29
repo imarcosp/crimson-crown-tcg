@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
 
 import { getMigrationManifestPaths, loadAndValidateManifest } from './migration-manifest.mjs'
 
@@ -22,6 +22,48 @@ function isSamePath(left, right) {
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+function hasSameIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino
+}
+
+async function readNonReparseDirectoryIdentity(path) {
+  const absolutePath = resolve(path)
+  const { root } = parse(absolutePath)
+  const components = relative(root, absolutePath).split(sep).filter(Boolean)
+  let currentPath = root
+  let currentIdentity
+
+  for (const component of components) {
+    currentPath = join(currentPath, component)
+    currentIdentity = await lstat(currentPath, { bigint: true })
+    if (!currentIdentity.isDirectory() || currentIdentity.isSymbolicLink()) {
+      fail('identidad del directorio de proyección inválida')
+    }
+  }
+
+  if (components.length === 0) {
+    currentIdentity = await lstat(currentPath, { bigint: true })
+    if (!currentIdentity.isDirectory() || currentIdentity.isSymbolicLink()) {
+      fail('identidad del directorio de proyección inválida')
+    }
+  }
+  return currentIdentity
+}
+
+async function readSafePhysicalParentIdentity(absoluteOutput) {
+  const lexicalParent = dirname(absoluteOutput)
+  const lexicalIdentity = await readNonReparseDirectoryIdentity(lexicalParent)
+  const path = await realpath(lexicalParent)
+  const identity = await stat(path, { bigint: true })
+  if (
+    !identity.isDirectory()
+    || !hasSameIdentity(lexicalIdentity, identity)
+  ) {
+    fail('identidad del directorio de proyección inválida')
+  }
+  return { identity, path }
 }
 
 function replaceMigrationSetting(config) {
@@ -72,10 +114,11 @@ async function resolvePhysicalPaths({ rootDir, outputDir }) {
     fail('directorio raíz de proyección no disponible')
   }
   try {
-    physicalParent = await realpath(dirname(absoluteOutput))
-    physicalParentIdentity = await stat(physicalParent, { bigint: true })
-    if (!physicalParentIdentity.isDirectory()) fail('directorio padre de proyección no disponible')
+    const safeParent = await readSafePhysicalParentIdentity(absoluteOutput)
+    physicalParent = safeParent.path
+    physicalParentIdentity = safeParent.identity
   } catch (error) {
+    if (error?.message === 'identidad del directorio de proyección inválida') throw error
     if (error?.message === 'directorio padre de proyección no disponible') throw error
     fail('directorio padre de proyección no disponible')
   }
@@ -106,16 +149,9 @@ async function resolvePhysicalPaths({ rootDir, outputDir }) {
   return { absoluteOutput, physicalParent, physicalParentIdentity, physicalRoot, physicalOutput }
 }
 
-function hasSameIdentity(left, right) {
-  return left.dev === right.dev && left.ino === right.ino
-}
-
 async function readPhysicalParentIdentity(absoluteOutput) {
   try {
-    const path = await realpath(dirname(absoluteOutput))
-    const identity = await stat(path, { bigint: true })
-    if (!identity.isDirectory()) fail('identidad del directorio de proyección inválida')
-    return { identity, path }
+    return await readSafePhysicalParentIdentity(absoluteOutput)
   } catch (error) {
     if (error?.message === 'identidad del directorio de proyección inválida') throw error
     fail('identidad del directorio de proyección inválida')
