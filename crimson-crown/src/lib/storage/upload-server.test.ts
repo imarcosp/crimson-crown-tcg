@@ -46,7 +46,7 @@ const localEnvironment = Object.freeze({
 })
 const storageIdentity: Readonly<{ etag: string; version: string }> = Object.freeze({
   etag: '"storage-etag-v1"',
-  version: 'storage-version-v1',
+  version: '55555555-5555-4555-8555-555555555555',
 })
 
 function storedInfo(
@@ -127,6 +127,78 @@ test('maps exact Supabase info metadata and treats only a 404 as missing', async
   )
 })
 
+test('accepts only one strong top-level FileObjectV2 identity and canonicalizes bare hashes', async () => {
+  const objectPath = 'orders/user/order/object.png'
+
+  for (const fixture of [
+    { etag: '"QuotedHash1234567890"', expected: '"QuotedHash1234567890"' },
+    { etag: 'BareHash1234567890', expected: '"BareHash1234567890"' },
+  ]) {
+    const dependencies = createUploadVerificationDependencies({
+      environment: localEnvironment,
+      createAdminClient: () => makeAdminClient({
+        info: async () => ({
+          data: storedInfo(objectPath, { ...storageIdentity, etag: fixture.etag }),
+          error: null,
+        }),
+      }),
+      fetch: async () => assert.fail('metadata lookup must use Storage info'),
+    })
+    const metadata = await dependencies.getStoredObjectMetadata('payment_proofs', objectPath)
+    assert.equal(metadata?.etag, fixture.expected)
+    assert.equal(metadata?.version, storageIdentity.version)
+  }
+
+  const invalidIdentities = [
+    { etag: '*', version: storageIdentity.version },
+    { etag: '"*"', version: storageIdentity.version },
+    { etag: 'W/"weak"', version: storageIdentity.version },
+    { etag: '"one", "two"', version: storageIdentity.version },
+    { etag: 'white space', version: storageIdentity.version },
+    { etag: '"line\nfeed"', version: storageIdentity.version },
+    { etag: '"one" "two"', version: storageIdentity.version },
+    { etag: storageIdentity.etag, version: 'not-a-uuid' },
+    { etag: storageIdentity.etag, version: '00000000-0000-0000-0000-000000000000' },
+  ]
+
+  for (const identity of invalidIdentities) {
+    const dependencies = createUploadVerificationDependencies({
+      environment: localEnvironment,
+      createAdminClient: () => makeAdminClient({
+        info: async () => ({ data: storedInfo(objectPath, identity), error: null }),
+      }),
+      fetch: async () => assert.fail('metadata lookup must use Storage info'),
+    })
+    const metadata = await dependencies.getStoredObjectMetadata('payment_proofs', objectPath)
+    assert.equal(metadata?.etag, undefined)
+    assert.equal(metadata?.version, undefined)
+  }
+
+  const metadataOnly = createUploadVerificationDependencies({
+    environment: localEnvironment,
+    createAdminClient: () => makeAdminClient({
+      info: async () => ({
+        data: {
+          bucketId: 'payment_proofs',
+          name: objectPath,
+          metadata: {
+            ...storageIdentity,
+            mimetype: 'image/png',
+            size: 8,
+          },
+        },
+        error: null,
+      }),
+    }),
+    fetch: async () => assert.fail('metadata lookup must use Storage info'),
+  })
+  const fallback = await metadataOnly.getStoredObjectMetadata('payment_proofs', objectPath)
+  assert.equal(fallback?.mimeType, 'image/png')
+  assert.equal(fallback?.size, 8)
+  assert.equal(fallback?.etag, undefined)
+  assert.equal(fallback?.version, undefined)
+})
+
 test('performs one authenticated, encoded and range-bounded streaming GET even when status is 200', async () => {
   const requests: Array<{ url: string; init: RequestInit | undefined }> = []
   const dependencies = createUploadVerificationDependencies({
@@ -174,16 +246,25 @@ test('performs one authenticated, encoded and range-bounded streaming GET even w
 })
 
 test('rejects redirects, precondition failures and unexpected 2xx without following locations', async () => {
-  const statuses = [201, 204, 302, 412] as const
+  const statuses = [201, 302, 412] as const
 
   for (const status of statuses) {
     const requests: RequestInit[] = []
+    let cancelCalls = 0
     const dependencies = createUploadVerificationDependencies({
       environment: localEnvironment,
       createAdminClient: () => makeAdminClient({}),
       fetch: async (_input, init) => {
         requests.push(init ?? {})
-        return new Response(status === 204 ? null : Uint8Array.from([1]), {
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(Uint8Array.from([1]))
+          },
+          cancel() {
+            cancelCalls += 1
+            if (status === 412) throw new Error('secret cancellation failure')
+          },
+        }), {
           status,
           headers: status === 302
             ? { Location: 'https://attacker.example/steal' }
@@ -203,6 +284,7 @@ test('rejects redirects, precondition failures and unexpected 2xx without follow
     )
     assert.equal(requests.length, 1)
     assert.equal(requests[0]?.redirect, 'error')
+    assert.equal(cancelCalls, 1)
   }
 })
 
@@ -216,10 +298,18 @@ test('requires a consistent Content-Range for 206 and preserves max-plus-one sen
   ]
 
   for (const contentRange of invalidRanges) {
+    let cancelCalls = 0
     const dependencies = createUploadVerificationDependencies({
       environment: localEnvironment,
       createAdminClient: () => makeAdminClient({}),
-      fetch: async () => new Response(Uint8Array.from([1, 2, 3, 4]), {
+      fetch: async () => new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(Uint8Array.from([1, 2, 3, 4]))
+        },
+        cancel() {
+          cancelCalls += 1
+        },
+      }), {
         status: 206,
         headers: contentRange === null ? undefined : { 'Content-Range': contentRange },
       }),
@@ -234,6 +324,7 @@ test('requires a consistent Content-Range for 206 and preserves max-plus-one sen
       ),
       { name: 'Error', message: 'No se pudo verificar el archivo.' },
     )
+    assert.equal(cancelCalls, 1)
   }
 
   for (const fixture of [
@@ -318,6 +409,33 @@ test('uses one max-plus-one buffer, ignores empty chunks, and cancels known over
   assert.equal(sentinel?.byteLength, 6)
   assert.equal(cancelled, true)
   assert.ok(pulls <= 1)
+
+  let invalidHeaderCancels = 0
+  const invalidHeader = createUploadVerificationDependencies({
+    environment: localEnvironment,
+    createAdminClient: () => makeAdminClient({}),
+    fetch: async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Uint8Array.from([1]))
+      },
+      cancel() {
+        invalidHeaderCancels += 1
+      },
+    }), {
+      status: 200,
+      headers: { 'Content-Length': 'not-a-number' },
+    }),
+  })
+  await assert.rejects(
+    invalidHeader.readObjectBytes(
+      'payment_proofs',
+      'folder/object.png',
+      storageIdentity,
+      5,
+    ),
+    { name: 'Error', message: 'No se pudo verificar el archivo.' },
+  )
+  assert.equal(invalidHeaderCancels, 1)
 })
 
 test('cancels a chunked response as soon as it exceeds the limit', async () => {
@@ -355,6 +473,7 @@ test('cancels a chunked response as soon as it exceeds the limit', async () => {
 test('returns null for a download 404 and removes only the exact requested object', async () => {
   const buckets: string[] = []
   const removals: string[][] = []
+  let missingBodyCancels = 0
   const dependencies = createUploadVerificationDependencies({
     environment: localEnvironment,
     createAdminClient: () => makeAdminClient({
@@ -365,7 +484,14 @@ test('returns null for a download 404 and removes only the exact requested objec
         return { data: [], error: null }
       },
     }),
-    fetch: async () => new Response(null, { status: 404 }),
+    fetch: async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Uint8Array.from([1]))
+      },
+      cancel() {
+        missingBodyCancels += 1
+      },
+    }), { status: 404 }),
   })
 
   assert.equal(
@@ -377,6 +503,7 @@ test('returns null for a download 404 and removes only the exact requested objec
     ),
     null,
   )
+  assert.equal(missingBodyCancels, 1)
   await dependencies.removeExactObject(
     'payment_proofs',
     'orders/exact.png',

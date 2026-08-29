@@ -89,6 +89,8 @@ const CREATE_ERROR_MESSAGE = 'No se pudo autorizar la carga.'
 const VERIFY_ERROR_MESSAGE = 'No se pudo verificar el archivo.'
 const UUID_SEGMENT = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
 const MAX_CANONICAL_PATH_LENGTH = 256
+const SAFE_ETAG_TOKEN_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/u
+const STORAGE_VERSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
 
 function createError(): Error {
   return new Error(CREATE_ERROR_MESSAGE)
@@ -305,21 +307,34 @@ async function rejectInvalidObject(
   throw verifyError()
 }
 
-function storedObjectIdentity(metadata: StoredObjectMetadata): StoredObjectIdentity | null {
+function normalizeStrongEtag(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 130) return null
+
+  const quotedMatch = /^"([^"\r\n]+)"$/u.exec(value)
+  const token = quotedMatch?.[1] ?? value
+  if (!SAFE_ETAG_TOKEN_PATTERN.test(token)) return null
+
+  return `"${token}"`
+}
+
+export function normalizeStoredObjectIdentity(
+  etag: unknown,
+  version: unknown,
+): StoredObjectIdentity | null {
+  const normalizedEtag = normalizeStrongEtag(etag)
   if (
-    typeof metadata.etag !== 'string' ||
-    metadata.etag.trim().length === 0 ||
-    metadata.etag.length > 512 ||
-    /[\u0000-\u001f\u007f]/u.test(metadata.etag) ||
-    typeof metadata.version !== 'string' ||
-    metadata.version.trim().length === 0 ||
-    metadata.version.length > 512 ||
-    /[\u0000-\u001f\u007f]/u.test(metadata.version)
+    normalizedEtag === null ||
+    typeof version !== 'string' ||
+    !STORAGE_VERSION_PATTERN.test(version)
   ) {
     return null
   }
 
-  return Object.freeze({ etag: metadata.etag, version: metadata.version })
+  return Object.freeze({ etag: normalizedEtag, version: version.toLowerCase() })
+}
+
+function storedObjectIdentity(metadata: StoredObjectMetadata): StoredObjectIdentity | null {
+  return normalizeStoredObjectIdentity(metadata.etag, metadata.version)
 }
 
 export async function verifyUploadedObjectCore(

@@ -4,6 +4,7 @@ import { assertSafeRuntimeSupabaseUrl } from '@/lib/environment/production-guard
 import { createAdminClient } from '@/lib/supabase/admin'
 
 import {
+  normalizeStoredObjectIdentity,
   verifyUploadedObjectCore,
   type StorageBucket,
   type StoredObjectIdentity,
@@ -47,17 +48,8 @@ function isMissingError(error: unknown): boolean {
   return error.status === 404 || error.statusCode === '404'
 }
 
-function isValidIdentity(identity: StoredObjectIdentity): boolean {
-  return (
-    typeof identity?.etag === 'string' &&
-    identity.etag.trim().length > 0 &&
-    identity.etag.length <= 512 &&
-    !/[\u0000-\u001f\u007f]/u.test(identity.etag) &&
-    typeof identity.version === 'string' &&
-    identity.version.trim().length > 0 &&
-    identity.version.length <= 512 &&
-    !/[\u0000-\u001f\u007f]/u.test(identity.version)
-  )
+function validIdentity(identity: StoredObjectIdentity): StoredObjectIdentity | null {
+  return normalizeStoredObjectIdentity(identity?.etag, identity?.version)
 }
 
 function safeObjectUrl(baseUrl: URL, bucket: StorageBucket, path: string): URL {
@@ -105,13 +97,14 @@ function metadataFromInfo(data: unknown): StoredObjectMetadata {
   }
 
   const metadata = isRecord(data.metadata) ? data.metadata : null
+  const identity = normalizeStoredObjectIdentity(data.etag, data.version)
   return {
     bucket: typeof data.bucketId === 'string' ? data.bucketId : '',
     path: typeof data.name === 'string' ? data.name : '',
     mimeType: data.contentType ?? metadata?.mimetype,
     size: data.size ?? metadata?.size,
-    etag: data.etag ?? metadata?.etag,
-    version: data.version ?? metadata?.version,
+    etag: identity?.etag,
+    version: identity?.version,
   }
 }
 
@@ -157,6 +150,14 @@ async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): Pr
   }
 }
 
+async function cancelResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel()
+  } catch {
+    // Status/header failures remain generic even if best-effort cancellation fails.
+  }
+}
+
 async function readBoundedResponse(
   response: Response,
   maxBytes: number,
@@ -165,15 +166,20 @@ async function readBoundedResponse(
 
   const reader = response.body.getReader()
   const bytes = new Uint8Array(maxBytes + 1)
-  const declaredLength = contentLength(response)
   let offset = 0
 
-  if (declaredLength !== null && declaredLength > maxBytes) {
-    await cancelReader(reader)
-    return bytes
-  }
-
   try {
+    const expectedLength = response.status === 206
+      ? expectedPartialLength(response, maxBytes)
+      : null
+    const declaredLength = contentLength(response)
+
+    if (declaredLength !== null && declaredLength > maxBytes) {
+      if (expectedLength !== null && expectedLength !== bytes.byteLength) throw verifyError()
+      await cancelReader(reader)
+      return bytes
+    }
+
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -185,17 +191,19 @@ async function readBoundedResponse(
       offset += writableBytes
 
       if (offset === bytes.byteLength) {
+        if (expectedLength !== null && expectedLength !== bytes.byteLength) throw verifyError()
         await cancelReader(reader)
         return bytes
       }
     }
+
+    if (declaredLength !== null && declaredLength !== offset) throw verifyError()
+    if (expectedLength !== null && expectedLength !== offset) throw verifyError()
+    return bytes.subarray(0, offset)
   } catch {
     await cancelReader(reader)
     throw verifyError()
   }
-
-  if (declaredLength !== null && declaredLength !== offset) throw verifyError()
-  return bytes.subarray(0, offset)
 }
 
 export function createUploadVerificationDependencies(
@@ -248,7 +256,8 @@ export function createUploadVerificationDependencies(
           ) {
             throw verifyError()
           }
-          if (!isValidIdentity(identity)) throw verifyError()
+          const normalizedIdentity = validIdentity(identity)
+          if (!normalizedIdentity) throw verifyError()
 
           const objectUrl = safeObjectUrl(safeBaseUrl, bucket, path)
           const response = await fetchRequest(objectUrl, {
@@ -256,24 +265,23 @@ export function createUploadVerificationDependencies(
             headers: {
               apikey: serviceRoleKey,
               Authorization: `Bearer ${serviceRoleKey}`,
-              'If-Match': identity.etag,
+              'If-Match': normalizedIdentity.etag,
               Range: `bytes=0-${maxBytes}`,
             },
             method: 'GET',
             redirect: 'error',
           })
 
-          if (response.status === 404) return null
-          if (response.status !== 200 && response.status !== 206) throw verifyError()
-
-          const expectedLength = response.status === 206
-            ? expectedPartialLength(response, maxBytes)
-            : null
-          const bytes = await readBoundedResponse(response, maxBytes)
-          if (expectedLength !== null && bytes.byteLength !== expectedLength) {
+          if (response.status === 404) {
+            await cancelResponseBody(response)
+            return null
+          }
+          if (response.status !== 200 && response.status !== 206) {
+            await cancelResponseBody(response)
             throw verifyError()
           }
-          return bytes
+
+          return await readBoundedResponse(response, maxBytes)
         } catch {
           throw verifyError()
         }
@@ -282,7 +290,8 @@ export function createUploadVerificationDependencies(
       async removeExactObject(bucket, path, identity) {
         try {
           safeObjectUrl(safeBaseUrl, bucket, path)
-          if (!isValidIdentity(identity)) throw verifyError()
+          const normalizedIdentity = validIdentity(identity)
+          if (!normalizedIdentity) throw verifyError()
 
           const bucketClient = admin.storage.from(bucket)
           const current = await bucketClient.info(path)
@@ -292,8 +301,8 @@ export function createUploadVerificationDependencies(
           if (
             currentMetadata.bucket !== bucket ||
             currentMetadata.path !== path ||
-            currentMetadata.etag !== identity.etag ||
-            currentMetadata.version !== identity.version
+            currentMetadata.etag !== normalizedIdentity.etag ||
+            currentMetadata.version !== normalizedIdentity.version
           ) {
             throw verifyError()
           }

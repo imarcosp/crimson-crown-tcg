@@ -319,7 +319,7 @@ const validatedPngIntent = validateUploadIntent({
 
 const storedIdentity: Readonly<{ etag: string; version: string }> = Object.freeze({
   etag: '"storage-etag-v1"',
-  version: 'storage-version-v1',
+  version: '55555555-5555-4555-8555-555555555555',
 })
 
 const validStoredMetadata: StoredObjectMetadata = Object.freeze({
@@ -547,7 +547,12 @@ test('removes only the exact expected object when stored MIME, size or path meta
 test('requires a non-empty etag and version before reading or removing an object', async () => {
   for (const metadata of [
     { ...validStoredMetadata, etag: '' },
-    { ...validStoredMetadata, version: '   ' },
+    { ...validStoredMetadata, etag: '*' },
+    { ...validStoredMetadata, etag: 'W/"weak-etag"' },
+    { ...validStoredMetadata, etag: '"one", "two"' },
+    { ...validStoredMetadata, etag: '"white space"' },
+    { ...validStoredMetadata, version: 'not-a-storage-version' },
+    { ...validStoredMetadata, version: '00000000-0000-0000-0000-000000000000' },
     { ...validStoredMetadata, etag: undefined },
     { ...validStoredMetadata, version: null },
   ]) {
@@ -570,6 +575,29 @@ test('requires a non-empty etag and version before reading or removing an object
     )
     assert.deepEqual(calls, [])
   }
+})
+
+test('canonicalizes a safe bare etag and uppercase storage version before reading', async () => {
+  const identities: Array<Readonly<{ etag: string; version: string }>> = []
+  await verifyUploadedObjectCore(
+    verifyInput(),
+    makeVerifyDependencies({
+      getStoredObjectMetadata: async () => ({
+        ...validStoredMetadata,
+        etag: 'BareHash1234567890',
+        version: storedIdentity.version.toUpperCase(),
+      }),
+      readObjectBytes: async (_bucket, _path, identity) => {
+        identities.push(identity)
+        return pngBytes
+      },
+    }),
+  )
+
+  assert.deepEqual(identities, [{
+    etag: '"BareHash1234567890"',
+    version: storedIdentity.version,
+  }])
 })
 
 test('removes only the exact object when bytes exceed limits, disagree with size, or fail signature', async () => {
