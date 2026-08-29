@@ -23,7 +23,7 @@ function sha256(value) {
 
 function verifiedManifest() {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     productionProjectRef: productionRef,
     entries: [
       {
@@ -32,7 +32,11 @@ function verifiedManifest() {
         remoteName: 'verified_remote',
         file: remoteFile,
         sha256: sha256(remoteSql),
-        equivalence: 'verified',
+        releaseProof: {
+          status: 'verified_present',
+          evidence: 'docs/evidence/fixture-proof.md#verified-remote',
+          remediationVersions: [],
+        },
       },
       {
         class: 'forward_pending',
@@ -308,7 +312,9 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
   const raceReady = join(fixtureParent, 'race-ready.txt')
   const manifest = verifiedManifest()
 
-  if (candidate) manifest.entries[0].equivalence = 'candidate'
+  if (candidate) {
+    manifest.entries[0].releaseProof = { status: 'candidate', evidence: null, remediationVersions: [] }
+  }
 
   await mkdir(releaseDir, { recursive: true })
   await mkdir(migrationsDir, { recursive: true })

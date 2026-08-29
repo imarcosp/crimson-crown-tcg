@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "productionProjectRef": "djfqozfaqkqdoqeoqbzt",
   "entries": [
     {
@@ -7,7 +7,11 @@
       "version": "20260826210617",
       "remoteName": "production_runtime_functions",
       "file": "20260826120000_production_runtime_functions.sql",
-      "equivalence": "candidate",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "1495f5ccbd382224fa5c28312ecc488f29ad8bd680020dda73e9f68a183388f3"
     },
     {
@@ -15,7 +19,11 @@
       "version": "20260826210725",
       "remoteName": "revoke_is_admin_anon",
       "file": "20260826121500_revoke_is_admin_anon.sql",
-      "equivalence": "candidate",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "9ccca376f02452f82481037f25646b1fc47812dd3e1966437f0fa8e0784dddcd"
     },
     {
@@ -23,7 +31,11 @@
       "version": "20260827051550",
       "remoteName": "create_multi_inventory_system",
       "file": "20260827020755_create_multi_inventory_system.sql",
-      "equivalence": "candidate",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "71f827c3d33fad843e1324fa4566be56d662c27d9da9e0f781eaacfa418a0080"
     },
     {
@@ -31,7 +43,11 @@
       "version": "20260827051604",
       "remoteName": "multi_inventory_runtime_functions",
       "file": "20260827020830_multi_inventory_runtime_functions.sql",
-      "equivalence": "candidate",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "0ec9d9c609d0cd30f9bf0d3089f983a2cf4d2dea5ef4a641594e5df38b801210"
     },
     {
@@ -39,103 +55,187 @@
       "version": "20260827051615",
       "remoteName": "add_external_prices_name_search_index",
       "file": "20260827024000_add_external_prices_name_search_index.sql",
-      "equivalence": "candidate",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "3deec1275e2079c80c5f0c5782c2b8580ee17433f28cb4ff21e998a70f1be39f"
     },
     {
       "class": "baseline_present",
       "version": "20231218",
       "file": "20231218_add_tcg_columns.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "e16166248daf1b0f72c31ae7a3b6b12530c064a73c919841a2468ed2617c2647"
     },
     {
       "class": "baseline_present",
       "version": "20240701000000",
       "file": "20240701000000_search_functions.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "799f98b45d9a870f36f93cf2fefdbc53580b83d707eeb46c85bf2779f97931a3"
     },
     {
       "class": "baseline_present",
       "version": "202606100001",
       "file": "202606100001_commission_start_guard.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "575625b8ecc97aa4341641be6b04ef2338533d73a0f87fabc1c9a306dd9a7d78"
     },
     {
       "class": "baseline_present",
       "version": "202606100002",
       "file": "202606100002_add_external_prices_catalog_support.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "145aa681403d1f2e39596ef5a357f32ac6dc8de4311556328d5568eaf22d278a"
     },
     {
       "class": "baseline_present",
       "version": "20260615000300",
       "file": "20260615000300_add_admin_manual_buylist_quotes.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "75f371bc5d7ed25eb44e5076fbbffed152ba0e3792df1bb91f434c428fce4762"
     },
     {
       "class": "baseline_present",
       "version": "20260823043500",
       "file": "20260823043500_production_compatibility_baseline.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "af5d734496bccfb005704750126a826f2a834455f08a804085447d393b5b4067"
     },
     {
       "class": "baseline_present",
       "version": "20260823043637",
       "file": "20260823043637_local_security_baseline.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "d5ad794f2e8fcc5d9e14abd3469f74a801787f8067e831add8e825c69affe9ad"
     },
     {
       "class": "baseline_present",
       "version": "20260823044210",
       "file": "20260823044210_fix_merge_duplicate_products_lint.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "e215b3e2ff99448b65a697f18b59b3e3117551b76fa188267bd6a286771d402d"
     },
     {
       "class": "baseline_present",
       "version": "20260823044710",
       "file": "20260823044710_restrict_decrement_stock_rpc.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "47162146d7150c728f8602cd64e5c62967b120850777363a6bbcce4ecc6cb67a"
     },
     {
       "class": "baseline_present",
       "version": "20260823044936",
       "file": "20260823044936_restrict_user_credit_adjustments.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "2866cf72d62cd535b14a2d8eafbdca38e829914a2ea5029bf5519a28d8607e6d"
     },
     {
       "class": "baseline_present",
       "version": "20260823050711",
       "file": "20260823050711_local_write_surface_hardening.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "48e67fb9df596622e3df6484b2b71b7396ab43b541ba29514254d03ec461f4a1"
     },
     {
       "class": "baseline_present",
       "version": "20260823051113",
       "file": "20260823051113_preserve_production_admin_allowlist.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "1877999be1f60e78f77d28fb13b17352d4ed1412fda74cd4270b5d4af48b698c"
     },
     {
       "class": "baseline_present",
       "version": "20260823140924",
       "file": "20260823140924_append_import_order_user_note.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "5d3f8dceb53b999e980a5353b3908e0425f050ab32b72fd4817200d8969c3b4b"
     },
     {
       "class": "baseline_present",
       "version": "20260823142117",
       "file": "20260823142117_normalize_import_admin_policies.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "6e60d1bebc0024d3769d32d38a2dc133fd928950282150b59f5a521e305844da"
     },
     {
       "class": "baseline_present",
       "version": "20260823173257",
       "file": "20260823173257_create_place_order_atomic.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "c26999e06f1e5dfa3caa755cf3af37ed3da4ae71f560cccf9aacee8209d942fb"
     },
     {
       "class": "baseline_present",
       "version": "20260823183638",
       "file": "20260823183638_create_release_expired_orders_atomic.sql",
+      "releaseProof": {
+        "status": "candidate",
+        "evidence": null,
+        "remediationVersions": []
+      },
       "sha256": "59540c20f7029fc492bafa12aa9c5fc44a26fdcfa8a9bc752f6902252351874f"
     },
     {

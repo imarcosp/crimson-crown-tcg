@@ -6,8 +6,13 @@ const productionProjectRef = 'djfqozfaqkqdoqeoqbzt'
 const manifestRelativePath = join('scripts', 'release', 'migration-manifest.json')
 const migrationsRelativePath = join('supabase', 'migrations')
 const classes = new Set(['remote_applied', 'baseline_present', 'forward_pending'])
+const historicalClasses = new Set(['remote_applied', 'baseline_present'])
+const proofStatuses = new Set(['candidate', 'verified_present', 'forward_reconciled'])
 const sha256Pattern = /^[a-f0-9]{64}$/
 const versionPattern = /^\d{8,}$/
+const evidenceSegmentPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+const evidenceAnchorPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
+const controlCharacterPattern = /[\u0000-\u001f\u007f-\u009f]/
 
 function fail(message) {
   throw new Error(message)
@@ -17,26 +22,104 @@ function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function validateExactKeys(entry, expectedKeys) {
-  const keys = Object.keys(entry).sort()
+function validateExactKeys(value, expectedKeys, message = 'campos de manifiesto inválidos') {
+  const keys = Object.keys(value).sort()
   const expected = [...expectedKeys].sort()
 
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
-    fail('campos de manifiesto inválidos')
+    fail(message)
   }
 }
 
-function validateEntry(entry, { allowCandidates, files, versions, classifiedFiles }) {
+function isSafeEvidenceAnchor(value) {
+  if (typeof value !== 'string' || value.length === 0) return false
+  if (value.includes('\\') || controlCharacterPattern.test(value)) return false
+
+  const firstHash = value.indexOf('#')
+  if (firstHash !== value.lastIndexOf('#')) return false
+
+  const evidencePath = firstHash === -1 ? value : value.slice(0, firstHash)
+  const anchor = firstHash === -1 ? null : value.slice(firstHash + 1)
+  if (!evidencePath.startsWith('docs/evidence/')) return false
+  if (evidencePath.includes('://') || evidencePath.startsWith('/')) return false
+
+  const segments = evidencePath.split('/')
+  if (
+    segments.length < 3
+    || segments.some((segment) => (
+      segment.length === 0
+      || segment === '.'
+      || segment === '..'
+      || !evidenceSegmentPattern.test(segment)
+    ))
+  ) {
+    return false
+  }
+
+  return anchor === null || evidenceAnchorPattern.test(anchor)
+}
+
+function validateReleaseProof(releaseProof) {
+  if (!isPlainObject(releaseProof)) {
+    fail('prueba de release inválida')
+  }
+  validateExactKeys(
+    releaseProof,
+    ['status', 'evidence', 'remediationVersions'],
+    'prueba de release inválida',
+  )
+
+  if (!proofStatuses.has(releaseProof.status)) {
+    fail('estado de prueba de release inválido')
+  }
+  if (!Array.isArray(releaseProof.remediationVersions)) {
+    fail('prueba de release inválida')
+  }
+
+  if (releaseProof.status === 'candidate') {
+    if (releaseProof.evidence !== null || releaseProof.remediationVersions.length !== 0) {
+      fail('prueba de release inválida')
+    }
+    return
+  }
+
+  if (!isSafeEvidenceAnchor(releaseProof.evidence)) {
+    fail('evidencia de release inválida')
+  }
+
+  if (releaseProof.status === 'verified_present') {
+    if (releaseProof.remediationVersions.length !== 0) {
+      fail('prueba de release inválida')
+    }
+    return
+  }
+
+  if (releaseProof.remediationVersions.length === 0) {
+    fail('remediaciones de release inválidas')
+  }
+  const remediationVersions = new Set()
+  for (const version of releaseProof.remediationVersions) {
+    if (typeof version !== 'string' || !versionPattern.test(version) || remediationVersions.has(version)) {
+      fail('remediaciones de release inválidas')
+    }
+    remediationVersions.add(version)
+  }
+}
+
+function validateEntry(entry, { files, versions, classifiedFiles }) {
   if (!isPlainObject(entry) || !classes.has(entry.class)) {
     fail('clase de migración inválida')
   }
 
   const isRemoteApplied = entry.class === 'remote_applied'
+  const isHistorical = historicalClasses.has(entry.class)
   validateExactKeys(
     entry,
     isRemoteApplied
-      ? ['class', 'version', 'remoteName', 'file', 'sha256', 'equivalence']
-      : ['class', 'version', 'file', 'sha256'],
+      ? ['class', 'version', 'remoteName', 'file', 'sha256', 'releaseProof']
+      : isHistorical
+        ? ['class', 'version', 'file', 'sha256', 'releaseProof']
+        : ['class', 'version', 'file', 'sha256'],
   )
 
   if (typeof entry.version !== 'string' || !versionPattern.test(entry.version)) {
@@ -70,17 +153,63 @@ function validateEntry(entry, { allowCandidates, files, versions, classifiedFile
     }
   }
 
-  if (isRemoteApplied) {
-    if (typeof entry.remoteName !== 'string' || entry.remoteName.length === 0) {
-      fail('nombre remoto inválido')
-    }
-    if (entry.equivalence !== 'candidate' && entry.equivalence !== 'verified') {
-      fail('equivalencia remota inválida')
-    }
-    if (entry.equivalence === 'candidate' && allowCandidates !== true) {
-      fail('equivalencia remota sin verificar')
+  if (isRemoteApplied && (typeof entry.remoteName !== 'string' || entry.remoteName.length === 0)) {
+    fail('nombre remoto inválido')
+  }
+  if (isHistorical) {
+    validateReleaseProof(entry.releaseProof)
+  }
+}
+
+function validateCrossEntryRelationships(entries) {
+  const historicalEntries = entries.filter((entry) => historicalClasses.has(entry.class))
+  const forwardEntries = entries.filter((entry) => entry.class === 'forward_pending')
+  const forwardByVersion = new Map(forwardEntries.map((entry) => [entry.version, entry]))
+  const excludedFrontier = historicalEntries.reduce((frontier, entry) => {
+    const version = BigInt(entry.version)
+    return frontier === null || version > frontier ? version : frontier
+  }, null)
+
+  for (const entry of historicalEntries) {
+    if (entry.releaseProof.status !== 'forward_reconciled') continue
+
+    const excludedVersion = BigInt(entry.version)
+    for (const remediationVersion of entry.releaseProof.remediationVersions) {
+      const remediation = forwardByVersion.get(remediationVersion)
+      const numericRemediationVersion = BigInt(remediationVersion)
+      if (
+        !remediation
+        || numericRemediationVersion <= excludedVersion
+        || (excludedFrontier !== null && numericRemediationVersion <= excludedFrontier)
+      ) {
+        fail('remediaciones de release inválidas')
+      }
     }
   }
+
+  let previousForwardVersion = null
+  for (const entry of forwardEntries) {
+    const version = BigInt(entry.version)
+    if (excludedFrontier !== null && version <= excludedFrontier) {
+      fail('versión forward no posterior al frontier')
+    }
+    if (previousForwardVersion !== null && version <= previousForwardVersion) {
+      fail('orden de migraciones forward inválido')
+    }
+    previousForwardVersion = version
+  }
+}
+
+function freezeManifestSnapshot(manifest) {
+  for (const entry of manifest.entries) {
+    if (historicalClasses.has(entry.class)) {
+      Object.freeze(entry.releaseProof.remediationVersions)
+      Object.freeze(entry.releaseProof)
+    }
+    Object.freeze(entry)
+  }
+  Object.freeze(manifest.entries)
+  return Object.freeze(manifest)
 }
 
 function sha256(bytes) {
@@ -110,7 +239,7 @@ export async function loadAndValidateManifest({ rootDir, allowCandidates }) {
   if (!isPlainObject(manifest) || Object.keys(manifest).sort().join(',') !== 'entries,productionProjectRef,schemaVersion') {
     fail('forma de manifiesto inválida')
   }
-  if (manifest.schemaVersion !== 1) {
+  if (manifest.schemaVersion !== 2) {
     fail('versión de esquema de manifiesto no admitida')
   }
   if (manifest.productionProjectRef !== productionProjectRef) {
@@ -120,18 +249,35 @@ export async function loadAndValidateManifest({ rootDir, allowCandidates }) {
     fail('entradas de manifiesto inválidas')
   }
 
-  const files = new Set((await readdir(migrationsPath)).filter((file) => file.endsWith('.sql')))
+  let migrationFiles
+  try {
+    migrationFiles = await readdir(migrationsPath)
+  } catch {
+    fail('no se pudo leer el directorio de migraciones')
+  }
+  const files = new Set(migrationFiles.filter((file) => file.endsWith('.sql')))
   const versions = new Set()
   const classifiedFiles = new Set()
 
   for (const entry of manifest.entries) {
-    validateEntry(entry, { allowCandidates, files, versions, classifiedFiles })
+    validateEntry(entry, { files, versions, classifiedFiles })
   }
 
   for (const file of files) {
     if (!classifiedFiles.has(file)) {
       fail('migración sin clasificar')
     }
+  }
+
+  validateCrossEntryRelationships(manifest.entries)
+
+  if (
+    allowCandidates !== true
+    && manifest.entries.some((entry) => (
+      historicalClasses.has(entry.class) && entry.releaseProof.status === 'candidate'
+    ))
+  ) {
+    fail('prueba de release candidata')
   }
 
   for (const entry of manifest.entries) {
@@ -147,5 +293,5 @@ export async function loadAndValidateManifest({ rootDir, allowCandidates }) {
     }
   }
 
-  return manifest
+  return freezeManifestSnapshot(manifest)
 }

@@ -2,7 +2,7 @@
 
 ## Decision
 
-**Blocked.** The five stored production migration statements match the paired local files after the permitted normalization, but current production catalog signatures do not prove three of the five remote pairs and do not prove fourteen of the sixteen `baseline_present` entries. The release manifest therefore remains fail-closed with every remote pair at `equivalence: "candidate"`.
+**Blocked.** The five stored production migration statements match the paired local files after the permitted normalization, but current production catalog signatures do not prove three of the five remote pairs and do not prove fourteen of the sixteen `baseline_present` entries. The schema-v2 release manifest therefore remains fail-closed with every `remote_applied` and `baseline_present` entry at `releaseProof.status: "candidate"`, with null evidence and no remediation versions.
 
 The real linked dry-run was not invoked. Running it would violate the Task 6 prerequisite that every pair and baseline exclusion be proven before the wrapper links a projection to production.
 
@@ -112,11 +112,11 @@ Summary: 2 baseline entries pass and 14 fail.
 
 Do not use `migration repair`, rename historical files, replay baseline SQL, or weaken the projection gate.
 
-1. Extend the manifest format so every `baseline_present` entry has an explicit verification state and evidence anchor. A failed or missing baseline proof must block projection creation independently of remote-pair status.
+1. Keep each schema-v2 historical `releaseProof` at `candidate` until its exclusion is independently justified. A `baseline_present` candidate blocks projection creation independently of every remote-pair proof; no current catalog result is promoted by the schema migration itself.
 2. Produce reviewed forward-only migrations for the runtime-function drift. Each migration must state the intended body hash, security mode, fixed `search_path`, and exact execute ACL; do not overwrite production functions until their consumers are tested.
 3. Add the missing inventory-movement policy in a focused forward migration and reconcile the idempotency-constraint signature without dropping a working constraint or touching inventory rows.
 4. Restore the search extension/functions, import/security policies, table/function revocations, and other missing hardening effects in domain-scoped forward migrations.
 5. Treat the commission guard separately: do not replay the historical backup/delete statements. Design a reviewed, non-destructive forward guard and an explicit data-retention procedure.
 6. Resolve column-signature drift explicitly rather than relying on `ADD COLUMN IF NOT EXISTS`; any type/default conversion requires its own compatibility and data-safety plan.
 
-After those forward migrations exist and are verified in an exclusive Crimson staging project, repeat the same read-only catalog proof. Only then may all five manifest entries become `verified`, a clean evidence commit be created, and the exact linked dry-run wrapper be invoked from that commit.
+After those forward migrations exist and are verified in an exclusive Crimson staging project, repeat the same read-only catalog proof. Only then may each of the twenty-one historical entries move independently from `candidate` to `verified_present` or `forward_reconciled` with a safe committed evidence anchor and, for reconciliation, the exact reviewed forward versions. A clean evidence commit must precede invoking the exact linked dry-run wrapper.

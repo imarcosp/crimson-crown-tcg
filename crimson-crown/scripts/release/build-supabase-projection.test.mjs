@@ -7,6 +7,11 @@ import test from 'node:test'
 import { buildProjection } from './build-supabase-projection.mjs'
 
 const sourceRoot = resolve(process.cwd())
+const verifiedProof = {
+  status: 'verified_present',
+  evidence: 'docs/evidence/fixture-proof.md#verified',
+  remediationVersions: [],
+}
 const fixtureEntries = [
   {
     class: 'remote_applied',
@@ -14,7 +19,7 @@ const fixtureEntries = [
     remoteName: 'production_runtime_functions',
     file: '20260826120000_production_runtime_functions.sql',
     sha256: '1495f5ccbd382224fa5c28312ecc488f29ad8bd680020dda73e9f68a183388f3',
-    equivalence: 'verified',
+    releaseProof: verifiedProof,
   },
   {
     class: 'remote_applied',
@@ -22,7 +27,7 @@ const fixtureEntries = [
     remoteName: 'revoke_is_admin_anon',
     file: '20260826121500_revoke_is_admin_anon.sql',
     sha256: '9ccca376f02452f82481037f25646b1fc47812dd3e1966437f0fa8e0784dddcd',
-    equivalence: 'verified',
+    releaseProof: verifiedProof,
   },
   {
     class: 'remote_applied',
@@ -30,7 +35,7 @@ const fixtureEntries = [
     remoteName: 'create_multi_inventory_system',
     file: '20260827020755_create_multi_inventory_system.sql',
     sha256: '71f827c3d33fad843e1324fa4566be56d662c27d9da9e0f781eaacfa418a0080',
-    equivalence: 'verified',
+    releaseProof: verifiedProof,
   },
   {
     class: 'remote_applied',
@@ -38,7 +43,7 @@ const fixtureEntries = [
     remoteName: 'multi_inventory_runtime_functions',
     file: '20260827020830_multi_inventory_runtime_functions.sql',
     sha256: '0ec9d9c609d0cd30f9bf0d3089f983a2cf4d2dea5ef4a641594e5df38b801210',
-    equivalence: 'verified',
+    releaseProof: verifiedProof,
   },
   {
     class: 'remote_applied',
@@ -46,13 +51,14 @@ const fixtureEntries = [
     remoteName: 'add_external_prices_name_search_index',
     file: '20260827024000_add_external_prices_name_search_index.sql',
     sha256: '3deec1275e2079c80c5f0c5782c2b8580ee17433f28cb4ff21e998a70f1be39f',
-    equivalence: 'verified',
+    releaseProof: verifiedProof,
   },
   {
     class: 'baseline_present',
     version: '20231218',
     file: '20231218_add_tcg_columns.sql',
     sha256: 'e16166248daf1b0f72c31ae7a3b6b12530c064a73c919841a2468ed2617c2647',
+    releaseProof: verifiedProof,
   },
   {
     class: 'forward_pending',
@@ -86,7 +92,7 @@ function parseToml(text) {
   return result
 }
 
-async function withFixture(callback, { config } = {}) {
+async function withFixture(callback, { config, entries = fixtureEntries } = {}) {
   const rootDir = await mkdtemp(join(tmpdir(), 'crimson-release-projection-root-'))
   const outputParent = await mkdtemp(join(tmpdir(), 'crimson-release-projection-output-'))
   const outputDir = join(outputParent, 'projection')
@@ -96,16 +102,16 @@ async function withFixture(callback, { config } = {}) {
   await mkdir(migrationsDir, { recursive: true })
   await mkdir(dirname(manifestPath), { recursive: true })
   await cp(join(sourceRoot, 'supabase', 'config.toml'), join(rootDir, 'supabase', 'config.toml'))
-  for (const entry of fixtureEntries) {
+  for (const entry of entries) {
     await cp(join(sourceRoot, 'supabase', 'migrations', entry.file), join(migrationsDir, entry.file))
   }
   if (config !== undefined) {
     await writeFile(join(rootDir, 'supabase', 'config.toml'), config)
   }
   await writeFile(manifestPath, `${JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     productionProjectRef: 'djfqozfaqkqdoqeoqbzt',
-    entries: fixtureEntries,
+    entries,
   }, null, 2)}\n`)
 
   try {
@@ -140,6 +146,22 @@ test('builds a migration-only projection from a verified manifest', async () => 
     assert.equal(
       await readFile(join(outputDir, 'supabase', 'migrations', '20260826210617_production_runtime_functions.sql'), 'utf8'),
       '-- release projection: remote_version=20260826210617 remote_name=production_runtime_functions local_source_sha256=1495f5ccbd382224fa5c28312ecc488f29ad8bd680020dda73e9f68a183388f3\n',
+    )
+    assert.equal(
+      await readFile(join(outputDir, 'supabase', 'migrations', '20260826210725_revoke_is_admin_anon.sql'), 'utf8'),
+      '-- release projection: remote_version=20260826210725 remote_name=revoke_is_admin_anon local_source_sha256=9ccca376f02452f82481037f25646b1fc47812dd3e1966437f0fa8e0784dddcd\n',
+    )
+    assert.equal(
+      await readFile(join(outputDir, 'supabase', 'migrations', '20260827051550_create_multi_inventory_system.sql'), 'utf8'),
+      '-- release projection: remote_version=20260827051550 remote_name=create_multi_inventory_system local_source_sha256=71f827c3d33fad843e1324fa4566be56d662c27d9da9e0f781eaacfa418a0080\n',
+    )
+    assert.equal(
+      await readFile(join(outputDir, 'supabase', 'migrations', '20260827051604_multi_inventory_runtime_functions.sql'), 'utf8'),
+      '-- release projection: remote_version=20260827051604 remote_name=multi_inventory_runtime_functions local_source_sha256=0ec9d9c609d0cd30f9bf0d3089f983a2cf4d2dea5ef4a641594e5df38b801210\n',
+    )
+    assert.equal(
+      await readFile(join(outputDir, 'supabase', 'migrations', '20260827051615_add_external_prices_name_search_index.sql'), 'utf8'),
+      '-- release projection: remote_version=20260827051615 remote_name=add_external_prices_name_search_index local_source_sha256=3deec1275e2079c80c5f0c5782c2b8580ee17433f28cb4ff21e998a70f1be39f\n',
     )
     assert.deepEqual(
       await readFile(join(outputDir, 'supabase', 'migrations', '20260829021742_admin_product_mutations.sql')),
@@ -275,9 +297,27 @@ test('keeps the real candidate manifest fail-closed by default', async () => {
   try {
     await assert.rejects(
       () => buildProjection({ rootDir: sourceRoot, outputDir }),
-      /equivalencia remota sin verificar/,
+      /prueba de release candidata/,
     )
   } finally {
     await rm(outputParent, { recursive: true, force: true })
   }
+})
+
+test('does not materialize a baseline candidate when all remote proofs are verified', async () => {
+  const candidateEntries = fixtureEntries.map((entry) => {
+    if (entry.class !== 'baseline_present') return entry
+    return {
+      ...entry,
+      releaseProof: { status: 'candidate', evidence: null, remediationVersions: [] },
+    }
+  })
+
+  await withFixture(async ({ rootDir, outputDir, outputParent }) => {
+    await assert.rejects(
+      () => buildProjection({ rootDir, outputDir }),
+      (error) => error.message === 'prueba de release candidata',
+    )
+    assert.deepEqual(await readdir(outputParent), [])
+  }, { entries: candidateEntries })
 })

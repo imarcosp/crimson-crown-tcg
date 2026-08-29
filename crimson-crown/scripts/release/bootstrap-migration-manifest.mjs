@@ -41,6 +41,10 @@ function migrationVersion(file) {
   return file.slice(0, file.indexOf('_'))
 }
 
+function candidateReleaseProof() {
+  return { status: 'candidate', evidence: null, remediationVersions: [] }
+}
+
 export function buildClassifiedEntries({ remoteApplied, baselinePresent, forwardPending }) {
   const entries = []
   const classifiedFiles = new Set()
@@ -59,10 +63,10 @@ export function buildClassifiedEntries({ remoteApplied, baselinePresent, forward
   }
 
   for (const [version, remoteName, file] of remoteApplied) {
-    addEntry({ class: 'remote_applied', version, remoteName, file, equivalence: 'candidate' })
+    addEntry({ class: 'remote_applied', version, remoteName, file, releaseProof: candidateReleaseProof() })
   }
   for (const file of baselinePresent) {
-    addEntry({ class: 'baseline_present', version: migrationVersion(file), file })
+    addEntry({ class: 'baseline_present', version: migrationVersion(file), file, releaseProof: candidateReleaseProof() })
   }
   for (const file of forwardPending) {
     addEntry({ class: 'forward_pending', version: migrationVersion(file), file })
@@ -117,7 +121,7 @@ async function bootstrap() {
   await mkdir(join(rootDir, 'scripts', 'release'), { recursive: true })
   await writeFile(
     manifestPath,
-    `${JSON.stringify({ schemaVersion: 1, productionProjectRef, entries: hashedEntries }, null, 2)}\n`,
+    `${JSON.stringify({ schemaVersion: 2, productionProjectRef, entries: hashedEntries }, null, 2)}\n`,
     { flag: 'wx' },
   )
 }

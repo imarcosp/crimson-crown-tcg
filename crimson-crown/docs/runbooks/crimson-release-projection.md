@@ -5,8 +5,8 @@ This runbook is a fail-closed review gate for the Crimson production Supabase pr
 ## Prerequisites
 
 - Use a clean, reviewed Git commit. Untracked or modified files block the wrapper.
-- Keep `scripts/release/migration-manifest.json` complete and hash-valid. Every `remote_applied` equivalence must be `verified`.
-- Complete and review Task 6 equivalence evidence before invoking the real linked wrapper. Until then, the checked-in candidate manifest intentionally blocks projection creation.
+- Keep `scripts/release/migration-manifest.json` complete and hash-valid. Every excluded `remote_applied` and `baseline_present` entry must have an independently reviewed schema-v2 `releaseProof`: either `verified_present` with a safe committed evidence anchor, or `forward_reconciled` with a safe anchor and reviewed newer `forward_pending` remediation versions.
+- Complete and review the independent proof for every historical exclusion before invoking the real linked wrapper. Until then, the checked-in manifest intentionally keeps all historical proofs at `candidate` and blocks projection creation.
 - Use the repository-local Supabase CLI. `npm run release:dry-run` resolves `node_modules/.bin/supabase.cmd`; `-SupabaseCli` exists only for an explicit executable file, including the offline test double.
 
 Run only after the prerequisites are satisfied:
@@ -30,7 +30,7 @@ There is no live-push mode or switch. A real apply requires a separate, explicit
 Stop and preserve the reviewed inputs when any of these occurs:
 
 - `LegacyDbPushMissingLocalError`;
-- any `candidate` equivalence;
+- any historical `releaseProof.status: "candidate"`;
 - a missing or foreign isolated linked ref;
 - a dirty Git worktree;
 - a changed or unreadable migration hash;

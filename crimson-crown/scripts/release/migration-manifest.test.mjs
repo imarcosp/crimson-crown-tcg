@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { cp, mkdir, mkdtemp, readdir, rm, unlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -13,22 +13,42 @@ const execFileAsync = promisify(execFile)
 const fixtureProjectRef = 'djfqozfaqkqdoqeoqbzt'
 const alphaFile = '20240101000000_alpha.sql'
 const betaFile = '20240102000000_beta.sql'
+const gammaFile = '20240103000000_gamma.sql'
 const alphaHash = 'b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060'
 const betaHash = 'f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad'
+const gammaHash = 'ae9a6306a205417afddd14316cc1d0d5e04a98f1be10865dce643925ee070ce2'
 const bootstrapScript = resolve('scripts/release/bootstrap-migration-manifest.mjs')
 
+function candidateProof() {
+  return { status: 'candidate', evidence: null, remediationVersions: [] }
+}
+
+function verifiedProof(evidence = 'docs/evidence/fixture-proof.md#verified') {
+  return { status: 'verified_present', evidence, remediationVersions: [] }
+}
+
+function reconciledProof(remediationVersions, evidence = 'docs/evidence/fixture-proof.md#reconciled') {
+  return { status: 'forward_reconciled', evidence, remediationVersions }
+}
+
 function completeFixtureManifest(entries = [
-  { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
+  {
+    class: 'baseline_present',
+    version: '20240101000000',
+    file: alphaFile,
+    sha256: alphaHash,
+    releaseProof: candidateProof(),
+  },
   { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
 ]) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     productionProjectRef: fixtureProjectRef,
     entries,
   }
 }
 
-async function withFixture(callback, manifest = completeFixtureManifest()) {
+async function withFixture(callback, manifest = completeFixtureManifest(), additionalFiles = []) {
   const rootDir = await mkdtemp(join(tmpdir(), 'crimson-migration-manifest-'))
   const migrationsDir = join(rootDir, 'supabase', 'migrations')
   const manifestPath = join(rootDir, 'scripts', 'release', 'migration-manifest.json')
@@ -36,6 +56,9 @@ async function withFixture(callback, manifest = completeFixtureManifest()) {
   await mkdir(migrationsDir, { recursive: true })
   await writeFile(join(migrationsDir, alphaFile), 'alpha\n')
   await writeFile(join(migrationsDir, betaFile), 'beta\n')
+  for (const [file, contents] of additionalFiles) {
+    await writeFile(join(migrationsDir, file), contents)
+  }
   await mkdir(dirname(manifestPath), { recursive: true })
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 
@@ -51,9 +74,20 @@ test('loads a complete fixture with literal classifications and hashes', async (
     const manifest = await loadAndValidateManifest({ rootDir, allowCandidates: true })
 
     assert.deepEqual(manifest.entries, [
-      { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
+      {
+        class: 'baseline_present',
+        version: '20240101000000',
+        file: alphaFile,
+        sha256: alphaHash,
+        releaseProof: candidateProof(),
+      },
       { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
     ])
+    assert.equal(Object.isFrozen(manifest), true)
+    assert.equal(Object.isFrozen(manifest.entries), true)
+    assert.equal(Object.isFrozen(manifest.entries[0]), true)
+    assert.equal(Object.isFrozen(manifest.entries[0].releaseProof), true)
+    assert.equal(Object.isFrozen(manifest.entries[0].releaseProof.remediationVersions), true)
   })
 })
 
@@ -67,10 +101,10 @@ test('every migration is classified exactly once and hashes match', async () => 
   assert.deepEqual(classified, actual)
 })
 
-test('projection is blocked while a remote pair is only a candidate', async () => {
+test('the real manifest is blocked while any historical proof is only a candidate', async () => {
   await assert.rejects(
     () => loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: false }),
-    /equivalencia remota sin verificar/,
+    /prueba de release candidata/,
   )
 })
 
@@ -82,7 +116,7 @@ test('projection rejects a candidate unless allowCandidates is the literal boole
       remoteName: 'fixture_remote',
       file: alphaFile,
       sha256: alphaHash,
-      equivalence: 'candidate',
+      releaseProof: candidateProof(),
     },
     { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
   ])
@@ -90,15 +124,275 @@ test('projection rejects a candidate unless allowCandidates is the literal boole
   await withFixture(
     (rootDir) => assert.rejects(
       () => loadAndValidateManifest({ rootDir, allowCandidates: 'true' }),
-      /equivalencia remota sin verificar/,
+      /prueba de release candidata/,
     ),
     manifest,
   )
 })
 
+test('a baseline candidate blocks even when every remote proof is verified', async () => {
+  const manifest = completeFixtureManifest([
+    {
+      class: 'remote_applied',
+      version: '20240101010101',
+      remoteName: 'fixture_remote',
+      file: alphaFile,
+      sha256: alphaHash,
+      releaseProof: verifiedProof(),
+    },
+    {
+      class: 'baseline_present',
+      version: '20240102000000',
+      file: betaFile,
+      sha256: betaHash,
+      releaseProof: candidateProof(),
+    },
+  ])
+
+  await withFixture(
+    (rootDir) => assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'prueba de release candidata',
+    ),
+    manifest,
+  )
+})
+
+test('rejects missing, extra, and malformed release proof fields', async () => {
+  const validBaseline = {
+    class: 'baseline_present',
+    version: '20240101000000',
+    file: alphaFile,
+    sha256: alphaHash,
+    releaseProof: candidateProof(),
+  }
+  const cases = [
+    {
+      entry: { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
+      expectedMessage: 'campos de manifiesto inválidos',
+    },
+    {
+      entry: { ...validBaseline, equivalence: 'candidate' },
+      expectedMessage: 'campos de manifiesto inválidos',
+    },
+    {
+      entry: { ...validBaseline, releaseProof: null },
+      expectedMessage: 'prueba de release inválida',
+    },
+    {
+      entry: { ...validBaseline, releaseProof: { status: 'candidate', evidence: null } },
+      expectedMessage: 'prueba de release inválida',
+    },
+    {
+      entry: { ...validBaseline, releaseProof: { ...candidateProof(), unexpected: true } },
+      expectedMessage: 'prueba de release inválida',
+    },
+    {
+      entry: { ...validBaseline, releaseProof: { status: 'unknown', evidence: null, remediationVersions: [] } },
+      expectedMessage: 'estado de prueba de release inválido',
+    },
+    {
+      entry: { ...validBaseline, releaseProof: { status: 'candidate', evidence: 'docs/evidence/proof.md', remediationVersions: [] } },
+      expectedMessage: 'prueba de release inválida',
+    },
+    {
+      entry: { ...validBaseline, releaseProof: { status: 'candidate', evidence: null, remediationVersions: ['20240102000000'] } },
+      expectedMessage: 'prueba de release inválida',
+    },
+  ]
+
+  for (const { entry, expectedMessage } of cases) {
+    await withFixture(
+      (rootDir) => assert.rejects(
+        () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
+        (error) => error.message === expectedMessage,
+      ),
+      completeFixtureManifest([
+        entry,
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+    )
+  }
+})
+
+test('verified-present proofs require safe evidence and no remediations', async () => {
+  const cases = [
+    { releaseProof: { status: 'verified_present', evidence: null, remediationVersions: [] }, expectedMessage: 'evidencia de release inválida' },
+    { releaseProof: { status: 'verified_present', evidence: '', remediationVersions: [] }, expectedMessage: 'evidencia de release inválida' },
+    { releaseProof: { status: 'verified_present', evidence: 'docs/evidence/proof.md', remediationVersions: ['20240102000000'] }, expectedMessage: 'prueba de release inválida' },
+  ]
+
+  for (const { releaseProof, expectedMessage } of cases) {
+    await withFixture(
+      (rootDir) => assert.rejects(
+        () => loadAndValidateManifest({ rootDir }),
+        (error) => error.message === expectedMessage,
+      ),
+      completeFixtureManifest([
+        { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash, releaseProof },
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+    )
+  }
+
+  await withFixture(async (rootDir) => {
+    const manifest = await loadAndValidateManifest({ rootDir })
+    assert.equal(manifest.entries[0].releaseProof.status, 'verified_present')
+  }, completeFixtureManifest([
+    {
+      class: 'baseline_present',
+      version: '20240101000000',
+      file: alphaFile,
+      sha256: alphaHash,
+      releaseProof: verifiedProof('docs/evidence/proof.md#baseline-20240101000000'),
+    },
+    { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+  ]))
+})
+
+test('rejects unsafe evidence anchors without echoing them', async () => {
+  const unsafeEvidence = [
+    'C:/docs/evidence/proof.md',
+    '/docs/evidence/proof.md',
+    'docs\\evidence\\proof.md',
+    'docs/evidence/../proof.md',
+    'docs/evidence/./proof.md',
+    'docs/evidence//proof.md',
+    'docs/evidence/',
+    'docs/evidence/proof.md#',
+    'docs/evidence/proof.md#bad/anchor',
+    'docs/evidence/proof.md#one#two',
+    'https://example.invalid/docs/evidence/proof.md',
+    'docs/evidence/proof.md#bad\nanchor',
+  ]
+
+  for (const evidence of unsafeEvidence) {
+    await withFixture(
+      (rootDir) => assert.rejects(
+        () => loadAndValidateManifest({ rootDir }),
+        (error) => error.message === 'evidencia de release inválida' && !error.message.includes(evidence),
+      ),
+      completeFixtureManifest([
+        {
+          class: 'baseline_present',
+          version: '20240101000000',
+          file: alphaFile,
+          sha256: alphaHash,
+          releaseProof: verifiedProof(evidence),
+        },
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+    )
+  }
+})
+
+test('forward-reconciled proofs reject unknown, duplicate, malformed, and old remediations', async () => {
+  const cases = [
+    {
+      releaseProof: reconciledProof(['20240103000000']),
+      excludedVersion: '20240101010101',
+      expectedMessage: 'remediaciones de release inválidas',
+    },
+    {
+      releaseProof: reconciledProof(['20240102000000', '20240102000000']),
+      excludedVersion: '20240101010101',
+      expectedMessage: 'remediaciones de release inválidas',
+    },
+    {
+      releaseProof: reconciledProof(['not-a-version']),
+      excludedVersion: '20240101010101',
+      expectedMessage: 'remediaciones de release inválidas',
+    },
+    {
+      releaseProof: reconciledProof(['20240102000000']),
+      excludedVersion: '20240103000000',
+      expectedMessage: 'remediaciones de release inválidas',
+    },
+  ]
+
+  for (const { releaseProof, excludedVersion, expectedMessage } of cases) {
+    await withFixture(
+      (rootDir) => assert.rejects(
+        () => loadAndValidateManifest({ rootDir }),
+        (error) => error.message === expectedMessage,
+      ),
+      completeFixtureManifest([
+        {
+          class: 'remote_applied',
+          version: excludedVersion,
+          remoteName: 'fixture_remote',
+          file: alphaFile,
+          sha256: alphaHash,
+          releaseProof,
+        },
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+    )
+  }
+})
+
+test('accepts a forward-reconciled proof tied to a newer forward migration in the same snapshot', async () => {
+  await withFixture(async (rootDir) => {
+    const manifest = await loadAndValidateManifest({ rootDir })
+    assert.deepEqual(manifest.entries[0].releaseProof, reconciledProof(['20240102000000']))
+  }, completeFixtureManifest([
+    {
+      class: 'baseline_present',
+      version: '20240101000000',
+      file: alphaFile,
+      sha256: alphaHash,
+      releaseProof: reconciledProof(['20240102000000']),
+    },
+    { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+  ]))
+})
+
+for (const excludedVersion of ['20240103000000', '020240102000000']) {
+  test(`rejects a forward version that is not newer than excluded frontier ${excludedVersion}`, async () => {
+    await withFixture(
+      (rootDir) => assert.rejects(
+        () => loadAndValidateManifest({ rootDir }),
+        (error) => error.message === 'versión forward no posterior al frontier',
+      ),
+      completeFixtureManifest([
+        {
+          class: 'remote_applied',
+          version: excludedVersion,
+          remoteName: 'fixture_remote',
+          file: alphaFile,
+          sha256: alphaHash,
+          releaseProof: verifiedProof(),
+        },
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+    )
+  })
+}
+
+test('rejects forward migrations that are not strictly increasing in manifest order', async () => {
+  await withFixture(
+    (rootDir) => assert.rejects(
+      () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
+      (error) => error.message === 'orden de migraciones forward inválido',
+    ),
+    completeFixtureManifest([
+      {
+        class: 'baseline_present',
+        version: '20240101000000',
+        file: alphaFile,
+        sha256: alphaHash,
+        releaseProof: candidateProof(),
+      },
+      { class: 'forward_pending', version: '20240103000000', file: gammaFile, sha256: gammaHash },
+      { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+    ]),
+    [[gammaFile, 'gamma\n']],
+  )
+})
+
 test('rejects a local classification whose version disagrees with its filename prefix', async () => {
   const manifest = completeFixtureManifest([
-    { class: 'baseline_present', version: '20240103000000', file: alphaFile, sha256: alphaHash },
+    { class: 'baseline_present', version: '20240103000000', file: alphaFile, sha256: alphaHash, releaseProof: candidateProof() },
     { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
   ])
 
@@ -113,7 +407,7 @@ test('rejects a local classification whose version disagrees with its filename p
 
 test('rejects a duplicate migration version', async () => {
   const manifest = completeFixtureManifest([
-    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
+    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash, releaseProof: candidateProof() },
     { class: 'forward_pending', version: '20240101000000', file: betaFile, sha256: betaHash },
   ])
 
@@ -128,7 +422,7 @@ test('rejects a duplicate migration version', async () => {
 
 test('rejects a manifest file that is not a migration', async () => {
   const manifest = completeFixtureManifest([
-    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
+    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash, releaseProof: candidateProof() },
     { class: 'forward_pending', version: '20240102000000', file: '20240103000000_unknown.sql', sha256: betaHash },
   ])
 
@@ -143,7 +437,7 @@ test('rejects a manifest file that is not a migration', async () => {
 
 test('rejects a changed migration hash', async () => {
   const manifest = completeFixtureManifest([
-    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
+    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash, releaseProof: candidateProof() },
     { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: '0000000000000000000000000000000000000000000000000000000000000000' },
   ])
 
@@ -165,21 +459,21 @@ test('validation errors never echo untrusted manifest values', async () => {
     },
     {
       manifest: completeFixtureManifest([
-        { class: 'baseline_present', version: marker, file: alphaFile, sha256: alphaHash },
+        { class: 'baseline_present', version: marker, file: alphaFile, sha256: alphaHash, releaseProof: candidateProof() },
         { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
       ]),
       expectedMessage: 'versión de migración inválida',
     },
     {
       manifest: completeFixtureManifest([
-        { class: 'baseline_present', version: '20240101000000', file: marker, sha256: alphaHash },
+        { class: 'baseline_present', version: '20240101000000', file: marker, sha256: alphaHash, releaseProof: candidateProof() },
         { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
       ]),
       expectedMessage: 'archivo de migración inválido',
     },
     {
       manifest: completeFixtureManifest([
-        { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: marker },
+        { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: marker, releaseProof: candidateProof() },
         { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
       ]),
       expectedMessage: 'hash SHA-256 inválido',
@@ -192,7 +486,7 @@ test('validation errors never echo untrusted manifest values', async () => {
           remoteName: { marker },
           file: alphaFile,
           sha256: alphaHash,
-          equivalence: 'candidate',
+          releaseProof: candidateProof(),
         },
         { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
       ]),
@@ -206,11 +500,11 @@ test('validation errors never echo untrusted manifest values', async () => {
           remoteName: 'fixture_remote',
           file: alphaFile,
           sha256: alphaHash,
-          equivalence: { marker },
+          releaseProof: { status: marker, evidence: null, remediationVersions: [] },
         },
         { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
       ]),
-      expectedMessage: 'equivalencia remota inválida',
+      expectedMessage: 'estado de prueba de release inválido',
     },
   ]
 
@@ -238,11 +532,33 @@ test('malformed manifest JSON errors never echo parser details', async () => {
   })
 })
 
+test('migration directory enumeration errors are generic and redact absolute paths', async () => {
+  await withFixture(async (rootDir) => {
+    await rm(join(rootDir, 'supabase', 'migrations'), { recursive: true })
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
+      (error) => (
+        error.message === 'no se pudo leer el directorio de migraciones'
+        && !error.message.includes(rootDir)
+        && !error.message.includes('supabase')
+      ),
+    )
+  })
+})
+
 test('migration content read errors never echo raw filesystem paths', async () => {
   const marker = '20240103000000_untrusted-filesystem-path.sql'
   const manifest = completeFixtureManifest([
-    { class: 'baseline_present', version: '20240103000000', file: marker, sha256: alphaHash },
-    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
+    {
+      class: 'remote_applied',
+      version: '20240101010101',
+      remoteName: 'untrusted_path_fixture',
+      file: marker,
+      sha256: alphaHash,
+      releaseProof: candidateProof(),
+    },
+    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash, releaseProof: candidateProof() },
     { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
   ])
 
@@ -258,7 +574,7 @@ test('migration content read errors never echo raw filesystem paths', async () =
 
 test('rejects a migration assigned to two classes', async () => {
   const manifest = completeFixtureManifest([
-    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
+    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash, releaseProof: candidateProof() },
     { class: 'forward_pending', version: '20240102000000', file: alphaFile, sha256: alphaHash },
     { class: 'forward_pending', version: '20240103000000', file: betaFile, sha256: betaHash },
   ])
@@ -295,6 +611,7 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
     await execFileAsync(process.execPath, [bootstrapScript], { cwd: rootDir })
     const manifest = await loadAndValidateManifest({ rootDir, allowCandidates: true })
 
+    assert.equal(manifest.schemaVersion, 2)
     assert.equal(manifest.entries.length, 22)
     assert.deepEqual(manifest.entries.slice(0, 2), [
       {
@@ -303,7 +620,7 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
         remoteName: 'production_runtime_functions',
         file: '20260826120000_production_runtime_functions.sql',
         sha256: '1495f5ccbd382224fa5c28312ecc488f29ad8bd680020dda73e9f68a183388f3',
-        equivalence: 'candidate',
+        releaseProof: candidateProof(),
       },
       {
         class: 'remote_applied',
@@ -311,9 +628,19 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
         remoteName: 'revoke_is_admin_anon',
         file: '20260826121500_revoke_is_admin_anon.sql',
         sha256: '9ccca376f02452f82481037f25646b1fc47812dd3e1966437f0fa8e0784dddcd',
-        equivalence: 'candidate',
+        releaseProof: candidateProof(),
       },
     ])
+    assert.equal(
+      manifest.entries
+        .filter((entry) => entry.class === 'remote_applied' || entry.class === 'baseline_present')
+        .every((entry) => (
+          entry.releaseProof.status === 'candidate'
+          && entry.releaseProof.evidence === null
+          && entry.releaseProof.remediationVersions.length === 0
+        )),
+      true,
+    )
 
     await assert.rejects(
       () => execFileAsync(process.execPath, [bootstrapScript], { cwd: rootDir }),
@@ -321,6 +648,31 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
     )
   } finally {
     await rm(rootDir, { recursive: true, force: true })
+  }
+})
+
+test('bootstrap output is byte-identical across two fresh destinations', async () => {
+  const roots = await Promise.all([
+    mkdtemp(join(tmpdir(), 'crimson-migration-bootstrap-deterministic-a-')),
+    mkdtemp(join(tmpdir(), 'crimson-migration-bootstrap-deterministic-b-')),
+  ])
+
+  try {
+    for (const rootDir of roots) {
+      await cp(resolve('supabase', 'migrations'), join(rootDir, 'supabase', 'migrations'), { recursive: true })
+      await execFileAsync(process.execPath, [bootstrapScript], { cwd: rootDir })
+    }
+
+    const outputs = await Promise.all(roots.map((rootDir) => (
+      readFile(join(rootDir, 'scripts', 'release', 'migration-manifest.json'))
+    )))
+    assert.deepEqual(outputs[0], outputs[1])
+
+    const manifest = JSON.parse(outputs[0].toString('utf8'))
+    assert.equal(manifest.schemaVersion, 2)
+    assert.deepEqual(manifest.entries[5].releaseProof, candidateProof())
+  } finally {
+    await Promise.all(roots.map((rootDir) => rm(rootDir, { recursive: true, force: true })))
   }
 })
 
