@@ -55,15 +55,15 @@ export default function Navbar() {
   const cartItems = useCartStore((s) => s.items)
   const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0)
 
-  const fetchUserData = useCallback(async (userId: string) => {
-    if (lastUserId.current === userId && userProfile) return
+  const fetchUserData = useCallback(async (userId: string, force = false) => {
+    if (!force && lastUserId.current === userId) return
     lastUserId.current = userId
     const { data } = await supabase.from('profiles').select('credits, first_name, last_name').eq('id', userId).single()
     if (data) {
       setUserProfile(data)
       if (data.credits != null) setCredits(Number(data.credits))
     }
-  }, [supabase, userProfile])
+  }, [supabase])
 
   useEffect(() => {
     let mounted = true
@@ -71,22 +71,33 @@ export default function Navbar() {
       const { data: { session } } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }))
       if (mounted && session?.user) {
         setUser(session.user)
-        fetchUserData(session.user.id)
+        void fetchUserData(session.user.id)
       }
     }
-    initSession()
-    const intervalId = setInterval(() => { if (user?.id) fetchUserData(user.id) }, 30000)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
+    void initSession()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       if (!mounted) return
       if (session?.user) {
         setUser(session.user)
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || !userProfile) fetchUserData(session.user.id)
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          const userId = session.user.id
+          window.setTimeout(() => {
+            if (mounted) void fetchUserData(userId)
+          }, 0)
+        }
       } else if (event === 'SIGNED_OUT') {
         setUser(null); setUserProfile(null); setCredits(0); lastUserId.current = null; router.replace('/')
       }
     })
-    return () => { mounted = false; subscription.unsubscribe(); clearInterval(intervalId) }
-  }, [supabase, fetchUserData, router, user?.id, userProfile]) 
+    return () => { mounted = false; subscription.unsubscribe() }
+  }, [supabase, fetchUserData, router])
+
+  useEffect(() => {
+    if (!user?.id) return
+    const userId = user.id
+    const intervalId = window.setInterval(() => { void fetchUserData(userId, true) }, 30000)
+    return () => { window.clearInterval(intervalId) }
+  }, [fetchUserData, user?.id])
 
   useEffect(() => {
     if (!user?.id) return
