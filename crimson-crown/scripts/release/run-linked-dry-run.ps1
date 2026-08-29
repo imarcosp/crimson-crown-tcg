@@ -15,6 +15,7 @@ $RequiredSupabaseCliVersion = '2.113.0'
 $RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $TempRoot = $null
 $TempRootUseLock = $null
+$TempRootOwned = $false
 $DirectorySeparators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 $TempBaseFull = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $TempBase = $TempBaseFull.TrimEnd($DirectorySeparators)
@@ -675,6 +676,7 @@ try {
       $TempRootUseLock = $null
       throw 'El directorio temporal no es un directorio físico seguro.'
     }
+    $TempRootOwned = $true
   } finally {
     $CreationBaseLock.Dispose()
   }
@@ -796,7 +798,10 @@ process.stdout.write(JSON.stringify(summary));
   Write-Output 'Migration list outcome: exact'
   Write-Output "Dry-run outcome: $(if ($ForwardPendingCount -eq 0) { 'up to date' } else { 'exact batch' })"
 } finally {
-  if ($null -ne $TempRoot) {
+  if ($TempRootOwned) {
+    if ($null -eq $TempRoot -or $null -eq $TempRootUseLock) {
+      throw 'No se pudo comprobar la propiedad del directorio temporal.'
+    }
     $CleanupBaseLock = Open-SafeTempBaseLock
     try {
       $CleanupTarget = [IO.Path]::GetFullPath($TempRoot)
@@ -817,6 +822,7 @@ process.stdout.write(JSON.stringify(summary));
         }
       }
       Remove-ExactTree -LiteralPath $CleanupTarget
+      $TempRootOwned = $false
     } finally {
       if ($null -ne $TempRootUseLock) {
         $TempRootUseLock.Dispose()
@@ -824,5 +830,8 @@ process.stdout.write(JSON.stringify(summary));
       }
       $CleanupBaseLock.Dispose()
     }
+  } elseif ($null -ne $TempRootUseLock) {
+    $TempRootUseLock.Dispose()
+    $TempRootUseLock = $null
   }
 }

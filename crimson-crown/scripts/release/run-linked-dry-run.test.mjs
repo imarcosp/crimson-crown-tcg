@@ -390,9 +390,11 @@ async function git(rootDir, args) {
 async function makeFixture({
   candidate = false,
   dirty = false,
+  fixedTempRootCollision = false,
   forceIdentityFailureBeforeLink = false,
   mutateManifestAfterBuild = false,
   pauseAtCreationIdentityBoundary = false,
+  postCreateHelperFailure = false,
   projectionSummaryOverride,
   zeroForward = false,
 } = {}) {
@@ -420,6 +422,8 @@ async function makeFixture({
   const useLockDone = join(fixtureParent, 'use-lock-done.txt')
   const creationLockReady = join(fixtureParent, 'creation-lock-ready.txt')
   const creationLockDone = join(fixtureParent, 'creation-lock-done.txt')
+  const fixedTempRoot = join(tempBase, `crimson-release-${'a'.repeat(32)}`)
+  const fixedTempRootSentinel = join(fixedTempRoot, 'must-survive.txt')
   const manifest = verifiedManifest({ zeroForward })
 
   if (candidate) {
@@ -431,6 +435,10 @@ async function makeFixture({
   await mkdir(explicitCliDir, { recursive: true })
   await mkdir(defaultCliDir, { recursive: true })
   await mkdir(tempBase)
+  if (fixedTempRootCollision) {
+    await mkdir(fixedTempRoot)
+    await writeFile(fixedTempRootSentinel, 'caller preserve\n')
+  }
   await mkdir(junctionTarget)
   await mkdir(tempBaseTarget)
   const fixtureWrapper = join(releaseDir, 'run-linked-dry-run.ps1')
@@ -465,6 +473,26 @@ async function makeFixture({
       hookedSource = wrapperSource.replace(atomicBoundary, `${atomicBoundary}\n    ${pauseSource}`)
     }
     await writeFile(fixtureWrapper, hookedSource)
+  }
+  if (fixedTempRootCollision) {
+    const wrapperSource = await readFile(fixtureWrapper, 'utf8')
+    const randomAssignment = '$TempRoot = Join-Path $TempBase ("crimson-release-{0}" -f [Guid]::NewGuid().ToString(\'N\'))'
+    assert.equal(wrapperSource.includes(randomAssignment), true)
+    await writeFile(
+      fixtureWrapper,
+      wrapperSource.replace(randomAssignment, '$TempRoot = $env:FAKE_FIXED_TEMP_ROOT'),
+    )
+  }
+  if (postCreateHelperFailure) {
+    const wrapperSource = await readFile(fixtureWrapper, 'utf8')
+    const metadataMarker = '            ByHandleFileInformation information;\n            if (!GetFileInformationByHandle(handle, out information))'
+    const markerIndex = wrapperSource.lastIndexOf(metadataMarker)
+    assert.ok(markerIndex >= 0)
+    const injectedMarker = '            if (Environment.GetEnvironmentVariable("FAKE_POST_CREATE_FAILURE") == "1")\n            {\n                handle.Dispose();\n                throw new IOException("Fixture post-create metadata failure.");\n            }\n' + metadataMarker
+    await writeFile(
+      fixtureWrapper,
+      `${wrapperSource.slice(0, markerIndex)}${injectedMarker}${wrapperSource.slice(markerIndex + metadataMarker.length)}`,
+    )
   }
   if (mutateManifestAfterBuild || projectionSummaryOverride !== undefined) {
     await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection-real.mjs'))
@@ -516,6 +544,9 @@ async function makeFixture({
     useLockDone,
     creationLockReady,
     creationLockDone,
+    fixedTempRoot,
+    fixedTempRootSentinel,
+    postCreateHelperFailure,
     cleanupAttacker,
     zeroForward,
   }
@@ -554,6 +585,8 @@ function runWrapper(fixture, mode = 'success', {
         FAKE_USE_LOCK_DONE: fixture.useLockDone,
         FAKE_CREATION_LOCK_READY: fixture.creationLockReady,
         FAKE_CREATION_LOCK_DONE: fixture.creationLockDone,
+        FAKE_FIXED_TEMP_ROOT: fixture.fixedTempRoot,
+        FAKE_POST_CREATE_FAILURE: fixture.postCreateHelperFailure ? '1' : '0',
       },
       windowsHide: true,
     },
@@ -1176,6 +1209,36 @@ test('creates the temporary root with its non-delete-sharing handle already held
   })
 })
 
+test('never deletes a pre-existing fixed-name collision or its caller sentinel', async () => {
+  await withFixture({ fixedTempRootCollision: true }, async (fixture) => {
+    const result = await runWrapper(fixture)
+
+    assert.notEqual(result.code, 0)
+    assert.equal(result.stdout, '')
+    assert.deepEqual(await readCalls(fixture.logPath), [['--version']])
+    assert.equal(await readFile(fixture.fixedTempRootSentinel, 'utf8'), 'caller preserve\n')
+    assert.deepEqual(await readdir(fixture.fixedTempRoot), ['must-survive.txt'])
+    assert.deepEqual((await readdir(fixture.tempBase)).sort(), [
+      'keep-me.txt',
+      `crimson-release-${'a'.repeat(32)}`,
+    ].sort())
+  })
+})
+
+test('leaves an uncertain post-create helper artifact instead of deleting by path', async () => {
+  await withFixture({ postCreateHelperFailure: true }, async (fixture) => {
+    const result = await runWrapper(fixture)
+    const tempEntries = (await readdir(fixture.tempBase)).filter((entry) => /^crimson-release-[0-9a-f]{32}$/i.test(entry))
+
+    assert.notEqual(result.code, 0)
+    assert.equal(result.stdout, '')
+    assert.deepEqual(await readCalls(fixture.logPath), [['--version']])
+    assert.equal(tempEntries.length, 1)
+    assert.deepEqual(await readdir(join(fixture.tempBase, tempEntries[0])), [])
+    assert.equal(await readFile(fixture.sentinel, 'utf8'), 'preserve\n')
+  })
+})
+
 test('runs no linked command after the pre-link identity gate fails', async () => {
   await withFixture({ forceIdentityFailureBeforeLink: true }, async (fixture) => {
     const result = await runWrapper(fixture)
@@ -1224,6 +1287,9 @@ test('opens the use lock under the creation-base lock and revalidates identity b
   assert.doesNotMatch(source.slice(creationStart, creationEnd), /New-Item\s+-ItemType\s+Directory\s+-Path\s+\$TempRoot/i)
   assert.match(source, /NtCreateFile/)
   assert.match(source, /FileCreate/)
+  assert.match(source, /\$TempRootOwned\s*=\s*\$false/)
+  assert.match(source, /\$TempRootOwned\s*=\s*\$true/)
+  assert.match(source, /if \(\$TempRootOwned\)/)
   assert.match(source, /if \(\$TempRootUseLock\.IsReparsePoint\)/)
   for (const phase of ['projection-build', 'link', 'linked-ref-read', 'migration-list', 'dry-run', 'cleanup']) {
     assert.match(source, new RegExp(`Assert-TempRootUseIdentity -Phase '${phase}'`))
