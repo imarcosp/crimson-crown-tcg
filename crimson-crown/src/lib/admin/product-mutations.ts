@@ -19,6 +19,52 @@ export type ProductInputResult =
   | { success: true; data: AdminProductInput }
   | { success: false; error: string }
 
+export type AdminProductMutationResult =
+  | {
+      success: true
+      data: {
+        product: Record<string, unknown>
+        mutationKind: 'inserted' | 'restocked' | 'updated'
+        previousStock: number
+        currentStock: number
+      }
+    }
+  | { success: false; error: string }
+
+export type SaveAdminProductInput = {
+  inventoryId: string
+  productId?: string | null
+  operationKey: string
+  product: unknown
+}
+
+export type ImportAdminProductsInput = {
+  inventoryId: string
+  rows: Array<{ operationKey: string; product: unknown }>
+}
+
+export type ImportAdminProductsResult =
+  | {
+      success: true
+      data: {
+        inserted: number
+        updated: number
+        errors: Array<{ index: number; error: string }>
+        stockArrivals: Array<{ id: string; name: string }>
+      }
+    }
+  | { success: false; error: string }
+
+export type DeleteAdminProductsInput = {
+  inventoryId: string
+  productIds: string[]
+  operationKey: string
+}
+
+export type DeleteAdminProductsResult =
+  | { success: true; data: { deletedIds: string[]; rejectedIds: string[] } }
+  | { success: false; error: string }
+
 const normalizeText = (value: unknown) => String(value ?? '').trim().replace(/\s+/g, ' ')
 
 function normalizeOptionalText(value: unknown) {
