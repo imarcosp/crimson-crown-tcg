@@ -1,0 +1,199 @@
+export type UploadKind =
+  | 'customer-product-request'
+  | 'admin-product-image'
+  | 'banner'
+  | 'order-proof'
+  | 'import-proof'
+  | 'commission-proof'
+
+export type UploadIntent = {
+  kind: UploadKind
+  name: string
+  size: number
+  mimeType: string
+}
+
+export type AllowedUploadExtension = 'jpg' | 'jpeg' | 'png' | 'webp' | 'pdf'
+
+export type ValidatedUploadIntent = {
+  kind: UploadKind
+  extension: AllowedUploadExtension
+  size: number
+  mimeType: string
+}
+
+type ProofUploadKind = 'order-proof' | 'import-proof' | 'commission-proof'
+
+export type StoragePathInput =
+  | {
+      kind: 'customer-product-request'
+      userId: string
+      objectId: string
+      extension: Exclude<AllowedUploadExtension, 'pdf'>
+    }
+  | {
+      kind: 'admin-product-image'
+      inventoryId: string
+      objectId: string
+      extension: Exclude<AllowedUploadExtension, 'pdf'>
+    }
+  | {
+      kind: 'banner'
+      objectId: string
+      extension: Exclude<AllowedUploadExtension, 'pdf'>
+    }
+  | {
+      kind: ProofUploadKind
+      userId: string
+      recordId: string
+      objectId: string
+      extension: AllowedUploadExtension
+    }
+
+const MAX_UPLOAD_SIZE = 5 * 1024 * 1024
+
+const IMAGE_UPLOAD_KINDS = new Set<UploadKind>([
+  'customer-product-request',
+  'admin-product-image',
+  'banner',
+])
+
+const PROOF_UPLOAD_KINDS = new Set<UploadKind>([
+  'order-proof',
+  'import-proof',
+  'commission-proof',
+])
+
+const ALL_UPLOAD_KINDS = new Set<UploadKind>([
+  ...IMAGE_UPLOAD_KINDS,
+  ...PROOF_UPLOAD_KINDS,
+])
+
+const MIME_EXTENSIONS: Readonly<Record<string, readonly AllowedUploadExtension[]>> = {
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/png': ['png'],
+  'image/webp': ['webp'],
+  'application/pdf': ['pdf'],
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+
+function isUploadKind(value: unknown): value is UploadKind {
+  return typeof value === 'string' && ALL_UPLOAD_KINDS.has(value as UploadKind)
+}
+
+function isProofUploadKind(kind: UploadKind): kind is ProofUploadKind {
+  return PROOF_UPLOAD_KINDS.has(kind)
+}
+
+function normalizeExtension(value: unknown): AllowedUploadExtension {
+  if (typeof value !== 'string') {
+    throw new Error('Extensión de archivo inválida.')
+  }
+
+  const extension = value.toLowerCase()
+  if (!['jpg', 'jpeg', 'png', 'webp', 'pdf'].includes(extension)) {
+    throw new Error('Extensión de archivo inválida.')
+  }
+
+  return extension as AllowedUploadExtension
+}
+
+function assertExtensionAllowedForKind(kind: UploadKind, extension: AllowedUploadExtension): void {
+  if (extension === 'pdf' && !isProofUploadKind(kind)) {
+    throw new Error('Tipo de archivo no permitido para esta carga.')
+  }
+}
+
+function normalizeUuid(value: unknown): string {
+  if (typeof value !== 'string' || !UUID_PATTERN.test(value)) {
+    throw new Error('Identificador de almacenamiento inválido.')
+  }
+
+  return value.toLowerCase()
+}
+
+function extensionFromSafeName(name: unknown): AllowedUploadExtension {
+  if (
+    typeof name !== 'string' ||
+    name.length === 0 ||
+    name.length > 255 ||
+    name !== name.trim() ||
+    /[\u0000-\u001f\u007f\\/]/u.test(name)
+  ) {
+    throw new Error('Nombre de archivo inválido.')
+  }
+
+  const firstDot = name.indexOf('.')
+  if (firstDot <= 0 || firstDot !== name.lastIndexOf('.') || firstDot === name.length - 1) {
+    throw new Error('Nombre de archivo inválido.')
+  }
+
+  return normalizeExtension(name.slice(firstDot + 1))
+}
+
+export function validateUploadIntent(intent: UploadIntent): ValidatedUploadIntent {
+  if (!intent || !isUploadKind(intent.kind)) {
+    throw new Error('Tipo de carga inválido.')
+  }
+
+  if (!Number.isSafeInteger(intent.size) || intent.size <= 0 || intent.size > MAX_UPLOAD_SIZE) {
+    throw new Error('Tamaño de archivo inválido.')
+  }
+
+  const allowedExtensions = MIME_EXTENSIONS[intent.mimeType]
+  if (!allowedExtensions) {
+    throw new Error('Tipo de archivo no permitido.')
+  }
+
+  const extension = extensionFromSafeName(intent.name)
+  if (!allowedExtensions.includes(extension)) {
+    throw new Error('El tipo declarado no coincide con la extensión.')
+  }
+  assertExtensionAllowedForKind(intent.kind, extension)
+
+  return {
+    kind: intent.kind,
+    extension,
+    size: intent.size,
+    mimeType: intent.mimeType,
+  }
+}
+
+export function buildStoragePath(input: StoragePathInput): string {
+  if (!input || !isUploadKind(input.kind)) {
+    throw new Error('Tipo de carga inválido.')
+  }
+
+  const extension = normalizeExtension(input.extension)
+  assertExtensionAllowedForKind(input.kind, extension)
+  const objectId = normalizeUuid(input.objectId)
+
+  switch (input.kind) {
+    case 'customer-product-request': {
+      const userId = normalizeUuid(input.userId)
+      return `requests/${userId}/${objectId}.${extension}`
+    }
+    case 'admin-product-image': {
+      const inventoryId = normalizeUuid(input.inventoryId)
+      return `catalog/${inventoryId}/${objectId}.${extension}`
+    }
+    case 'banner':
+      return `site/${objectId}.${extension}`
+    case 'order-proof': {
+      const userId = normalizeUuid(input.userId)
+      const recordId = normalizeUuid(input.recordId)
+      return `orders/${userId}/${recordId}/${objectId}.${extension}`
+    }
+    case 'import-proof': {
+      const userId = normalizeUuid(input.userId)
+      const recordId = normalizeUuid(input.recordId)
+      return `imports/${userId}/${recordId}/${objectId}.${extension}`
+    }
+    case 'commission-proof': {
+      const userId = normalizeUuid(input.userId)
+      const recordId = normalizeUuid(input.recordId)
+      return `commissions/${recordId}/${userId}/${objectId}.${extension}`
+    }
+  }
+}
