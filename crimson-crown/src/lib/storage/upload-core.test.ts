@@ -351,7 +351,7 @@ function verifyInput() {
   }
 }
 
-test('verifies exact metadata and leading bytes while imposing the 5 MiB read ceiling', async () => {
+test('passes the validated eight-byte intent as the adapter read limit', async () => {
   const calls: string[] = []
 
   await verifyUploadedObjectCore(
@@ -368,7 +368,7 @@ test('verifies exact metadata and leading bytes while imposing the 5 MiB read ce
         assert.equal(bucket, 'payment_proofs')
         assert.equal(path, orderPath)
         assert.deepEqual(identity, storedIdentity)
-        assert.equal(maxBytes, 5 * MiB)
+        assert.equal(maxBytes, pngBytes.byteLength)
         return pngBytes
       },
       removeExactObject: async () => {
@@ -601,8 +601,10 @@ test('canonicalizes a safe bare etag and uppercase storage version before readin
 })
 
 test('removes only the exact object when bytes exceed limits, disagree with size, or fail signature', async () => {
+  const oneByteOversize = new Uint8Array(pngBytes.byteLength + 1)
+  oneByteOversize.set(pngBytes)
   const byteFixtures = [
-    new Uint8Array(5 * MiB + 1),
+    oneByteOversize,
     pngBytes.subarray(0, pngBytes.byteLength - 1),
     new TextEncoder().encode('<script>'),
   ]
@@ -615,7 +617,7 @@ test('removes only the exact object when bytes exceed limits, disagree with size
         makeVerifyDependencies({
           readObjectBytes: async (_bucket, _path, identity, maxBytes) => {
             assert.deepEqual(identity, storedIdentity)
-            assert.equal(maxBytes, 5 * MiB)
+            assert.equal(maxBytes, pngBytes.byteLength)
             return bytes
           },
           removeExactObject: async (bucket, path, identity) => {
@@ -627,6 +629,32 @@ test('removes only the exact object when bytes exceed limits, disagree with size
     )
     assert.deepEqual(removals, [['payment_proofs', orderPath, storedIdentity]])
   }
+})
+
+test('accepts an exact 5 MiB intent without an off-by-one rejection', async () => {
+  const exactLimitBytes = new Uint8Array(5 * MiB)
+  exactLimitBytes.set(pngBytes)
+  const exactLimitIntent = validateUploadIntent({
+    kind: 'order-proof',
+    name: 'proof.png',
+    size: exactLimitBytes.byteLength,
+    mimeType: 'image/png',
+  })
+
+  await verifyUploadedObjectCore(
+    { ...verifyInput(), intent: exactLimitIntent },
+    makeVerifyDependencies({
+      getStoredObjectMetadata: async () => ({
+        ...validStoredMetadata,
+        size: exactLimitBytes.byteLength,
+      }),
+      readObjectBytes: async (_bucket, _path, _identity, maxBytes) => {
+        assert.equal(maxBytes, 5 * MiB)
+        return exactLimitBytes
+      },
+      removeExactObject: async () => assert.fail('an exact-limit object must not be removed'),
+    }),
+  )
 })
 
 test('does not remove an object when the identity-conditional read fails', async () => {

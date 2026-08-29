@@ -378,7 +378,7 @@ export async function verifyUploadedObjectCore(
       input.expectedBucket,
       input.expectedPath,
       identity,
-      MAX_UPLOAD_SIZE,
+      input.intent.size,
     )
   } catch {
     throw verifyError()

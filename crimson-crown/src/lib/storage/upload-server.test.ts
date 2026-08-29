@@ -470,6 +470,36 @@ test('cancels a chunked response as soon as it exceeds the limit', async () => {
   assert.ok(pulls <= 3)
 })
 
+test('accepts exactly 5 MiB while retaining the expected-size-plus-one sentinel buffer', async () => {
+  const exactLimit = 5 * MiB
+  const requests: RequestInit[] = []
+  const dependencies = createUploadVerificationDependencies({
+    environment: localEnvironment,
+    createAdminClient: () => makeAdminClient({}),
+    fetch: async (_input, init) => {
+      requests.push(init ?? {})
+      return new Response(new Uint8Array(exactLimit), {
+        status: 206,
+        headers: { 'Content-Range': `bytes 0-${exactLimit - 1}/${exactLimit}` },
+      })
+    },
+  })
+
+  const bytes = await dependencies.readObjectBytes(
+    'payment_proofs',
+    'folder/object.png',
+    storageIdentity,
+    exactLimit,
+  )
+
+  assert.equal(
+    requests[0]?.headers && new Headers(requests[0].headers).get('Range'),
+    `bytes=0-${exactLimit}`,
+  )
+  assert.equal(bytes?.byteLength, exactLimit)
+  assert.equal(bytes?.buffer.byteLength, exactLimit + 1)
+})
+
 test('returns null for a download 404 and removes only the exact requested object', async () => {
   const buckets: string[] = []
   const removals: string[][] = []
