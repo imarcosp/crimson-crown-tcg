@@ -23,15 +23,22 @@ Las funciones trigger no se consideran “sin consumidor” por no aparecer en T
 
 Cada evidencia `repository` del JSON se valida contra un archivo real confinado al repositorio, una línea y un texto ancla. Las evidencias `catalog` usan un identificador no-file explícito y nunca declaran una línea ficticia.
 
-## Diferencias local/producción que bloquean una equivalencia asumida
+## Snapshot histórico previo al hardening
 
-- Producción conserva `search_path` mutable en las 24 firmas; local ya fija `public, pg_temp` en cinco: `assign_import_order_number()`, `find_orders_by_id_part(text)`, `generate_next_import_order_number()`, `is_commission_admin()` y `merge_duplicate_products(integer)`.
-- Producción permite ejecución mediante `PUBLIC`, `anon`, `authenticated` y `service_role` en las 24 firmas. Local ya restringe once ACL: las cinco anteriores, `handle_new_user()` y los cinco `notify_*()`; `find_orders_by_id_part(text)` y `merge_duplicate_products(integer)` todavía incluyen `authenticated` localmente.
+- En la captura Task 1, producción conservaba `search_path` mutable en las 24 firmas y local ya fijaba `public, pg_temp` en cinco: `assign_import_order_number()`, `find_orders_by_id_part(text)`, `generate_next_import_order_number()`, `is_commission_admin()` y `merge_duplicate_products(integer)`.
+- En esa misma captura, producción permitía ejecución mediante `PUBLIC`, `anon`, `authenticated` y `service_role` en las 24 firmas. Local ya restringía once ACL: las cinco anteriores, `handle_new_user()` y los cinco `notify_*()`; `find_orders_by_id_part(text)` y `merge_duplicate_products(integer)` todavía incluían `authenticated` localmente.
 - `is_commission_admin()` y `merge_duplicate_products(integer)` son `SECURITY INVOKER` en producción pero `SECURITY DEFINER` en local. El campo `security` del JSON refleja producción; ambos estados observados quedan bajo `catalog`.
 - `auth.users.on_auth_user_created -> public.handle_new_user()` existe en producción y falta en el espejo local. Esta diferencia no autoriza a recrear el trigger en esta tarea; queda como drift explícito para verificación posterior.
 - Los otros 13 registros de `pg_trigger`, las cinco políticas de `is_commission_admin()` y las cuatro dependencias entre funciones coinciden entre ambos entornos.
 
-## Excepciones revisables
+Estos datos describen el antes y no deben confundirse con el estado local actual. La migración forward `20260829183155_harden_privileged_surfaces.sql` ya está aplicada sólo al contenedor local y no reescribe el historial.
+
+## Estado local posterior y excepciones revisadas
+
+- Las 24 firmas objetivo tienen `search_path=public, pg_temp`: conteo mutable `0`.
+- Ninguna función `SECURITY DEFINER` de `public` es ejecutable efectivamente por `anon`: conteo `0`.
+- `authenticated` puede ejecutar efectivamente 25 definers de negocio. Cada firma, guard interno y prueba positiva/negativa está cerrada en [el baseline P0](../evidence/crimson-p0-security-advisor-baseline.md); no existe una excepción implícita o global.
+- Entre las 24 superficies privilegiadas originales, sólo `is_commission_admin()` conserva `authenticated`; las otras 23 quedan limitadas a `service_role`.
 
 La única excepción al perfil service-only en este lote es `is_commission_admin()`: `authenticated` necesita ejecutarla indirectamente desde las cinco políticas RLS de comisiones. La autorización no descansa sólo en el grant: el cuerpo productivo actual valida el email de `auth.jwt()` y el cuerpo local objetivo delega en `public.is_admin()`. Antes del release, el contrato de la migración exigirá revocar `PUBLIC`/`anon` y conservar sólo `authenticated`/`service_role`.
 
@@ -39,4 +46,4 @@ No se acepta ninguna otra advertencia por ausencia de consumidor. Las funciones 
 
 ## Estado de la tarea
 
-El inventario está completo y versionado. Las aserciones que exigen la migración `_harden_privileged_surfaces.sql` deben continuar en rojo hasta la Task 2; este documento no crea ni aplica esa migración.
+El inventario, la migración forward y las verificaciones locales están completos y versionados. El baseline registra exactamente `0 / 0 / 25`, no un “cero warnings” artificial. Producción mantiene el snapshot original hasta un release separado y explícitamente autorizado; esta tarea no la consultó ni la mutó.
