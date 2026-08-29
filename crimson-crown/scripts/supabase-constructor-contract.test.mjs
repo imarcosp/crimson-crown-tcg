@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -15,7 +15,7 @@ const GUARDED_ADAPTER_ALLOWLIST = new Set([
   'scripts/lib/guarded-supabase-client.mjs',
   'src/lib/supabase/guarded-constructors.ts',
 ])
-const SOURCE_EXTENSIONS = new Set(['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx'])
+const SOURCE_EXTENSIONS = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
 const IGNORED_DIRECTORIES = new Set([
   '.next',
   'coverage',
@@ -47,6 +47,16 @@ function discoverSourceFiles(directory) {
   }
 
   return files
+}
+
+function scriptKindForFile(filePath) {
+  const extension = path.extname(filePath)
+  if (extension === '.jsx') return ts.ScriptKind.JSX
+  if (extension === '.tsx') return ts.ScriptKind.TSX
+  if (extension === '.cjs' || extension === '.js' || extension === '.mjs') {
+    return ts.ScriptKind.JS
+  }
+  return ts.ScriptKind.TS
 }
 
 function isRawPackageSpecifier(specifier) {
@@ -92,11 +102,30 @@ function createLexicalModel(sourceFile) {
       return
     }
 
+    if (ts.isObjectBindingPattern(name)) {
+      for (const element of name.elements) {
+        if (element.dotDotDotToken || !ts.isIdentifier(element.name)) {
+          addBindingPattern(scope, element.name, {
+            ...binding,
+            initializer: null,
+            propertyName: null,
+          })
+          continue
+        }
+        addBinding(scope, element.name.text, {
+          ...binding,
+          propertyName: element.propertyName ?? element.name,
+        })
+      }
+      return
+    }
+
     for (const element of name.elements) {
       if (ts.isOmittedExpression(element)) continue
       addBindingPattern(scope, element.name, {
         ...binding,
         initializer: null,
+        propertyName: null,
       })
     }
   }
@@ -149,6 +178,28 @@ function createLexicalModel(sourceFile) {
         })
       }
     }
+  }
+
+  function registerImportEquals(statement, scope) {
+    if (statement.isTypeOnly) return
+
+    let kind = 'other'
+    if (
+      ts.isExternalModuleReference(statement.moduleReference) &&
+      statement.moduleReference.expression &&
+      ts.isStringLiteralLike(statement.moduleReference.expression) &&
+      (
+        statement.moduleReference.expression.text === 'node:module' ||
+        statement.moduleReference.expression.text === 'module'
+      )
+    ) {
+      kind = 'module-namespace'
+    }
+    addBinding(scope, statement.name.text, {
+      declaration: statement,
+      initializer: null,
+      kind,
+    })
   }
 
   function visit(node, scope) {
@@ -220,6 +271,7 @@ function createLexicalModel(sourceFile) {
     }
 
     if (ts.isImportDeclaration(node)) registerImport(node, scope)
+    if (ts.isImportEqualsDeclaration(node)) registerImportEquals(node, scope)
 
     if (
       ts.isVariableDeclaration(node) &&
@@ -232,7 +284,7 @@ function createLexicalModel(sourceFile) {
         : nearestFunctionOrSourceScope(scope)
       addBindingPattern(bindingScope, node.name, {
         declaration: node,
-        initializer: ts.isIdentifier(node.name) ? node.initializer ?? null : null,
+        initializer: node.initializer ?? null,
         kind,
       })
     }
@@ -319,7 +371,12 @@ function resolveStaticString(expression, model, resolving = new Set()) {
 
   if (ts.isIdentifier(current)) {
     const binding = lookupBinding(current, model)
-    if (!binding || resolving.has(binding) || !constBindingIsReadable(binding, current, model)) {
+    if (
+      !binding ||
+      binding.propertyName ||
+      resolving.has(binding) ||
+      !constBindingIsReadable(binding, current, model)
+    ) {
       return null
     }
 
@@ -353,14 +410,70 @@ function propertyAccessParts(expression, model) {
   return null
 }
 
+function bindingPropertyName(binding, model) {
+  const propertyName = binding.propertyName
+  if (!propertyName) return null
+  if (ts.isIdentifier(propertyName) || ts.isStringLiteralLike(propertyName)) {
+    return propertyName.text
+  }
+  if (ts.isComputedPropertyName(propertyName)) {
+    return resolveStaticString(propertyName.expression, model)
+  }
+  return null
+}
+
+function isNodeModuleSpecifier(expression, model) {
+  const specifier = resolveStaticString(expression, model)
+  return specifier === 'node:module' || specifier === 'module'
+}
+
+function isModuleNamespacePromiseExpression(expression, model, resolving = new Set()) {
+  const current = unwrapTransparentExpression(expression)
+  if (ts.isIdentifier(current)) {
+    const binding = lookupBinding(current, model)
+    if (
+      !binding ||
+      binding.propertyName ||
+      resolving.has(binding) ||
+      !constBindingIsReadable(binding, current, model)
+    ) {
+      return false
+    }
+
+    const nextResolving = new Set(resolving)
+    nextResolving.add(binding)
+    return isModuleNamespacePromiseExpression(binding.initializer, model, nextResolving)
+  }
+
+  return (
+    ts.isCallExpression(current) &&
+    current.expression.kind === ts.SyntaxKind.ImportKeyword &&
+    current.arguments.length > 0 &&
+    isNodeModuleSpecifier(current.arguments[0], model)
+  )
+}
+
 function isModuleNamespaceExpression(expression, model, resolving = new Set()) {
   const current = unwrapTransparentExpression(expression)
+  if (ts.isAwaitExpression(current)) {
+    return isModuleNamespacePromiseExpression(current.expression, model, resolving)
+  }
+
+  if (
+    ts.isCallExpression(current) &&
+    current.arguments.length > 0 &&
+    isLoaderExpression(current.expression, model) &&
+    isNodeModuleSpecifier(current.arguments[0], model)
+  ) {
+    return true
+  }
+
   if (!ts.isIdentifier(current)) return false
 
   const binding = lookupBinding(current, model)
   if (!binding || resolving.has(binding)) return false
   if (binding.kind === 'module-namespace') return true
-  if (!constBindingIsReadable(binding, current, model)) return false
+  if (binding.propertyName || !constBindingIsReadable(binding, current, model)) return false
 
   const nextResolving = new Set(resolving)
   nextResolving.add(binding)
@@ -377,6 +490,12 @@ function isCreateRequireFactory(expression, model, resolving = new Set()) {
 
     const nextResolving = new Set(resolving)
     nextResolving.add(binding)
+    if (binding.propertyName) {
+      return (
+        bindingPropertyName(binding, model) === 'createRequire' &&
+        isModuleNamespaceExpression(binding.initializer, model, nextResolving)
+      )
+    }
     return isCreateRequireFactory(binding.initializer, model, nextResolving)
   }
 
@@ -443,7 +562,7 @@ function inspectFile(filePath) {
     readFileSync(filePath, 'utf8'),
     ts.ScriptTarget.Latest,
     true,
-    filePath.endsWith('.tsx') || filePath.endsWith('.jsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    scriptKindForFile(filePath),
   )
   const lexicalModel = createLexicalModel(sourceFile)
   const constructorBindings = new Map()
@@ -576,6 +695,65 @@ test('all runtime Supabase constructors are confined to guarded adapters', () =>
   )
 })
 
+test('recursive executable discovery includes mts and cts without broadening test exclusions', () => {
+  const fixtureDirectory = mkdtempSync(
+    path.join(process.cwd(), 'scripts', '.supabase-contract-extensions-'),
+  )
+  const nestedDirectory = path.join(fixtureDirectory, 'nested')
+  mkdirSync(nestedDirectory)
+
+  const fixtures = [
+    {
+      name: 'runtime.mts',
+      source: "import { createClient } from '@supabase/supabase-js'",
+    },
+    {
+      name: 'nested/runtime.cts',
+      source: "import supabase = require('@supabase/ssr/server')",
+    },
+    {
+      name: 'runtime-test.mts',
+      source: "import { createServerClient } from '@supabase/ssr'",
+    },
+    {
+      controlled: true,
+      name: 'controlled.test.mts',
+      source: "import { createClient } from '@supabase/supabase-js'",
+    },
+    {
+      controlled: true,
+      name: 'nested/controlled.spec.cts',
+      source: "import supabase = require('@supabase/ssr')",
+    },
+  ]
+
+  try {
+    for (const fixture of fixtures) {
+      writeFileSync(path.join(fixtureDirectory, fixture.name), fixture.source, 'utf8')
+    }
+
+    const discovered = discoverSourceFiles(fixtureDirectory)
+    assert.deepEqual(
+      discovered
+        .map((filePath) => path.relative(fixtureDirectory, filePath).replaceAll(path.sep, '/'))
+        .sort(),
+      fixtures.map((fixture) => fixture.name).sort(),
+    )
+
+    for (const fixture of fixtures) {
+      const findings = inspectFile(path.join(fixtureDirectory, fixture.name))
+      const violations = findings.rawImports.length + findings.constructorCalls.length
+      if (fixture.controlled) {
+        assert.equal(violations, 0, `${fixture.name} must remain a controlled test fixture`)
+      } else {
+        assert.ok(violations > 0, `${fixture.name} must remain executable contract scope`)
+      }
+    }
+  } finally {
+    rmSync(fixtureDirectory, { recursive: true, force: true })
+  }
+})
+
 test('raw Supabase subpaths and loader aliases cannot bypass the runtime contract', () => {
   const fixtures = [
     {
@@ -649,6 +827,48 @@ test('raw Supabase subpaths and loader aliases cannot bypass the runtime contrac
       extension: '.ts',
       source: "const dependency = <string>('@supabase/' + 'supabase-js'); (module.require as typeof module.require)(dependency!)",
     },
+    {
+      name: 'TypeScript import-equals node module namespace creates a loader',
+      extension: '.cts',
+      source: "import moduleTools = require('node:module'); const load = moduleTools.createRequire(__filename); load('@supabase/ssr/server')",
+    },
+    {
+      name: 'CommonJS node module namespace creates a loader',
+      source: "const moduleTools = require('node:module'); const makeLoader = moduleTools.createRequire; const load = makeLoader(import.meta.url); load('@supabase/supabase-js/runtime')",
+    },
+    {
+      name: 'CommonJS module namespace survives const alias chains',
+      source: "const imported = require('module'); const moduleTools = imported; const makeLoader = moduleTools['create' + 'Require']; const load = makeLoader(import.meta.url); load('@supabase/ssr')",
+    },
+    {
+      name: 'CommonJS destructured createRequire alias creates a loader',
+      source: "const { createRequire: makeLoader } = require('node:module'); const factory = makeLoader; const load = factory(import.meta.url); load('@supabase/supabase-js')",
+    },
+    {
+      name: 'CommonJS destructured createRequire shorthand creates a loader',
+      source: "const { createRequire } = require('module'); const load = createRequire(import.meta.url); load('@supabase/ssr/server')",
+    },
+    {
+      name: 'awaited dynamic import namespace creates a loader',
+      source: "const moduleTools = await import('node:module'); const load = moduleTools.createRequire(import.meta.url); load('@supabase/supabase-js/runtime')",
+    },
+    {
+      name: 'awaited dynamic import namespace survives promise and namespace aliases',
+      source: "const pending = import('module'); const pendingAlias = pending; const imported = await pendingAlias; const moduleTools = imported; const load = moduleTools.createRequire(import.meta.url); load('@supabase/ssr')",
+    },
+    {
+      name: 'awaited dynamic import destructured factory survives an alias',
+      source: "const { createRequire: importedFactory } = await import('node:module'); const makeLoader = importedFactory; const load = makeLoader(import.meta.url); load('@supabase/supabase-js')",
+    },
+    {
+      name: 'TypeScript wrappers preserve CommonJS createRequire provenance',
+      extension: '.mts',
+      source: "const moduleTools = (require('node:module') as typeof import('node:module'))!; const makeLoader = (moduleTools.createRequire satisfies typeof moduleTools.createRequire)!; const load = makeLoader(import.meta.url); load('@supabase/ssr/server')",
+    },
+    {
+      name: 'real module namespace survives a later nested shadow',
+      source: "const moduleTools = require('module'); function ordinary() { const moduleTools = helper; return moduleTools } const load = moduleTools.createRequire(import.meta.url); load('@supabase/supabase-js')",
+    },
   ]
   const fixtureDirectory = mkdtempSync(path.join(tmpdir(), 'crimson-supabase-contract-'))
 
@@ -703,13 +923,38 @@ test('ordinary calls, shadowed loaders, and non-module text are not loader bound
       name: 'same-scope TDZ prevents a later raw constant from becoming an earlier argument',
       source: "require(dependency); const dependency = '@supabase/ssr'",
     },
+    {
+      name: 'parameter-shadowed require cannot prove a node module namespace',
+      source: "function inspect(require) { const moduleTools = require('node:module'); const load = moduleTools.createRequire(import.meta.url); load('@supabase/ssr') }",
+    },
+    {
+      name: 'ordinary import-like helper cannot prove a node module namespace',
+      source: "const importModule = helper; const moduleTools = await importModule('node:module'); const load = moduleTools.createRequire(import.meta.url); load('@supabase/supabase-js')",
+    },
+    {
+      name: 'ordinary helper result cannot prove a node module namespace',
+      source: "const moduleTools = helper('module'); const load = moduleTools.createRequire(import.meta.url); load('@supabase/ssr')",
+    },
+    {
+      name: 'ordinary destructured createRequire value is not a proven factory',
+      source: "const { createRequire } = helper('node:module'); const load = createRequire(import.meta.url); load('@supabase/supabase-js')",
+    },
+    {
+      name: 'same-block TDZ namespace shadow blocks outer provenance',
+      source: "const moduleTools = require('node:module'); { const load = moduleTools.createRequire(import.meta.url); const moduleTools = helper; load('@supabase/ssr') }",
+    },
+    {
+      name: 'ordinary import-equals namespace cannot create a loader',
+      extension: '.cts',
+      source: "import moduleTools = require('./helper'); const load = moduleTools.createRequire(__filename); load('@supabase/supabase-js')",
+    },
   ]
   const fixtureDirectory = mkdtempSync(path.join(tmpdir(), 'crimson-supabase-negative-contract-'))
 
   try {
     const falsePositives = []
     fixtures.forEach((fixture, index) => {
-      const filePath = path.join(fixtureDirectory, `fixture-${index}.mjs`)
+      const filePath = path.join(fixtureDirectory, `fixture-${index}${fixture.extension ?? '.mjs'}`)
       writeFileSync(filePath, fixture.source, 'utf8')
       const findings = inspectFile(filePath)
       if (findings.rawImports.length > 0 || findings.constructorCalls.length > 0) {
