@@ -22,7 +22,7 @@ function validateExactKeys(entry, expectedKeys) {
   const expected = [...expectedKeys].sort()
 
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
-    fail(`campos de manifiesto inválidos para ${entry.file ?? 'entrada sin archivo'}`)
+    fail('campos de manifiesto inválidos')
   }
 }
 
@@ -40,37 +40,45 @@ function validateEntry(entry, { allowCandidates, files, versions, classifiedFile
   )
 
   if (typeof entry.version !== 'string' || !versionPattern.test(entry.version)) {
-    fail(`versión de migración inválida: ${entry.version}`)
+    fail('versión de migración inválida')
   }
   if (versions.has(entry.version)) {
-    fail(`versión de migración duplicada: ${entry.version}`)
+    fail('versión de migración duplicada')
   }
   versions.add(entry.version)
 
   if (typeof entry.file !== 'string' || !entry.file.endsWith('.sql') || entry.file.includes('/') || entry.file.includes('\\')) {
-    fail(`archivo de migración inválido: ${entry.file}`)
+    fail('archivo de migración inválido')
   }
   if (classifiedFiles.has(entry.file)) {
-    fail(`archivo asignado a más de una clase: ${entry.file}`)
+    fail('archivo asignado a más de una clase')
   }
   classifiedFiles.add(entry.file)
   if (!files.has(entry.file)) {
-    fail(`archivo de migración desconocido: ${entry.file}`)
+    fail('archivo de migración desconocido')
   }
 
   if (typeof entry.sha256 !== 'string' || !sha256Pattern.test(entry.sha256)) {
-    fail(`hash SHA-256 inválido: ${entry.file}`)
+    fail('hash SHA-256 inválido')
+  }
+
+  if (!isRemoteApplied) {
+    const separatorIndex = entry.file.indexOf('_')
+    const fileVersion = separatorIndex > 0 ? entry.file.slice(0, separatorIndex) : null
+    if (entry.version !== fileVersion) {
+      fail('versión de migración no coincide con el archivo')
+    }
   }
 
   if (isRemoteApplied) {
     if (typeof entry.remoteName !== 'string' || entry.remoteName.length === 0) {
-      fail(`nombre remoto inválido: ${entry.file}`)
+      fail('nombre remoto inválido')
     }
     if (entry.equivalence !== 'candidate' && entry.equivalence !== 'verified') {
-      fail(`equivalencia remota inválida: ${entry.file}`)
+      fail('equivalencia remota inválida')
     }
-    if (entry.equivalence === 'candidate' && !allowCandidates) {
-      fail(`equivalencia remota sin verificar: ${entry.file}`)
+    if (entry.equivalence === 'candidate' && allowCandidates !== true) {
+      fail('equivalencia remota sin verificar')
     }
   }
 }
@@ -87,18 +95,18 @@ export async function loadAndValidateManifest({ rootDir, allowCandidates }) {
 
   try {
     manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-  } catch (error) {
-    fail(`no se pudo leer el manifiesto de migraciones: ${error.message}`)
+  } catch {
+    fail('no se pudo leer el manifiesto de migraciones')
   }
 
   if (!isPlainObject(manifest) || Object.keys(manifest).sort().join(',') !== 'entries,productionProjectRef,schemaVersion') {
     fail('forma de manifiesto inválida')
   }
   if (manifest.schemaVersion !== 1) {
-    fail(`versión de esquema de manifiesto no admitida: ${manifest.schemaVersion}`)
+    fail('versión de esquema de manifiesto no admitida')
   }
   if (manifest.productionProjectRef !== productionProjectRef) {
-    fail(`referencia de proyecto de producción no permitida: ${manifest.productionProjectRef}`)
+    fail('referencia de proyecto de producción no permitida')
   }
   if (!Array.isArray(manifest.entries) || manifest.entries.length === 0) {
     fail('entradas de manifiesto inválidas')
@@ -114,14 +122,14 @@ export async function loadAndValidateManifest({ rootDir, allowCandidates }) {
 
   for (const file of files) {
     if (!classifiedFiles.has(file)) {
-      fail(`migración sin clasificar: ${file}`)
+      fail('migración sin clasificar')
     }
   }
 
   for (const entry of manifest.entries) {
     const actualHash = sha256(await readFile(join(migrationsPath, entry.file)))
     if (entry.sha256 !== actualHash) {
-      fail(`hash SHA-256 no coincide: ${entry.file}`)
+      fail('hash SHA-256 no coincide')
     }
   }
 

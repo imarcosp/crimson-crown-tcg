@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import test from 'node:test'
 
+import { buildClassifiedEntries } from './bootstrap-migration-manifest.mjs'
 import { loadAndValidateManifest } from './migration-manifest.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -73,6 +74,43 @@ test('projection is blocked while a remote pair is only a candidate', async () =
   )
 })
 
+test('projection rejects a candidate unless allowCandidates is the literal boolean true', async () => {
+  const manifest = completeFixtureManifest([
+    {
+      class: 'remote_applied',
+      version: '20240101000000',
+      remoteName: 'fixture_remote',
+      file: alphaFile,
+      sha256: alphaHash,
+      equivalence: 'candidate',
+    },
+    { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+  ])
+
+  await withFixture(
+    (rootDir) => assert.rejects(
+      () => loadAndValidateManifest({ rootDir, allowCandidates: 'true' }),
+      /equivalencia remota sin verificar/,
+    ),
+    manifest,
+  )
+})
+
+test('rejects a local classification whose version disagrees with its filename prefix', async () => {
+  const manifest = completeFixtureManifest([
+    { class: 'baseline_present', version: '20240103000000', file: alphaFile, sha256: alphaHash },
+    { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+  ])
+
+  await withFixture(
+    (rootDir) => assert.rejects(
+      () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
+      /versión de migración no coincide con el archivo/,
+    ),
+    manifest,
+  )
+})
+
 test('rejects a duplicate migration version', async () => {
   const manifest = completeFixtureManifest([
     { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
@@ -82,7 +120,7 @@ test('rejects a duplicate migration version', async () => {
   await withFixture(
     (rootDir) => assert.rejects(
       () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
-      /versión de migración duplicada: 20240101000000/,
+      (error) => error.message === 'versión de migración duplicada',
     ),
     manifest,
   )
@@ -97,7 +135,7 @@ test('rejects a manifest file that is not a migration', async () => {
   await withFixture(
     (rootDir) => assert.rejects(
       () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
-      /archivo de migración desconocido: 20240103000000_unknown\.sql/,
+      (error) => error.message === 'archivo de migración desconocido',
     ),
     manifest,
   )
@@ -112,23 +150,51 @@ test('rejects a changed migration hash', async () => {
   await withFixture(
     (rootDir) => assert.rejects(
       () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
-      /hash SHA-256 no coincide: 20240102000000_beta\.sql/,
+      (error) => error.message === 'hash SHA-256 no coincide',
     ),
     manifest,
   )
 })
 
-test('rejects a foreign production project reference', async () => {
-  const manifest = completeFixtureManifest()
-  manifest.productionProjectRef = 'aaaaaaaaaaaaaaaaaaaa'
+test('validation errors never echo untrusted manifest values', async () => {
+  const marker = 'untrusted-manifest-value'
+  const cases = [
+    {
+      manifest: { ...completeFixtureManifest(), productionProjectRef: marker },
+      expectedMessage: 'referencia de proyecto de producción no permitida',
+    },
+    {
+      manifest: completeFixtureManifest([
+        { class: 'baseline_present', version: marker, file: alphaFile, sha256: alphaHash },
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+      expectedMessage: 'versión de migración inválida',
+    },
+    {
+      manifest: completeFixtureManifest([
+        { class: 'baseline_present', version: '20240101000000', file: marker, sha256: alphaHash },
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+      expectedMessage: 'archivo de migración inválido',
+    },
+    {
+      manifest: completeFixtureManifest([
+        { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: marker },
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+      expectedMessage: 'hash SHA-256 inválido',
+    },
+  ]
 
-  await withFixture(
-    (rootDir) => assert.rejects(
-      () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
-      /referencia de proyecto de producción no permitida: aaaaaaaaaaaaaaaaaaaa/,
-    ),
-    manifest,
-  )
+  for (const { manifest, expectedMessage } of cases) {
+    await withFixture(
+      (rootDir) => assert.rejects(
+        () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
+        (error) => error.message === expectedMessage && !error.message.includes(marker),
+      ),
+      manifest,
+    )
+  }
 })
 
 test('rejects a migration assigned to two classes', async () => {
@@ -141,9 +207,23 @@ test('rejects a migration assigned to two classes', async () => {
   await withFixture(
     (rootDir) => assert.rejects(
       () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
-      /archivo asignado a más de una clase: 20240101000000_alpha\.sql/,
+      (error) => error.message === 'archivo asignado a más de una clase',
     ),
     manifest,
+  )
+})
+
+test('bootstrap classification rejects distinct files with a duplicate version', () => {
+  assert.throws(
+    () => buildClassifiedEntries({
+      remoteApplied: [
+        ['20240101000000', 'fixture_one', '20240101000000_one.sql'],
+        ['20240101000000', 'fixture_two', '20240102000000_two.sql'],
+      ],
+      baselinePresent: [],
+      forwardPending: [],
+    }),
+    (error) => error.message === 'versión de migración duplicada',
   )
 })
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const productionProjectRef = 'djfqozfaqkqdoqeoqbzt'
 const remoteApplied = [
@@ -40,6 +41,36 @@ function migrationVersion(file) {
   return file.slice(0, file.indexOf('_'))
 }
 
+export function buildClassifiedEntries({ remoteApplied, baselinePresent, forwardPending }) {
+  const entries = []
+  const classifiedFiles = new Set()
+  const versions = new Set()
+
+  const addEntry = (entry) => {
+    if (classifiedFiles.has(entry.file)) {
+      throw new Error('archivo de migración clasificado más de una vez')
+    }
+    if (versions.has(entry.version)) {
+      throw new Error('versión de migración duplicada')
+    }
+    classifiedFiles.add(entry.file)
+    versions.add(entry.version)
+    entries.push(entry)
+  }
+
+  for (const [version, remoteName, file] of remoteApplied) {
+    addEntry({ class: 'remote_applied', version, remoteName, file, equivalence: 'candidate' })
+  }
+  for (const file of baselinePresent) {
+    addEntry({ class: 'baseline_present', version: migrationVersion(file), file })
+  }
+  for (const file of forwardPending) {
+    addEntry({ class: 'forward_pending', version: migrationVersion(file), file })
+  }
+
+  return entries
+}
+
 async function hashMigration(migrationsPath, file) {
   return sha256(await readFile(join(migrationsPath, file)))
 }
@@ -66,28 +97,15 @@ async function bootstrap() {
   }
 
   const actualFiles = new Set((await readdir(migrationsPath)).filter((file) => file.endsWith('.sql')))
-  const entries = []
-  const classifiedFiles = new Set()
+  const entries = buildClassifiedEntries({ remoteApplied, baselinePresent, forwardPending })
+  const classifiedFiles = new Set(entries.map((entry) => entry.file))
+  const hashedEntries = []
 
-  const addEntry = async (entry) => {
+  for (const entry of entries) {
     if (!actualFiles.has(entry.file)) {
       throw new Error(`archivo de migración clasificado no existe: ${entry.file}`)
     }
-    if (classifiedFiles.has(entry.file)) {
-      throw new Error(`archivo de migración clasificado más de una vez: ${entry.file}`)
-    }
-    classifiedFiles.add(entry.file)
-    entries.push({ ...entry, sha256: await hashMigration(migrationsPath, entry.file) })
-  }
-
-  for (const [version, remoteName, file] of remoteApplied) {
-    await addEntry({ class: 'remote_applied', version, remoteName, file, equivalence: 'candidate' })
-  }
-  for (const file of baselinePresent) {
-    await addEntry({ class: 'baseline_present', version: migrationVersion(file), file })
-  }
-  for (const file of forwardPending) {
-    await addEntry({ class: 'forward_pending', version: migrationVersion(file), file })
+    hashedEntries.push({ ...entry, sha256: await hashMigration(migrationsPath, entry.file) })
   }
 
   for (const file of actualFiles) {
@@ -99,12 +117,14 @@ async function bootstrap() {
   await mkdir(join(rootDir, 'scripts', 'release'), { recursive: true })
   await writeFile(
     manifestPath,
-    `${JSON.stringify({ schemaVersion: 1, productionProjectRef, entries }, null, 2)}\n`,
+    `${JSON.stringify({ schemaVersion: 1, productionProjectRef, entries: hashedEntries }, null, 2)}\n`,
     { flag: 'wx' },
   )
 }
 
-bootstrap().catch((error) => {
-  console.error(error.message)
-  process.exitCode = 1
-})
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  bootstrap().catch((error) => {
+    console.error(error.message)
+    process.exitCode = 1
+  })
+}
