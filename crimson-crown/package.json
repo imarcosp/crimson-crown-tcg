@@ -29,6 +29,7 @@
     "test:local-storage": "node scripts/local-db/storage-matrix.mjs",
     "test:payment-proof-paths": "node --test scripts/local-db/payment-proof-paths-contract.test.mjs",
     "test:atomic-import-proof": "node --test scripts/local-db/import-proof-finalization-contract.test.mjs",
+    "test:import-item-freeze": "node --test scripts/local-db/import-item-freeze-contract.test.mjs",
     "local-storage:prepare": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/local-db/prepare-storage-fixtures.ps1",
     "local-db:prepare-artifacts": "node scripts/local-db/prepare-artifact-location.mjs",
     "local-db:assert-network": "node scripts/local-db/assert-local-network-isolation.mjs",

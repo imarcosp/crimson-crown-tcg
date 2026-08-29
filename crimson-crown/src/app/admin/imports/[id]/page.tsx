@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { sendImportNotification } from '@/app/actions/email'
+import { mutateAdminImportItemAction } from '@/app/actions/imports'
 import { getAdminInventories, type Inventory } from '@/app/actions/admin-inventories'
 import { createUploadTicketAction } from '@/app/actions/storage-uploads'
 import { uploadWithTicket } from '@/lib/storage/upload-client'
@@ -212,7 +213,15 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       const newVal = !currentVal
       const updatedItems = items.map(i => i.id === itemId ? { ...i, [field]: newVal } : i)
       setItems(updatedItems)
-      await supabase.from('import_items').update({ [field]: newVal }).eq('id', itemId)
+      const result = await mutateAdminImportItemAction(id, String(itemId), 'set-flag', {
+          field,
+          value: newVal,
+      })
+      if (!result.success) {
+          setItems(items)
+          alert(result.error)
+          return
+      }
       await checkAutoStatus(updatedItems)
   }
 
@@ -364,24 +373,17 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           // finalPlatform = 'Otro' (Descomentar si el error persiste y no se puede tocar la DB)
       }
 
-      const payload = { order_id: id, ...formData, platform: finalPlatform, product_name: finalName, image_url: finalImageUrl }
+      const payload = { ...formData, platform: finalPlatform, product_name: finalName, image_url: finalImageUrl }
 
-      let error = null
+      let result
       if (editItem) {
-          const { error: err } = await supabase.from('import_items').update(payload).eq('id', editItem.id)
-          error = err
+          result = await mutateAdminImportItemAction(id, String(editItem.id), 'update', payload)
       } else {
-          const { error: err } = await supabase.from('import_items').insert(payload)
-          error = err
+          result = await mutateAdminImportItemAction(id, null, 'insert', payload)
       }
 
-      if (error) {
-          // Mensaje de ayuda específico si falla el enum
-          if (error.message.includes('invalid input value for enum')) {
-              alert(`❌ Error de Plataforma: La base de datos no acepta "${formData.platform}".\n\nSolución: Cambia la plataforma a "Otro" y escribe "${formData.platform}" en el nombre del producto.`)
-          } else {
-              alert(`❌ Error al guardar: ${error.message}`)
-          }
+      if (!result.success) {
+          alert(`❌ ${result.error}`)
           return
       }
       
@@ -397,10 +399,25 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       const newVal = !currentVal
       const updatedItems = items.map(i => i.id === itemId ? { ...i, in_cart: newVal } : i)
       setItems(updatedItems)
-      await supabase.from('import_items').update({ in_cart: newVal }).eq('id', itemId)
+      const result = await mutateAdminImportItemAction(id, String(itemId), 'set-flag', {
+          field: 'in_cart',
+          value: newVal,
+      })
+      if (!result.success) {
+          setItems(items)
+          alert(result.error)
+      }
   }
 
-  const deleteItem = async (itemId: number) => { if(confirm('¿Borrar este item?')) { await supabase.from('import_items').delete().eq('id', itemId); fetchOrder() } }
+  const deleteItem = async (itemId: number) => {
+      if (!confirm('¿Borrar este item?')) return
+      const result = await mutateAdminImportItemAction(id, String(itemId), 'delete', {})
+      if (!result.success) {
+          alert(result.error)
+          return
+      }
+      fetchOrder()
+  }
   const calculateTotal = (item: any) => ((item.unit_price * (1 + (item.tax_percent / 100)))) * item.quantity
   const orderTotal = items.reduce((acc, item) => acc + calculateTotal(item), 0)
 

@@ -344,6 +344,9 @@ begin;
 delete from public.credit_transactions
 where user_id = '${fixture.ownerId}'
   and description = 'Pago de Orden de Importación #${fixture.orderId}';
+update public.import_orders
+set status = 'Cotizada'
+where id = ${fixture.orderId} and user_notes = '${fixture.marker}';
 delete from public.import_items where order_id = ${fixture.orderId};
 delete from public.import_orders where id = ${fixture.orderId} and user_notes = '${fixture.marker}';
 update public.profiles set credits = ${creditsLiteral} where id = '${fixture.ownerId}';

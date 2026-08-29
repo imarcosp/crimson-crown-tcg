@@ -8,6 +8,7 @@ import {
 } from '@/lib/storage/proof-finalization-core'
 import { verifyTrustedUploadedObject } from '@/lib/storage/upload-server'
 import { normalizeProofRecordId } from '@/lib/storage/upload-policy'
+import { isAdminEmail } from '@/lib/auth/admin-access'
 
 const FINALIZE_ERROR_MESSAGE = 'No se pudo finalizar el comprobante.'
 
@@ -41,29 +42,58 @@ export async function deleteImportItemAction(itemId: unknown, orderId: unknown) 
 
 export async function rejectImportQuoteAction(orderId: string) {
   try {
+    const normalizedOrderId = normalizeProofRecordId('import-proof', orderId)
     const user = await authenticatedUser()
     const admin = createAdminClient()
-    const { data: order, error: orderError } = await admin
-      .from('import_orders')
-      .select('user_id, status')
-      .eq('id', orderId)
-      .maybeSingle()
-
-    if (orderError || !order || order.user_id !== user.id) {
-      return { success: false, error: 'No tienes permiso para modificar esta orden' }
-    }
-    if (order.status !== 'Cotizada') {
-      return { success: false, error: 'La orden no está en estado de cotización.' }
-    }
-
-    const { error } = await admin
-      .from('import_orders')
-      .update({ status: 'Solo Cotización' })
-      .eq('id', orderId)
-    if (error) throw error
+    const { error } = await admin.rpc('reject_import_quote_atomic', {
+      order_id_input: normalizedOrderId,
+      user_id_input: user.id,
+    })
+    if (error) throw new Error('No se pudo rechazar la cotización.')
     return { success: true }
   } catch {
     return { success: false, error: 'No se pudo rechazar la cotización.' }
+  }
+}
+
+type AdminImportItemOperation = 'insert' | 'update' | 'delete' | 'set-flag'
+
+export async function mutateAdminImportItemAction(
+  orderId: unknown,
+  itemId: unknown,
+  operation: unknown,
+  payload: unknown,
+): Promise<Readonly<{ success: true; itemId: string }> | Readonly<{ success: false; error: string }>> {
+  const errorMessage = 'No se pudo modificar el artículo.'
+  try {
+    const normalizedOrderId = normalizeProofRecordId('import-proof', orderId)
+    if (
+      typeof operation !== 'string' ||
+      !['insert', 'update', 'delete', 'set-flag'].includes(operation) ||
+      !payload ||
+      typeof payload !== 'object' ||
+      Array.isArray(payload)
+    ) {
+      throw new Error(errorMessage)
+    }
+    const normalizedItemId = operation === 'insert'
+      ? null
+      : normalizeProofRecordId('import-proof', itemId)
+
+    const user = await authenticatedUser()
+    if (!isAdminEmail(user.email)) throw new Error(errorMessage)
+
+    const admin = createAdminClient()
+    const { data, error } = await admin.rpc('admin_mutate_import_item_atomic', {
+      order_id_input: normalizedOrderId,
+      item_id_input: normalizedItemId,
+      operation_input: operation as AdminImportItemOperation,
+      payload_input: payload,
+    })
+    if (error || data === null || data === undefined) throw new Error(errorMessage)
+    return Object.freeze({ success: true, itemId: String(data) })
+  } catch {
+    return Object.freeze({ success: false, error: errorMessage })
   }
 }
 
