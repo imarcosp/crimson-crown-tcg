@@ -5,6 +5,9 @@ declare
   function_owner oid;
   actual_runtime_roles text[];
   unexpected_grantees text[];
+  runtime_role text;
+  expected_effective_privilege boolean;
+  actual_effective_privilege boolean;
 begin
   if to_regclass('pg_temp.expected_privileged_surfaces') is null then
     raise exception 'expected_privileged_surfaces temp table is required';
@@ -68,6 +71,20 @@ begin
     ) then
       raise exception 'unexpected runtime ACL for %', surface.signature;
     end if;
+
+    foreach runtime_role in array array['anon', 'authenticated', 'service_role']::text[]
+    loop
+      expected_effective_privilege := runtime_role = any(surface.allowed_roles);
+      select has_function_privilege(r.oid, function_oid, 'EXECUTE')
+      into actual_effective_privilege
+      from pg_roles as r
+      where r.rolname = runtime_role;
+
+      if actual_effective_privilege is null
+        or actual_effective_privilege <> expected_effective_privilege then
+        raise exception 'unexpected effective runtime privilege for % on %', runtime_role, surface.signature;
+      end if;
+    end loop;
 
     if exists (
       select 1

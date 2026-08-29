@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import dotenv from 'dotenv'
 import { createOperationalSupabaseClient as createClient } from '../lib/guarded-supabase-client.mjs'
 
@@ -9,6 +12,15 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 const loopbackHosts = new Set(['127.0.0.1', 'localhost', '::1'])
+const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+const privilegedVerifier = path.join(appRoot, 'scripts', 'local-db', 'verify-privileged-surfaces.ps1')
+const powershell = path.join(
+  process.env.SystemRoot || 'C:\\Windows',
+  'System32',
+  'WindowsPowerShell',
+  'v1.0',
+  'powershell.exe',
+)
 
 if (!url || !anonKey || !serviceKey) throw new Error('Faltan las credenciales de Supabase local.')
 if (!loopbackHosts.has(new URL(url).hostname)) {
@@ -67,22 +79,64 @@ async function expectBlocked(label, operation) {
   assert.ok(error || (data?.length ?? 0) === 0, `${label} debe estar bloqueado`)
 }
 
-function expectPermissionDenied(label, result, hiddenRpcName = null) {
+export function expectPermissionDenied(label, result, expected) {
+  const expectedKind = expected?.kind
+  const expectedName = expected?.name
+  assert.ok(expectedKind === 'function' || expectedKind === 'view', `${label} requiere un tipo de objeto esperado`)
+  assert.match(expectedName ?? '', /^[a-z_][a-z0-9_]*$/, `${label} requiere un nombre de objeto exacto`)
+
   if (result.error?.code === '42501') {
-    assert.match(result.error.message ?? '', /permission denied/i, `${label} debe negarse antes de ejecutar la función`)
+    assert.equal(
+      result.error.message,
+      `permission denied for ${expectedKind} ${expectedName}`,
+      `${label} debe asociar 42501 al objeto exacto`,
+    )
     return
   }
 
-  if (hiddenRpcName && result.error?.code === 'PGRST202') {
-    assert.match(result.error.message ?? '', /schema cache/i, `${label} debe quedar oculto del schema cache`)
-    assert.match(result.error.message ?? '', new RegExp(`\\b${hiddenRpcName}\\b`), `${label} debe identificar la RPC oculta`)
+  if (result.error?.code === 'PGRST202') {
+    assert.equal(expectedKind, 'function', `${label} sólo permite PGRST202 para funciones`)
+    assert.equal(expected.catalogVerified, true, `${label} requiere catálogo local verificado antes de aceptar PGRST202`)
+    assert.equal(
+      result.error.message,
+      `Could not find the function public.${expectedName} without parameters in the schema cache`,
+      `${label} debe identificar exactamente la RPC oculta`,
+    )
+    assert.equal(
+      result.error.details,
+      `Searched for the function public.${expectedName} without parameters or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.`,
+      `${label} debe contener el detalle predecible del schema cache`,
+    )
     return
   }
 
   assert.fail(`${label} debe fallar por privilegio antes de ejecutar; código recibido: ${result.error?.code ?? 'sin error'}`)
 }
 
+function verifyLocalPrivilegedCatalog() {
+  const result = spawnSync(powershell, [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    privilegedVerifier,
+  ], {
+    cwd: appRoot,
+    encoding: 'utf8',
+    timeout: 120_000,
+    windowsHide: true,
+  })
+
+  if (result.status !== 0 || !/PRIVILEGED_SURFACES_OK/.test(result.stdout ?? '')) {
+    throw new Error('La matriz Data API requiere un catálogo privilegiado local verificado.')
+  }
+  return true
+}
+
 async function main() {
+  // PostgREST oculta algunas RPC sin grant. Sólo aceptamos PGRST202 después
+  // de que el gate de catálogo pruebe que la firma existe y su ACL es exacta.
+  const privilegedCatalogVerified = verifyLocalPrivilegedCatalog()
   const anon = client()
   const standard = await signedIn('standard')
   const admin = await signedIn('admin')
@@ -141,26 +195,32 @@ async function main() {
   }
 
   const viewProbe = await anon.from('admin_users').select('id').limit(1)
-  expectPermissionDenied('anon no debe leer admin_users', viewProbe)
+  expectPermissionDenied('anon no debe leer admin_users', viewProbe, {
+    kind: 'view', name: 'admin_users', catalogVerified: privilegedCatalogVerified,
+  })
 
   const standardViewProbe = await standard.from('admin_users').select('id').limit(1)
-  expectPermissionDenied('authenticated no debe leer admin_users', standardViewProbe)
+  expectPermissionDenied('authenticated no debe leer admin_users', standardViewProbe, {
+    kind: 'view', name: 'admin_users', catalogVerified: privilegedCatalogVerified,
+  })
 
   for (const probe of privilegedRpcDenialProbes) {
     expectPermissionDenied(
       `anon no debe invocar ${probe.name}`,
       await anon.rpc(probe.name, probe.args),
-      probe.name,
+      { kind: 'function', name: probe.name, catalogVerified: privilegedCatalogVerified },
     )
     expectPermissionDenied(
       `authenticated no debe invocar ${probe.name}`,
       await standard.rpc(probe.name, probe.args),
-      probe.name,
+      { kind: 'function', name: probe.name, catalogVerified: privilegedCatalogVerified },
     )
   }
 
   const anonCommissionAdmin = await anon.rpc('is_commission_admin')
-  expectPermissionDenied('anon no debe invocar is_commission_admin', anonCommissionAdmin, 'is_commission_admin')
+  expectPermissionDenied('anon no debe invocar is_commission_admin', anonCommissionAdmin, {
+    kind: 'function', name: 'is_commission_admin', catalogVerified: privilegedCatalogVerified,
+  })
 
   const standardCommissionAdmin = await standard.rpc('is_commission_admin')
   assert.ifError(standardCommissionAdmin.error)
@@ -368,6 +428,7 @@ async function main() {
 
   console.log(JSON.stringify({
     ok: true,
+    privilegedCatalogVerified,
     anonPrivate,
     publicProducts,
     standardProfile,
@@ -387,7 +448,9 @@ async function main() {
   }, null, 2))
 }
 
-main().catch((error) => {
-  console.error(error.message)
-  process.exitCode = 1
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main().catch((error) => {
+    console.error(error.message)
+    process.exitCode = 1
+  })
+}
