@@ -49,7 +49,14 @@ export type StoragePathInput =
       readonly extension: Exclude<AllowedUploadExtension, 'pdf'>
     }
   | {
-      readonly kind: ProofUploadKind
+      readonly kind: 'order-proof' | 'commission-proof'
+      readonly userId: string
+      readonly recordId: string
+      readonly objectId: string
+      readonly extension: AllowedUploadExtension
+    }
+  | {
+      readonly kind: 'import-proof'
       readonly userId: string
       readonly recordId: string
       readonly objectId: string
@@ -85,6 +92,8 @@ const MIME_EXTENSIONS: Readonly<
 })
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+const POSITIVE_BIGINT_PATTERN = /^[1-9][0-9]*$/u
+const POSTGRES_BIGINT_MAX = BigInt('9223372036854775807')
 
 function isUploadKind(value: unknown): value is UploadKind {
   return typeof value === 'string' && ALL_UPLOAD_KINDS.has(value as UploadKind)
@@ -123,6 +132,18 @@ function normalizeUuid(value: unknown): string {
   }
 
   return value.toLowerCase()
+}
+
+function normalizePositivePostgresBigint(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    !POSITIVE_BIGINT_PATTERN.test(value) ||
+    BigInt(value) > POSTGRES_BIGINT_MAX
+  ) {
+    throw new Error('Identificador de almacenamiento inválido.')
+  }
+
+  return value
 }
 
 function extensionFromSafeName(name: unknown): AllowedUploadExtension {
@@ -199,7 +220,7 @@ export function buildStoragePath(input: StoragePathInput): string {
     }
     case 'import-proof': {
       const userId = normalizeUuid(input.userId)
-      const recordId = normalizeUuid(input.recordId)
+      const recordId = normalizePositivePostgresBigint(input.recordId)
       return `imports/${userId}/${recordId}/${objectId}.${extension}`
     }
     case 'commission-proof': {

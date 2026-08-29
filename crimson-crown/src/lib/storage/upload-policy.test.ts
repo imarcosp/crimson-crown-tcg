@@ -9,6 +9,7 @@ const userId = '11111111-1111-4111-8111-111111111111'
 const recordId = '22222222-2222-4222-8222-222222222222'
 const objectId = '33333333-3333-4333-8333-333333333333'
 const inventoryId = '44444444-4444-4444-8444-444444444444'
+const importRecordId = '9223372036854775807'
 
 test('accepts every supported upload kind at the exact 5 MiB boundary', () => {
   const imageKinds = [
@@ -197,7 +198,7 @@ test('rejects unknown upload kinds at runtime', () => {
   )
 })
 
-test('builds the six canonical path shapes from UUIDs only', () => {
+test('builds the six canonical path shapes from validated identifiers only', () => {
   assert.equal(
     buildStoragePath({
       kind: 'customer-product-request',
@@ -225,8 +226,14 @@ test('builds the six canonical path shapes from UUIDs only', () => {
     `orders/${userId}/${recordId}/${objectId}.png`,
   )
   assert.equal(
-    buildStoragePath({ kind: 'import-proof', userId, recordId, objectId, extension: 'pdf' }),
-    `imports/${userId}/${recordId}/${objectId}.pdf`,
+    buildStoragePath({
+      kind: 'import-proof',
+      userId,
+      recordId: importRecordId,
+      objectId,
+      extension: 'pdf',
+    }),
+    `imports/${userId}/${importRecordId}/${objectId}.pdf`,
   )
   assert.equal(
     buildStoragePath({
@@ -238,6 +245,47 @@ test('builds the six canonical path shapes from UUIDs only', () => {
     }),
     `commissions/${recordId}/${userId}/${objectId}.jpeg`,
   )
+})
+
+test('accepts only positive canonical PostgreSQL bigint IDs for import proof paths', () => {
+  assert.equal(
+    buildStoragePath({ kind: 'import-proof', userId, recordId: '1', objectId, extension: 'png' }),
+    `imports/${userId}/1/${objectId}.png`,
+  )
+  assert.equal(
+    buildStoragePath({
+      kind: 'import-proof',
+      userId,
+      recordId: '9223372036854775807',
+      objectId,
+      extension: 'pdf',
+    }),
+    `imports/${userId}/9223372036854775807/${objectId}.pdf`,
+  )
+
+  for (const invalidRecordId of [
+    '0',
+    '-1',
+    '+1',
+    '01',
+    ' 1',
+    '1 ',
+    '1.0',
+    '1e3',
+    '1/2',
+    '1\\2',
+    '9223372036854775808',
+  ]) {
+    assert.throws(() =>
+      buildStoragePath({
+        kind: 'import-proof',
+        userId,
+        recordId: invalidRecordId,
+        objectId,
+        extension: 'pdf',
+      }),
+    )
+  }
 })
 
 test('normalizes valid uppercase UUIDs to canonical lowercase paths', () => {
