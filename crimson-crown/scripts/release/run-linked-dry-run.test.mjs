@@ -527,8 +527,9 @@ async function makeFixture({
     await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection.mjs'))
   }
   await cp(join(sourceRoot, 'scripts', 'release', 'migration-manifest.mjs'), join(releaseDir, 'migration-manifest.mjs'))
+  await cp(join(sourceRoot, 'scripts', 'release', 'query-windows-reparse-points.ps1'), join(releaseDir, 'query-windows-reparse-points.ps1'))
   await writeFile(join(releaseDir, 'migration-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-  await writeFile(join(evidenceDir, 'fixture-proof.md'), '<a id="verified-remote"></a>\n')
+  await writeFile(join(evidenceDir, 'fixture-proof.md'), '# Verified Remote\n')
   await writeFile(join(rootDir, 'supabase', 'config.toml'), '[db.migrations]\nenabled = false\n')
   await writeFile(join(migrationsDir, remoteFile), remoteSql)
   if (!zeroForward) {

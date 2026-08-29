@@ -103,7 +103,7 @@ async function withFixture(callback, { config, entries = fixtureEntries } = {}) 
   await mkdir(migrationsDir, { recursive: true })
   await mkdir(evidenceDir, { recursive: true })
   await mkdir(dirname(manifestPath), { recursive: true })
-  await writeFile(join(evidenceDir, 'fixture-proof.md'), '<a id="verified"></a>\n')
+  await writeFile(join(evidenceDir, 'fixture-proof.md'), '# Verified\n')
   await cp(join(sourceRoot, 'supabase', 'config.toml'), join(rootDir, 'supabase', 'config.toml'))
   for (const entry of entries) {
     await cp(join(sourceRoot, 'supabase', 'migrations', entry.file), join(migrationsDir, entry.file))

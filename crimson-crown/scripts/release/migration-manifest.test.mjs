@@ -18,6 +18,88 @@ const alphaHash = 'b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51
 const betaHash = 'f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad'
 const gammaHash = 'ae9a6306a205417afddd14316cc1d0d5e04a98f1be10865dce643925ee070ce2'
 const bootstrapScript = resolve('scripts/release/bootstrap-migration-manifest.mjs')
+const windowsReparseGuardScript = resolve('scripts/release/query-windows-reparse-points.ps1')
+const genericReparsePointScript = String.raw`
+param([Parameter(Mandatory = $true)][string]$LiteralPath)
+$ErrorActionPreference = 'Stop'
+$source = @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+public static class CrimsonGenericReparseFixture
+{
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DeviceIoControl(SafeFileHandle handle, uint code, IntPtr input, uint inputSize, IntPtr output, uint outputSize, out uint returned, IntPtr overlapped);
+
+    public static void Set(string path)
+    {
+        using (SafeFileHandle handle = CreateFileW(path, 0x40000000, 7, IntPtr.Zero, 3, 0x00200000, IntPtr.Zero))
+        {
+            if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+            IntPtr buffer = Marshal.AllocHGlobal(24);
+            try
+            {
+                for (int index = 0; index < 24; index++) Marshal.WriteByte(buffer, index, 0);
+                Marshal.WriteInt32(buffer, 0, 3);
+                byte[] guid = Guid.Parse("12345678-1234-1234-1234-1234567890ab").ToByteArray();
+                Marshal.Copy(guid, 0, IntPtr.Add(buffer, 8), 16);
+                uint returned;
+                if (!DeviceIoControl(handle, 0x000900A4, buffer, 24, IntPtr.Zero, 0, out returned, IntPtr.Zero))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+    }
+}
+'@
+Add-Type -TypeDefinition $source
+[CrimsonGenericReparseFixture]::Set($LiteralPath)
+`
+
+function windowsSystemExecutable(name) {
+  const systemRoot = process.env.SystemRoot
+  if (!systemRoot) throw new Error('Windows system root unavailable')
+  return join(systemRoot, 'System32', name)
+}
+
+async function createGenericReparsePoint(path) {
+  const scriptDir = await mkdtemp(join(tmpdir(), 'crimson-generic-reparse-fixture-'))
+  const scriptPath = join(scriptDir, 'create-generic-reparse.ps1')
+  try {
+    await writeFile(scriptPath, genericReparsePointScript)
+    await execFileAsync(
+      windowsSystemExecutable('WindowsPowerShell\\v1.0\\powershell.exe'),
+      ['-NoProfile', '-NonInteractive', '-File', scriptPath, path],
+      { maxBuffer: 16 * 1024, timeout: 15_000, windowsHide: true },
+    )
+  } finally {
+    await rm(scriptDir, { force: true, recursive: true })
+  }
+}
+
+async function clearGenericReparsePoint(path) {
+  await execFileAsync(
+    windowsSystemExecutable('fsutil.exe'),
+    ['reparsepoint', 'delete', path],
+    { maxBuffer: 16 * 1024, timeout: 15_000, windowsHide: true },
+  )
+}
+
+async function queryWindowsReparsePoints(paths) {
+  return execFileAsync(
+    windowsSystemExecutable('WindowsPowerShell\\v1.0\\powershell.exe'),
+    ['-NoProfile', '-NonInteractive', '-File', windowsReparseGuardScript, ...paths],
+    { maxBuffer: 16 * 1024, timeout: 15_000, windowsHide: true },
+  )
+}
 
 function candidateProof() {
   return { status: 'candidate', evidence: null, remediationVersions: [] }
@@ -73,7 +155,7 @@ async function withFixture(callback, manifest = completeFixtureManifest(), addit
   await writeFile(join(migrationsDir, betaFile), 'beta\n')
   await writeFile(
     join(evidenceDir, 'fixture-proof.md'),
-    '<a id="verified"></a>\n<a id="reconciled"></a>\n<a id="verified-remote"></a>\n',
+    '# Verified\n# Reconciled\n# Verified Remote\n',
   )
   await writeFile(join(evidenceDir, 'proof.md'), '# Baseline 20240101000000\n')
   for (const [file, contents] of additionalFiles) {
@@ -397,6 +479,66 @@ test('rejects an evidence file reached through a junction ancestor', async (t) =
   }, manifestWithVerifiedEvidence(evidence))
 })
 
+test('rejects a generic non-name Windows reparse evidence file', async (t) => {
+  if (process.platform !== 'win32') {
+    t.skip('generic Windows reparse fixture requires Windows')
+    return
+  }
+  const evidence = 'docs/evidence/generic-reparse.md'
+
+  await withFixture(async (rootDir) => {
+    const evidenceFile = join(rootDir, 'docs', 'evidence', 'generic-reparse.md')
+    await writeFile(evidenceFile, '# Verified\n')
+    try {
+      await createGenericReparsePoint(evidenceFile)
+    } catch {
+      t.skip('generic Windows reparse fixture unavailable on this host')
+      return
+    }
+
+    try {
+      await assert.rejects(
+        () => loadAndValidateManifest({ rootDir }),
+        (error) => error.message === 'evidencia de release inválida',
+      )
+    } finally {
+      await clearGenericReparsePoint(evidenceFile)
+    }
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('the Windows attribute guard rejects a generic reparse point and accepts a regular file', async (t) => {
+  if (process.platform !== 'win32') {
+    t.skip('Windows attribute guard requires Windows')
+    return
+  }
+  const rootDir = await mkdtemp(join(tmpdir(), 'crimson-reparse-guard-'))
+  const regularFile = join(rootDir, 'regular.md')
+  const reparseFile = join(rootDir, 'generic.md')
+  await writeFile(regularFile, '# Regular\n')
+  await writeFile(reparseFile, '# Generic\n')
+
+  try {
+    const safeResult = await queryWindowsReparsePoints([regularFile])
+    assert.equal(safeResult.stdout, 'SAFE')
+    assert.equal(safeResult.stderr, '')
+
+    try {
+      await createGenericReparsePoint(reparseFile)
+    } catch {
+      t.skip('generic Windows reparse fixture unavailable on this host')
+      return
+    }
+    try {
+      await assert.rejects(() => queryWindowsReparsePoints([regularFile, reparseFile]))
+    } finally {
+      await clearGenericReparsePoint(reparseFile)
+    }
+  } finally {
+    await rm(rootDir, { force: true, recursive: true })
+  }
+})
+
 test('rejects a safe anchor that is absent from the evidence Markdown', async () => {
   const evidence = 'docs/evidence/fixture-proof.md#missing-anchor'
 
@@ -423,12 +565,95 @@ test('resolves deterministic duplicate ATX heading slugs', async () => {
   }, manifestWithVerifiedEvidence(evidence))
 })
 
-test('accepts a safe explicit Markdown evidence anchor', async () => {
+test('accepts a strict ATX Markdown evidence heading', async () => {
   const evidence = 'docs/evidence/fixture-proof.md#verified'
 
   await withFixture(async (rootDir) => {
     const manifest = await loadAndValidateManifest({ rootDir })
     assert.equal(manifest.entries[0].releaseProof.evidence, evidence)
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('rejects an ATX evidence heading hidden inside a Markdown comment', async () => {
+  const evidence = 'docs/evidence/commented-anchor.md#verified'
+
+  await withFixture(async (rootDir) => {
+    await writeFile(
+      join(rootDir, 'docs', 'evidence', 'commented-anchor.md'),
+      '<!--\n# Verified\n-->\n',
+    )
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    )
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('rejects an ATX evidence heading hidden inside a raw HTML block', async () => {
+  const evidence = 'docs/evidence/raw-html-anchor.md#verified'
+
+  await withFixture(async (rootDir) => {
+    await writeFile(
+      join(rootDir, 'docs', 'evidence', 'raw-html-anchor.md'),
+      '<script type="text/plain">\n# Verified\n</script>\n',
+    )
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    )
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('rejects ATX evidence headings inside processing, declaration, and CDATA blocks', async () => {
+  const cases = [
+    ['processing.md', '<?proof\n# Verified\n?>\n'],
+    ['declaration.md', '<!PROOF\n# Verified\n>\n'],
+    ['cdata.md', '<![CDATA[\n# Verified\n]]>\n'],
+  ]
+
+  for (const [file, markdown] of cases) {
+    const evidence = `docs/evidence/${file}#verified`
+    await withFixture(async (rootDir) => {
+      await writeFile(join(rootDir, 'docs', 'evidence', file), markdown)
+      await assert.rejects(
+        () => loadAndValidateManifest({ rootDir }),
+        (error) => error.message === 'evidencia de release inválida',
+      )
+    }, manifestWithVerifiedEvidence(evidence))
+  }
+})
+
+test('rejects duplicate explicit HTML anchors instead of treating them as unique evidence', async () => {
+  const evidence = 'docs/evidence/duplicate-explicit.md#verified'
+
+  await withFixture(async (rootDir) => {
+    await writeFile(
+      join(rootDir, 'docs', 'evidence', 'duplicate-explicit.md'),
+      '<a id="verified"></a>\n<a id="verified"></a>\n',
+    )
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    )
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('does not let an explicit HTML ID claim a heading collision suffix', async () => {
+  const evidence = 'docs/evidence/html-heading-collision.md#proof-1'
+
+  await withFixture(async (rootDir) => {
+    await writeFile(
+      join(rootDir, 'docs', 'evidence', 'html-heading-collision.md'),
+      '<a id="proof-1"></a>\n# Proof\n',
+    )
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    )
   }, manifestWithVerifiedEvidence(evidence))
 })
 

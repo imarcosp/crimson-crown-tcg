@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
+import { execFile } from 'node:child_process'
 import { lstat, readFile, readdir, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
-import { TextDecoder } from 'node:util'
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { promisify, TextDecoder } from 'node:util'
 
 const productionProjectRef = 'djfqozfaqkqdoqeoqbzt'
 const manifestRelativePath = join('scripts', 'release', 'migration-manifest.json')
@@ -13,11 +15,16 @@ const sha256Pattern = /^[a-f0-9]{64}$/
 const versionPattern = /^\d{8,}$/
 const evidenceSegmentPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const evidenceAnchorPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
-const explicitMarkdownAnchorPattern = /^[ ]{0,3}<a id="([A-Za-z0-9][A-Za-z0-9._:-]*)"><\/a>[ \t]*$/
 const atxHeadingPattern = /^[ ]{0,3}#{1,6}(?:[ \t]+|$)(.*)$/
 const simpleHeadingTextPattern = /^[A-Za-z0-9 _-]+$/
+const rawHtmlOpeningPattern = /^[ ]{0,3}<([A-Za-z][A-Za-z0-9-]*)(?:[ \t][^<>]*)?>[ \t]*$/
+const rawHtmlClosingPattern = /^[ ]{0,3}<\/([A-Za-z][A-Za-z0-9-]*)>[ \t]*$/
+const voidHtmlTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'])
 const controlCharacterPattern = /[\u0000-\u001f\u007f-\u009f]/
 const markdownDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+const execFileAsync = promisify(execFile)
+const releaseScriptDir = dirname(fileURLToPath(import.meta.url))
+const windowsReparseGuardScript = join(releaseScriptDir, 'query-windows-reparse-points.ps1')
 
 function fail(message) {
   throw new Error(message)
@@ -136,10 +143,28 @@ function githubStyleHeadingSlug(headingText) {
   return headingText.trim().toLowerCase().replace(/ +/g, '-') || null
 }
 
+function opaqueHtmlBlockDescriptor(line) {
+  const content = line.replace(/^[ ]{0,3}/, '')
+  const forms = [
+    { opening: '<?', closing: '?>' },
+    { opening: '<![CDATA[', closing: ']]>' },
+  ]
+  if (/^<![A-Z]/.test(content)) forms.push({ opening: '<!', closing: '>' })
+
+  const form = forms.find(({ opening }) => content.startsWith(opening))
+  if (!form) return null
+  return {
+    closed: content.slice(form.opening.length).includes(form.closing),
+    closing: form.closing,
+  }
+}
+
 function collectMarkdownAnchors(markdown) {
   const anchors = new Set()
-  const usedHeadingSlugs = new Set()
   let openFence = null
+  let openHtmlComment = false
+  let opaqueHtmlEnd = null
+  let rawHtmlBlock = null
 
   for (const line of markdown.split(/\r\n|\n|\r/)) {
     const fence = fenceDescriptor(line)
@@ -159,11 +184,42 @@ function collectMarkdownAnchors(markdown) {
       continue
     }
 
-    const explicitAnchor = line.match(explicitMarkdownAnchorPattern)
-    if (explicitAnchor) {
-      anchors.add(explicitAnchor[1])
+    if (openHtmlComment) {
+      if (line.includes('-->')) openHtmlComment = false
       continue
     }
+    const htmlCommentStart = line.indexOf('<!--')
+    if (htmlCommentStart !== -1) {
+      if (line.indexOf('-->', htmlCommentStart + 4) === -1) openHtmlComment = true
+      continue
+    }
+
+    if (opaqueHtmlEnd) {
+      if (line.includes(opaqueHtmlEnd)) opaqueHtmlEnd = null
+      continue
+    }
+    const opaqueHtmlBlock = opaqueHtmlBlockDescriptor(line)
+    if (opaqueHtmlBlock) {
+      if (!opaqueHtmlBlock.closed) opaqueHtmlEnd = opaqueHtmlBlock.closing
+      continue
+    }
+
+    const rawHtmlOpening = line.match(rawHtmlOpeningPattern)
+    const rawHtmlClosing = line.match(rawHtmlClosingPattern)
+    if (rawHtmlBlock) {
+      if (rawHtmlOpening?.[1].toLowerCase() === rawHtmlBlock.tag) rawHtmlBlock.depth += 1
+      if (rawHtmlClosing?.[1].toLowerCase() === rawHtmlBlock.tag) rawHtmlBlock.depth -= 1
+      if (rawHtmlBlock.depth === 0) rawHtmlBlock = null
+      continue
+    }
+    if (rawHtmlOpening) {
+      const tag = rawHtmlOpening[1].toLowerCase()
+      if (!voidHtmlTags.has(tag) && !line.trimEnd().endsWith('/>')) {
+        rawHtmlBlock = { depth: 1, tag }
+      }
+      continue
+    }
+    if (rawHtmlClosing) continue
 
     const atxHeading = line.match(atxHeadingPattern)
     if (!atxHeading) continue
@@ -173,21 +229,44 @@ function collectMarkdownAnchors(markdown) {
 
     let headingSlug = baseSlug
     let suffix = 0
-    while (usedHeadingSlugs.has(headingSlug)) {
+    while (anchors.has(headingSlug)) {
       suffix += 1
       headingSlug = `${baseSlug}-${suffix}`
     }
-    usedHeadingSlugs.add(headingSlug)
     anchors.add(headingSlug)
   }
 
   return anchors
 }
 
+async function assertNoWindowsReparsePoints(paths) {
+  if (process.platform !== 'win32') return
+  const systemRoot = process.env.SystemRoot
+  if (typeof systemRoot !== 'string' || !isAbsolute(systemRoot)) {
+    fail('evidencia de release inválida')
+  }
+
+  const powershell = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+  const { stdout, stderr } = await execFileAsync(
+    powershell,
+    ['-NoProfile', '-NonInteractive', '-File', windowsReparseGuardScript, ...paths],
+    { encoding: 'utf8', maxBuffer: 16 * 1024, timeout: 15_000, windowsHide: true },
+  )
+  if (stdout !== 'SAFE' || stderr !== '') fail('evidencia de release inválida')
+}
+
 async function readNonReparseEvidenceFileIdentity(path) {
   const absolutePath = resolve(path)
   const { root } = parse(absolutePath)
   const components = relative(root, absolutePath).split(sep).filter(Boolean)
+  const componentPaths = []
+  let componentPath = root
+  for (const component of components) {
+    componentPath = join(componentPath, component)
+    componentPaths.push(componentPath)
+  }
+  await assertNoWindowsReparsePoints(componentPaths)
+
   let currentPath = root
   let currentIdentity = null
 

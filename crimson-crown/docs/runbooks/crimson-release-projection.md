@@ -9,12 +9,11 @@ This runbook is a fail-closed review gate for the Crimson production Supabase pr
 - Complete and review the independent proof for every historical exclusion before invoking the real linked wrapper. Until then, the checked-in manifest intentionally keeps all historical proofs at `candidate` and blocks projection creation.
 - Use the repository-local Supabase CLI pinned exactly to `2.113.0`. `npm run release:dry-run` resolves `node_modules/.bin/supabase.cmd` as a literal file; `-SupabaseCli` exists only for an explicit executable file, including the offline test double, and never bypasses the exact version check.
 
-Evidence references are resolved physically below `docs/evidence/`. Every lexical path component must be a non-reparse directory, the final component must be a non-reparse regular file, and aliases, junctions, symbolic links, traversal and missing paths are rejected. An optional `#anchor` is accepted only when the referenced Markdown contains one of these deterministic forms:
+Evidence references are resolved physically below `docs/evidence/`. Every lexical path component must be a non-reparse directory, the final component must be a non-reparse regular file, and aliases, junctions, symbolic links, traversal and missing paths are rejected. On Windows, every component is also checked for the generic `FILE_ATTRIBUTE_REPARSE_POINT` attribute through a literal-path PowerShell helper invoked without a shell. An optional `#anchor` is accepted only when the referenced Markdown contains this deterministic form:
 
-- an entire line `<a id="safe-anchor"></a>`, with up to three leading spaces and an ID matching `[A-Za-z0-9][A-Za-z0-9._:-]*`;
 - an ATX heading of levels 1–6 whose text contains only ASCII letters, digits, spaces, `_` and `-`. Its base slug lowercases the text and replaces each run of spaces with `-`; if that slug is already used, the first unused `-1`, `-2` and so on is appended.
 
-Fenced code blocks are ignored. Setext headings, inline Markdown-derived labels and other HTML anchor forms are intentionally unsupported; use the explicit anchor form when a heading needs richer text.
+Fenced code blocks, HTML comments and raw HTML blocks are ignored. Explicit HTML anchors, Setext headings and inline Markdown-derived labels are intentionally unsupported. Raw HTML covers strict standalone opening/closing tag lines with same-tag depth, processing instructions, declarations and CDATA blocks; headings that need richer text must be replaced by a separate supported ATX evidence heading.
 
 Run only after the prerequisites are satisfied:
 
