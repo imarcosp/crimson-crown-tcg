@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import test from 'node:test'
@@ -298,6 +298,111 @@ test('requires an existing immediate parent for the output reservation', async (
       () => buildProjection({ rootDir, outputDir: join(outputParent, 'missing-parent', 'projection') }),
       /directorio padre de proyección no disponible/,
     )
+  })
+})
+
+test('fails closed when the physical parent is swapped before the reservation revalidation', async () => {
+  await withFixture(async ({ rootDir, outputDir, outputParent }) => {
+    const originalParent = `${outputParent}-original`
+    try {
+      await assert.rejects(
+        () => buildProjection({
+          rootDir,
+          outputDir,
+          _testHooks: {
+            beforeParentReservationRevalidation: async () => {
+              await rename(outputParent, originalParent)
+              await mkdir(outputParent)
+            },
+          },
+        }),
+        (error) => error.message === 'identidad del directorio de proyección inválida',
+      )
+      assert.deepEqual(await readdir(outputParent), [])
+    } finally {
+      await rm(originalParent, { recursive: true, force: true })
+    }
+  })
+})
+
+test('fails closed after a parent junction swap before the final reservation check', async (t) => {
+  await withFixture(async ({ rootDir, outputDir, outputParent }) => {
+    const outsideTarget = await mkdtemp(join(tmpdir(), 'crimson-release-projection-outside-'))
+    const outsideSentinel = join(outsideTarget, 'must-survive.txt')
+    const junctionProbe = join(outputParent, 'junction-probe')
+    const originalParent = `${outputParent}-original`
+    await writeFile(outsideSentinel, 'preserve\n')
+
+    try {
+      try {
+        await symlink(outsideTarget, junctionProbe, 'junction')
+        await rm(junctionProbe)
+      } catch (error) {
+        t.skip(`junction unavailable on this host: ${error.code ?? 'unknown error'}`)
+        return
+      }
+
+      await assert.rejects(
+        () => buildProjection({
+          rootDir,
+          outputDir,
+          _testHooks: {
+            beforeParentReservationRevalidation: async () => {
+              await rename(outputParent, originalParent)
+              await symlink(outsideTarget, outputParent, 'junction')
+            },
+          },
+        }),
+        (error) => error.message === 'identidad del directorio de proyección inválida',
+      )
+      assert.equal(await readFile(outsideSentinel, 'utf8'), 'preserve\n')
+      assert.deepEqual(await readdir(outsideTarget), ['must-survive.txt'])
+    } finally {
+      await rm(outputParent, { force: true })
+      await mkdir(outputParent)
+      await rm(originalParent, { recursive: true, force: true })
+      await rm(outsideTarget, { recursive: true, force: true })
+    }
+  })
+})
+
+test('fails closed when the reserved output is replaced by a junction before identity verification', async (t) => {
+  await withFixture(async ({ rootDir, outputDir, outputParent }) => {
+    const outsideTarget = await mkdtemp(join(tmpdir(), 'crimson-release-projection-outside-'))
+    const outsideSentinel = join(outsideTarget, 'must-survive.txt')
+    const originalReservation = join(outputParent, 'original-reservation')
+    const junctionProbe = join(outputParent, 'junction-probe')
+    await writeFile(outsideSentinel, 'preserve\n')
+
+    try {
+      try {
+        await symlink(outsideTarget, junctionProbe, 'junction')
+        await rm(junctionProbe)
+      } catch (error) {
+        t.skip(`junction unavailable on this host: ${error.code ?? 'unknown error'}`)
+        return
+      }
+
+      await assert.rejects(
+        () => buildProjection({
+          rootDir,
+          outputDir,
+          _testHooks: {
+            afterOutputReservation: async () => {
+              await rename(outputDir, originalReservation)
+              await symlink(outsideTarget, outputDir, 'junction')
+            },
+          },
+        }),
+        (error) => error.message === 'identidad del directorio de proyección inválida',
+      )
+      assert.equal(await readFile(outsideSentinel, 'utf8'), 'preserve\n')
+      assert.deepEqual(await readdir(outsideTarget), ['must-survive.txt'])
+      assert.deepEqual(await readdir(originalReservation), [])
+    } finally {
+      await rm(outputDir, { force: true })
+      await rm(outsideTarget, { recursive: true, force: true })
+    }
   })
 })
 

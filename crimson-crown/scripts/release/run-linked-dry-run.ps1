@@ -14,6 +14,7 @@ $ProductionProjectRef = 'djfqozfaqkqdoqeoqbzt'
 $RequiredSupabaseCliVersion = '2.113.0'
 $RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $TempRoot = $null
+$TempRootUseLock = $null
 $DirectorySeparators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 $TempBaseFull = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $TempBase = $TempBaseFull.TrimEnd($DirectorySeparators)
@@ -117,6 +118,44 @@ public sealed class CrimsonDirectoryIdentityLock : IDisposable
         return new CrimsonDirectoryIdentityLock(handle, information);
     }
 
+    public bool MatchesPath(string path)
+    {
+        SafeFileHandle pathHandle = CreateFileW(
+            path,
+            FileReadAttributes,
+            FileShareRead | FileShareWrite | 0x00000004,
+            IntPtr.Zero,
+            OpenExisting,
+            FileFlagBackupSemantics | FileFlagOpenReparsePoint,
+            IntPtr.Zero);
+        if (pathHandle.IsInvalid)
+        {
+            pathHandle.Dispose();
+            return false;
+        }
+
+        try
+        {
+            ByHandleFileInformation information;
+            if (!GetFileInformationByHandle(pathHandle, out information))
+            {
+                return false;
+            }
+            if (
+                (information.FileAttributes & FileAttributeDirectory) == 0 ||
+                (information.FileAttributes & FileAttributeReparsePoint) != 0)
+            {
+                return false;
+            }
+            ulong fileIndex = ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow;
+            return information.VolumeSerialNumber == VolumeSerialNumber && fileIndex == FileIndex;
+        }
+        finally
+        {
+            pathHandle.Dispose();
+        }
+    }
+
     public void Dispose()
     {
         if (handle != null)
@@ -158,6 +197,26 @@ function Open-SafeTempBaseLock {
     throw 'La base temporal no es un directorio físico seguro.'
   }
   return $TempBaseLock
+}
+
+function Assert-TempRootUseIdentity {
+  param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('projection-build', 'link', 'linked-ref-read', 'migration-list', 'dry-run', 'cleanup')]
+    [string]$Phase
+  )
+
+  if ($null -eq $TempRootUseLock -or $null -eq $TempRoot) {
+    throw 'La identidad del directorio temporal no está disponible.'
+  }
+  try {
+    $Matches = $TempRootUseLock.MatchesPath($TempRoot)
+  } catch {
+    throw 'No se pudo revalidar la identidad del directorio temporal.'
+  }
+  if (-not $Matches) {
+    throw 'La identidad del directorio temporal cambió.'
+  }
 }
 
 function Remove-ExactTree {
@@ -471,6 +530,12 @@ try {
   $CreationBaseLock = Open-SafeTempBaseLock
   try {
     New-Item -ItemType Directory -Path $TempRoot -ErrorAction Stop | Out-Null
+    $TempRootUseLock = Open-DirectoryIdentityLock -LiteralPath $TempRoot
+    if ($TempRootUseLock.IsReparsePoint) {
+      $TempRootUseLock.Dispose()
+      $TempRootUseLock = $null
+      throw 'El directorio temporal no es un directorio físico seguro.'
+    }
   } finally {
     $CreationBaseLock.Dispose()
   }
@@ -486,6 +551,7 @@ const { buildProjection } = await import(modulePath.href);
 const summary = await buildProjection({ rootDir, outputDir });
 process.stdout.write(JSON.stringify(summary));
 '@
+  Assert-TempRootUseIdentity -Phase 'projection-build'
   $ProjectionOutput = @(& $NodeExecutable --input-type=module -e $ProjectionBuilder $RepositoryRoot $Projection 2>&1)
   if ($LASTEXITCODE -ne 0) {
     throw 'La proyección de release fue rechazada.'
@@ -548,11 +614,13 @@ process.stdout.write(JSON.stringify(summary));
     throw 'Summary de proyección inválido.'
   }
 
+  Assert-TempRootUseIdentity -Phase 'link'
   $LinkOutput = Invoke-Supabase -Executable $ResolvedSupabaseCli -Arguments @(
     '--workdir', $Projection, 'link', '--project-ref', $ProductionProjectRef
   ) -FailureMessage 'Supabase link falló.'
 
   $LinkedRefPath = Join-Path $Projection 'supabase\.temp\project-ref'
+  Assert-TempRootUseIdentity -Phase 'linked-ref-read'
   try {
     $LinkedRef = (Get-Content -Raw -LiteralPath $LinkedRefPath).Trim()
   } catch {
@@ -562,6 +630,7 @@ process.stdout.write(JSON.stringify(summary));
     throw 'La referencia enlazada no pertenece a Crimson producción.'
   }
 
+  Assert-TempRootUseIdentity -Phase 'migration-list'
   $MigrationOutput = Invoke-Supabase -Executable $ResolvedSupabaseCli -Arguments @(
     '--workdir', $Projection, 'migration', 'list', '--linked'
   ) -FailureMessage 'Supabase migration list falló.'
@@ -571,6 +640,7 @@ process.stdout.write(JSON.stringify(summary));
     -RemoteVersions $ProjectedRemoteVersions `
     -ForwardVersions $ForwardPendingVersions
 
+  Assert-TempRootUseIdentity -Phase 'dry-run'
   $PushOutput = Invoke-Supabase -Executable $ResolvedSupabaseCli -Arguments @(
     '--workdir', $Projection, 'db', 'push', '--linked', '--dry-run'
   ) -FailureMessage 'Supabase db push dry-run falló.'
@@ -599,8 +669,20 @@ process.stdout.write(JSON.stringify(summary));
       ) {
         throw 'Destino temporal de cleanup rechazado.'
       }
+      if ($null -ne $TempRootUseLock) {
+        try {
+          Assert-TempRootUseIdentity -Phase 'cleanup'
+        } finally {
+          $TempRootUseLock.Dispose()
+          $TempRootUseLock = $null
+        }
+      }
       Remove-ExactTree -LiteralPath $CleanupTarget
     } finally {
+      if ($null -ne $TempRootUseLock) {
+        $TempRootUseLock.Dispose()
+        $TempRootUseLock = $null
+      }
       $CleanupBaseLock.Dispose()
     }
   }

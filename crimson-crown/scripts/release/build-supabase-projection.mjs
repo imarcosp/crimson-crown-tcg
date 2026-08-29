@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import { getMigrationManifestPaths, loadAndValidateManifest } from './migration-manifest.mjs'
@@ -64,6 +64,7 @@ async function resolvePhysicalPaths({ rootDir, outputDir }) {
   const absoluteOutput = resolve(outputDir)
   let physicalRoot
   let physicalParent
+  let physicalParentIdentity
 
   try {
     physicalRoot = await realpath(absoluteRoot)
@@ -72,7 +73,10 @@ async function resolvePhysicalPaths({ rootDir, outputDir }) {
   }
   try {
     physicalParent = await realpath(dirname(absoluteOutput))
+    physicalParentIdentity = await stat(physicalParent, { bigint: true })
+    if (!physicalParentIdentity.isDirectory()) fail('directorio padre de proyección no disponible')
   } catch (error) {
+    if (error?.message === 'directorio padre de proyección no disponible') throw error
     fail('directorio padre de proyección no disponible')
   }
 
@@ -99,7 +103,54 @@ async function resolvePhysicalPaths({ rootDir, outputDir }) {
     fail('directorio de proyección dentro del repositorio no permitido')
   }
 
-  return { physicalRoot, physicalOutput }
+  return { absoluteOutput, physicalParent, physicalParentIdentity, physicalRoot, physicalOutput }
+}
+
+function hasSameIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino
+}
+
+async function readPhysicalParentIdentity(absoluteOutput) {
+  try {
+    const path = await realpath(dirname(absoluteOutput))
+    const identity = await stat(path, { bigint: true })
+    if (!identity.isDirectory()) fail('identidad del directorio de proyección inválida')
+    return { identity, path }
+  } catch (error) {
+    if (error?.message === 'identidad del directorio de proyección inválida') throw error
+    fail('identidad del directorio de proyección inválida')
+  }
+}
+
+async function verifyReservedOutputIdentity({ absoluteOutput, physicalOutput, physicalParent, physicalParentIdentity }) {
+  const currentParent = await readPhysicalParentIdentity(absoluteOutput)
+  if (!isSamePath(currentParent.path, physicalParent) || !hasSameIdentity(currentParent.identity, physicalParentIdentity)) {
+    fail('identidad del directorio de proyección inválida')
+  }
+
+  try {
+    const lexicalIdentity = await lstat(physicalOutput, { bigint: true })
+    if (!lexicalIdentity.isDirectory() || lexicalIdentity.isSymbolicLink()) {
+      fail('identidad del directorio de proyección inválida')
+    }
+    const resolvedOutput = await realpath(physicalOutput)
+    const physicalIdentity = await stat(resolvedOutput, { bigint: true })
+    if (
+      !physicalIdentity.isDirectory()
+      || !isSamePath(dirname(resolvedOutput), physicalParent)
+      || !hasSameIdentity(lexicalIdentity, physicalIdentity)
+    ) {
+      fail('identidad del directorio de proyección inválida')
+    }
+  } catch (error) {
+    if (error?.message === 'identidad del directorio de proyección inválida') throw error
+    fail('identidad del directorio de proyección inválida')
+  }
+}
+
+async function runTestHook(testHooks, name) {
+  const hook = testHooks?.[name]
+  if (hook !== undefined) await hook()
 }
 
 async function reserveOutputDirectory(outputDir) {
@@ -165,8 +216,14 @@ function buildProjectionSummary(entries) {
   })
 }
 
-export async function buildProjection({ rootDir, outputDir, allowCandidates = false }) {
-  const { physicalRoot, physicalOutput } = await resolvePhysicalPaths({ rootDir, outputDir })
+export async function buildProjection({ rootDir, outputDir, allowCandidates = false, _testHooks }) {
+  const {
+    absoluteOutput,
+    physicalParent,
+    physicalParentIdentity,
+    physicalRoot,
+    physicalOutput,
+  } = await resolvePhysicalPaths({ rootDir, outputDir })
   const { migrationsPath } = getMigrationManifestPaths({ rootDir: physicalRoot })
 
   const manifest = await loadAndValidateManifest({ rootDir: physicalRoot, allowCandidates })
@@ -180,7 +237,14 @@ export async function buildProjection({ rootDir, outputDir, allowCandidates = fa
     fail('no se pudo preparar la configuración de Supabase')
   }
 
+  await runTestHook(_testHooks, 'beforeParentReservationRevalidation')
+  const currentParent = await readPhysicalParentIdentity(absoluteOutput)
+  if (!isSamePath(currentParent.path, physicalParent) || !hasSameIdentity(currentParent.identity, physicalParentIdentity)) {
+    fail('identidad del directorio de proyección inválida')
+  }
   await reserveOutputDirectory(physicalOutput)
+  await runTestHook(_testHooks, 'afterOutputReservation')
+  await verifyReservedOutputIdentity({ absoluteOutput, physicalOutput, physicalParent, physicalParentIdentity })
 
   const projectedSupabasePath = join(physicalOutput, 'supabase')
   const projectedMigrationsPath = join(projectedSupabasePath, 'migrations')

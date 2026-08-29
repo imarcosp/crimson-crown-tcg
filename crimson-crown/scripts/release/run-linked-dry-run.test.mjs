@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { execFile, spawn } from 'node:child_process'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import test from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 
@@ -77,6 +78,15 @@ $command = $cliArgs[$workdirIndex + 2]
 
 if ($command -eq 'link') {
   if ($env:FAKE_SUPABASE_MODE -eq 'link-fail') { exit 41 }
+  if ($env:FAKE_SUPABASE_MODE -eq 'use-lock-attack') {
+    $tempRoot = Split-Path -Parent $workdir
+    Set-Content -NoNewline -LiteralPath $env:FAKE_USE_LOCK_READY -Value $tempRoot
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while (-not (Test-Path -LiteralPath $env:FAKE_USE_LOCK_DONE)) {
+      if ([DateTime]::UtcNow -ge $deadline) { exit 46 }
+      Start-Sleep -Milliseconds 5
+    }
+  }
   if ($env:FAKE_SUPABASE_MODE -ne 'missing-ref') {
     $metadata = Join-Path $workdir 'supabase/.temp'
     New-Item -ItemType Directory -Force -Path $metadata | Out-Null
@@ -380,6 +390,7 @@ async function git(rootDir, args) {
 async function makeFixture({
   candidate = false,
   dirty = false,
+  forceIdentityFailureBeforeLink = false,
   mutateManifestAfterBuild = false,
   projectionSummaryOverride,
   zeroForward = false,
@@ -404,6 +415,8 @@ async function makeFixture({
   const tempBaseJunction = join(fixtureParent, 'temp-base-junction')
   const tempBaseSentinel = join(tempBaseTarget, 'must-survive.txt')
   const raceReady = join(fixtureParent, 'race-ready.txt')
+  const useLockReady = join(fixtureParent, 'use-lock-ready.txt')
+  const useLockDone = join(fixtureParent, 'use-lock-done.txt')
   const manifest = verifiedManifest({ zeroForward })
 
   if (candidate) {
@@ -417,7 +430,17 @@ async function makeFixture({
   await mkdir(tempBase)
   await mkdir(junctionTarget)
   await mkdir(tempBaseTarget)
-  await cp(sourceWrapper, join(releaseDir, 'run-linked-dry-run.ps1'))
+  const fixtureWrapper = join(releaseDir, 'run-linked-dry-run.ps1')
+  await cp(sourceWrapper, fixtureWrapper)
+  if (forceIdentityFailureBeforeLink) {
+    const wrapperSource = await readFile(fixtureWrapper, 'utf8')
+    const identityGate = "Assert-TempRootUseIdentity -Phase 'link'\n  $LinkOutput"
+    assert.equal(wrapperSource.includes(identityGate), true)
+    await writeFile(
+      fixtureWrapper,
+      wrapperSource.replace(identityGate, "throw 'Fallo de identidad temporal simulado.'\n  $LinkOutput"),
+    )
+  }
   if (mutateManifestAfterBuild || projectionSummaryOverride !== undefined) {
     await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection-real.mjs'))
     await writeFile(
@@ -464,6 +487,8 @@ async function makeFixture({
     tempBaseJunction,
     tempBaseSentinel,
     raceReady,
+    useLockReady,
+    useLockDone,
     cleanupAttacker,
     zeroForward,
   }
@@ -498,6 +523,8 @@ function runWrapper(fixture, mode = 'success', {
         FAKE_ZERO_FORWARD: fixture.zeroForward ? '1' : '0',
         FAKE_JUNCTION_TARGET: fixture.junctionTarget,
         FAKE_RACE_READY: fixture.raceReady,
+        FAKE_USE_LOCK_READY: fixture.useLockReady,
+        FAKE_USE_LOCK_DONE: fixture.useLockDone,
       },
       windowsHide: true,
     },
@@ -513,6 +540,61 @@ function runWrapper(fixture, mode = 'success', {
     child.once('error', reject)
     child.once('close', (code) => resolvePromise({ code, stdout, stderr }))
   })
+}
+
+async function runUseLockAttacker(fixture) {
+  const deadline = Date.now() + 30_000
+  let tempRoot
+  while (Date.now() < deadline) {
+    try {
+      tempRoot = (await readFile(fixture.useLockReady, 'utf8')).trim()
+      break
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
+    await delay(5)
+  }
+  if (!tempRoot) {
+    return { reachedActiveWindow: false, moveSucceeded: false, junctionAttempted: false }
+  }
+
+  const backup = `${tempRoot}-attacker-backup`
+  let moveSucceeded = false
+  let moveErrorCode = null
+  let junctionAttempted = false
+  let junctionCreated = false
+  try {
+    await rename(tempRoot, backup)
+    moveSucceeded = true
+  } catch (error) {
+    moveErrorCode = error.code ?? null
+  }
+  if (moveSucceeded) {
+    junctionAttempted = true
+    try {
+      await symlink(fixture.junctionTarget, tempRoot, 'junction')
+      junctionCreated = true
+    } catch {}
+  }
+
+  let pathExistsAfter = false
+  let isReparseAfter = null
+  try {
+    const state = await lstat(tempRoot)
+    pathExistsAfter = true
+    isReparseAfter = state.isSymbolicLink()
+  } catch {}
+  await writeFile(fixture.useLockDone, 'done\n')
+
+  return {
+    reachedActiveWindow: true,
+    moveSucceeded,
+    moveErrorCode,
+    junctionAttempted,
+    junctionCreated,
+    pathExistsAfter,
+    isReparseAfter,
+  }
 }
 
 async function readCalls(logPath) {
@@ -869,7 +951,7 @@ test('rejects a local-only migration-list row when zero forwards are approved', 
   })
 })
 
-test('removes a substituted temporary-root junction without traversing its external target', async (t) => {
+test('fails closed on a substituted temporary-root junction without traversing its external target', async (t) => {
   await withFixture({}, async (fixture) => {
     const junctionProbe = join(fixture.fixtureParent, 'junction-probe')
     try {
@@ -881,11 +963,15 @@ test('removes a substituted temporary-root junction without traversing its exter
     }
 
     const result = await runWrapper(fixture, 'root-junction-after-push')
+    const calls = await readCalls(fixture.logPath)
 
-    assert.equal(result.code, 0, result.stderr)
+    assert.notEqual(result.code, 0)
+    assert.equal(result.stdout, '')
+    assert.equal(calls.length, 4)
+    assert.equal(calls[3].at(-1), '--dry-run')
     assert.equal(await readFile(fixture.junctionSentinel, 'utf8'), 'external preserve\n')
     assert.deepEqual(await readdir(fixture.junctionTarget), ['must-survive.txt'])
-    await assertExactCleanup(fixture)
+    assert.equal(await readFile(fixture.sentinel, 'utf8'), 'preserve\n')
   })
 })
 
@@ -1010,6 +1096,39 @@ test('holds directory identities while a concurrent attacker attempts cleanup su
   })
 })
 
+test('holds the exact temporary-root identity throughout projection use and rejects an active rename/junction attack', async () => {
+  await withFixture({}, async (fixture) => {
+    const [result, attackResult] = await Promise.all([
+      runWrapper(fixture, 'use-lock-attack'),
+      runUseLockAttacker(fixture),
+    ])
+    const calls = await readCalls(fixture.logPath)
+
+    assert.equal(attackResult.reachedActiveWindow, true, JSON.stringify(attackResult))
+    assert.equal(attackResult.moveSucceeded, false, JSON.stringify(attackResult))
+    assert.ok(['EPERM', 'EACCES', 'EBUSY'].includes(attackResult.moveErrorCode), JSON.stringify(attackResult))
+    assert.equal(attackResult.junctionAttempted, false, JSON.stringify(attackResult))
+    assert.equal(attackResult.junctionCreated, false, JSON.stringify(attackResult))
+    assert.equal(attackResult.pathExistsAfter, true, JSON.stringify(attackResult))
+    assert.equal(attackResult.isReparseAfter, false, JSON.stringify(attackResult))
+    assertNormalizedSuccess(result)
+    assert.equal(calls.length, 4)
+    assert.equal(await readFile(fixture.junctionSentinel, 'utf8'), 'external preserve\n')
+    await assertExactCleanup(fixture)
+  })
+})
+
+test('runs no linked command after the pre-link identity gate fails', async () => {
+  await withFixture({ forceIdentityFailureBeforeLink: true }, async (fixture) => {
+    const result = await runWrapper(fixture)
+
+    assert.notEqual(result.code, 0)
+    assert.equal(result.stdout, '')
+    assert.deepEqual(await readCalls(fixture.logPath), [['--version']])
+    await assertExactCleanup(fixture)
+  })
+})
+
 for (const failure of [
   { mode: 'link-fail', expectedCalls: 2 },
   { mode: 'list-fail', expectedCalls: 3 },
@@ -1034,6 +1153,24 @@ test('contains no repair, dry-run bypass, or recursive Remove-Item shortcut', as
   assert.doesNotMatch(source, /migration\s+repair/i)
   assert.doesNotMatch(source, /\[switch\][^\r\n]*(?:dry.?run|push|live|apply)/i)
   assert.doesNotMatch(source, /Remove-Item[^\r\n]*-Recurse/i)
+})
+
+test('opens the use lock under the creation-base lock and revalidates identity before each sensitive use', async () => {
+  const source = await readFile(sourceWrapper, 'utf8')
+  const creationStart = source.indexOf('$CreationBaseLock = Open-SafeTempBaseLock')
+  const creationEnd = source.indexOf('$CreationBaseLock.Dispose()', creationStart)
+  const useLockOpen = source.indexOf('$TempRootUseLock = Open-DirectoryIdentityLock', creationStart)
+
+  assert.ok(creationStart >= 0)
+  assert.ok(useLockOpen > creationStart && useLockOpen < creationEnd)
+  assert.match(source, /if \(\$TempRootUseLock\.IsReparsePoint\)/)
+  for (const phase of ['projection-build', 'link', 'linked-ref-read', 'migration-list', 'dry-run', 'cleanup']) {
+    assert.match(source, new RegExp(`Assert-TempRootUseIdentity -Phase '${phase}'`))
+  }
+  const cleanupRevalidation = source.indexOf("Assert-TempRootUseIdentity -Phase 'cleanup'")
+  const useLockDispose = source.indexOf('$TempRootUseLock.Dispose()', cleanupRevalidation)
+  const removeTree = source.indexOf('Remove-ExactTree -LiteralPath $CleanupTarget', cleanupRevalidation)
+  assert.ok(cleanupRevalidation >= 0 && useLockDispose > cleanupRevalidation && removeTree > useLockDispose)
 })
 
 test('parses the Win32 identity-lock helper with Windows PowerShell 5.1', async () => {
