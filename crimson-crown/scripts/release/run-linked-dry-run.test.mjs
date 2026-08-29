@@ -115,13 +115,69 @@ const cleanupAttackerSource = String.raw`param(
 )
 $ErrorActionPreference = 'Stop'
 
-function Try-Replacement([string]$Path, [string]$Backup, [string]$Target) {
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class CrimsonCleanupAttackNative
+{
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool MoveFileExW(string existingPath, string newPath, uint flags);
+}
+'@
+
+function Get-PathState([string]$Path) {
   try {
-    Move-Item -LiteralPath $Path -Destination $Backup
-    New-Item -ItemType Junction -Path $Path -Target $Target | Out-Null
-    return 'substituted'
+    $Item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    return @{
+      exists = $true
+      isReparse = (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)
+    }
   } catch {
-    return ("blocked:{0}" -f $_.Exception.GetType().Name)
+    return @{ exists = $false; isReparse = $null }
+  }
+}
+
+function Try-Replacement([string]$Path, [string]$Backup, [string]$Target) {
+  $MoveSucceeded = [CrimsonCleanupAttackNative]::MoveFileExW($Path, $Backup, 0)
+  $Win32Error = if ($MoveSucceeded) { 0 } else { [Runtime.InteropServices.Marshal]::GetLastWin32Error() }
+  $JunctionAttempted = $false
+  $JunctionCreated = $false
+  $JunctionError = $null
+
+  if ($MoveSucceeded) {
+    $JunctionAttempted = $true
+    try {
+      New-Item -ItemType Junction -Path $Path -Target $Target -ErrorAction Stop | Out-Null
+      $JunctionCreated = $true
+    } catch {
+      $JunctionError = $_.Exception.GetType().FullName
+    }
+  }
+
+  $PathState = Get-PathState $Path
+  $LockRejected = ((5, 32) -contains $Win32Error) -and $PathState.exists -and -not $PathState.isReparse
+  $Status = if ($LockRejected) {
+    'lock-rejected'
+  } elseif ($MoveSucceeded -and $JunctionCreated) {
+    'substituted'
+  } elseif ($MoveSucceeded) {
+    'junction-failed'
+  } else {
+    'ambiguous-move-failure'
+  }
+
+  return @{
+    status = $Status
+    replacementAttempted = $true
+    moveSucceeded = $MoveSucceeded
+    win32Error = $Win32Error
+    junctionAttempted = $JunctionAttempted
+    junctionCreated = $JunctionCreated
+    junctionError = $JunctionError
+    pathExistsAfter = $PathState.exists
+    isReparseAfter = $PathState.isReparse
   }
 }
 
@@ -135,22 +191,72 @@ while ([DateTime]::UtcNow -lt $Deadline) {
   Start-Sleep -Milliseconds 5
 }
 if ($null -eq $RaceDirectory) {
-  ConvertTo-Json -Compress @{ subdirectory = 'missed-ready'; tempBase = 'missed-ready' }
+  ConvertTo-Json -Depth 5 -Compress @{
+    observedCleanup = $false
+    attemptedBothDuringCleanup = $false
+    status = 'missed-ready'
+    initialCount = $InitialCount
+    remainingAtObservation = $null
+    remainingAfterAttempts = $null
+    subdirectory = @{ replacementAttempted = $false; status = 'not-attempted' }
+    tempBase = @{ replacementAttempted = $false; status = 'not-attempted' }
+  }
   exit 0
 }
 
+$ObservedCleanup = $false
+$RemainingAtObservation = $null
 while ([DateTime]::UtcNow -lt $Deadline) {
   try {
     $Remaining = @(Get-ChildItem -LiteralPath $RaceDirectory -Force -ErrorAction Stop).Count
-    if ($Remaining -gt 0 -and $Remaining -lt $InitialCount) { break }
+    if ($Remaining -gt 0 -and $Remaining -lt $InitialCount) {
+      $ObservedCleanup = $true
+      $RemainingAtObservation = $Remaining
+      break
+    }
   } catch {}
   Start-Sleep -Milliseconds 1
 }
 
-$SubdirectoryResult = Try-Replacement $RaceDirectory ("{0}-attacker-backup" -f $RaceDirectory) $SubdirectoryTarget
-$TempBaseResult = Try-Replacement $TempBase ("{0}-attacker-backup" -f $TempBase) $TempBaseTarget
+if (-not $ObservedCleanup) {
+  ConvertTo-Json -Depth 5 -Compress @{
+    observedCleanup = $false
+    attemptedBothDuringCleanup = $false
+    status = 'missed-cleanup-window'
+    initialCount = $InitialCount
+    remainingAtObservation = $null
+    remainingAfterAttempts = $null
+    subdirectory = @{ replacementAttempted = $false; status = 'not-attempted' }
+    tempBase = @{ replacementAttempted = $false; status = 'not-attempted' }
+  }
+  exit 0
+}
 
-ConvertTo-Json -Compress @{ subdirectory = $SubdirectoryResult; tempBase = $TempBaseResult }
+$TempBaseResult = Try-Replacement $TempBase ("{0}-attacker-backup" -f $TempBase) $TempBaseTarget
+$SubdirectoryResult = Try-Replacement $RaceDirectory ("{0}-attacker-backup" -f $RaceDirectory) $SubdirectoryTarget
+
+$RemainingAfterAttempts = $null
+try {
+  $RemainingAfterAttempts = @(Get-ChildItem -LiteralPath $RaceDirectory -Force -ErrorAction Stop).Count
+} catch {}
+$AttemptedBothDuringCleanup = (
+  $SubdirectoryResult.replacementAttempted -and
+  $TempBaseResult.replacementAttempted -and
+  $null -ne $RemainingAfterAttempts -and
+  $RemainingAfterAttempts -gt 0 -and
+  $RemainingAfterAttempts -lt $InitialCount
+)
+
+ConvertTo-Json -Depth 5 -Compress @{
+  observedCleanup = $ObservedCleanup
+  attemptedBothDuringCleanup = $AttemptedBothDuringCleanup
+  status = if ($AttemptedBothDuringCleanup) { 'attacks-attempted-during-cleanup' } else { 'cleanup-window-ended-during-attempts' }
+  initialCount = $InitialCount
+  remainingAtObservation = $RemainingAtObservation
+  remainingAfterAttempts = $RemainingAfterAttempts
+  subdirectory = $SubdirectoryResult
+  tempBase = $TempBaseResult
+}
 `
 
 const mutateManifestAfterBuildSource = `import { readFile, writeFile } from 'node:fs/promises'
@@ -359,6 +465,28 @@ function runCleanupAttacker(fixture) {
   })
 }
 
+function assertCleanupAttackEvidence(result, initialCount = 2500) {
+  assert.equal(result.observedCleanup, true, `cleanup was not observed: ${JSON.stringify(result)}`)
+  assert.equal(result.initialCount, initialCount)
+  assert.ok(Number.isInteger(result.remainingAtObservation))
+  assert.ok(result.remainingAtObservation > 0 && result.remainingAtObservation < initialCount)
+  assert.equal(result.attemptedBothDuringCleanup, true, `both attempts were not bracketed by active cleanup: ${JSON.stringify(result)}`)
+  assert.ok(Number.isInteger(result.remainingAfterAttempts))
+  assert.ok(result.remainingAfterAttempts > 0 && result.remainingAfterAttempts < initialCount)
+
+  for (const label of ['subdirectory', 'tempBase']) {
+    const attempt = result[label]
+    assert.equal(attempt?.replacementAttempted, true, `${label} replacement was not attempted`)
+    assert.equal(attempt.status, 'lock-rejected', `${label} did not report an unambiguous lock rejection`)
+    assert.equal(attempt.moveSucceeded, false, `${label} was moved`)
+    assert.ok([5, 32].includes(attempt.win32Error), `${label} returned Win32 error ${attempt.win32Error}`)
+    assert.equal(attempt.junctionAttempted, false, `${label} unexpectedly reached junction creation`)
+    assert.equal(attempt.junctionCreated, false, `${label} was replaced by a junction`)
+    assert.equal(attempt.pathExistsAfter, true, `${label} disappeared after the rejected move`)
+    assert.equal(attempt.isReparseAfter, false, `${label} became a reparse point`)
+  }
+}
+
 async function withFixture(options, callback) {
   const fixture = await makeFixture(options)
   try {
@@ -501,15 +629,103 @@ test('rejects a temporary base that is itself a junction', async (t) => {
   })
 })
 
-test('holds directory identities while a concurrent attacker attempts cleanup substitution', async () => {
+test('rejects missed or ambiguous cleanup attacker evidence', () => {
+  assert.throws(() => assertCleanupAttackEvidence({
+    observedCleanup: false,
+    initialCount: 2500,
+    attemptedBothDuringCleanup: false,
+    remainingAtObservation: null,
+    remainingAfterAttempts: null,
+    subdirectory: { replacementAttempted: false, status: 'not-attempted' },
+    tempBase: { replacementAttempted: false, status: 'not-attempted' },
+  }))
+
+  assert.throws(() => assertCleanupAttackEvidence({
+    observedCleanup: true,
+    initialCount: 2500,
+    attemptedBothDuringCleanup: true,
+    remainingAtObservation: 100,
+    remainingAfterAttempts: 90,
+    subdirectory: {
+      replacementAttempted: true,
+      status: 'ambiguous-move-failure',
+      moveSucceeded: false,
+      win32Error: 3,
+      junctionAttempted: false,
+      junctionCreated: false,
+      pathExistsAfter: false,
+      isReparseAfter: null,
+    },
+    tempBase: {
+      replacementAttempted: true,
+      status: 'lock-rejected',
+      moveSucceeded: false,
+      win32Error: 5,
+      junctionAttempted: false,
+      junctionCreated: false,
+      pathExistsAfter: true,
+      isReparseAfter: false,
+    },
+  }))
+
+  assert.throws(() => assertCleanupAttackEvidence({
+    observedCleanup: true,
+    initialCount: 2500,
+    attemptedBothDuringCleanup: true,
+    remainingAtObservation: 100,
+    remainingAfterAttempts: 90,
+    subdirectory: {
+      replacementAttempted: true,
+      status: 'junction-failed',
+      moveSucceeded: true,
+      win32Error: 0,
+      junctionAttempted: false,
+      junctionCreated: false,
+      pathExistsAfter: false,
+      isReparseAfter: null,
+    },
+    tempBase: {
+      replacementAttempted: true,
+      status: 'lock-rejected',
+      moveSucceeded: false,
+      win32Error: 32,
+      junctionAttempted: false,
+      junctionCreated: false,
+      pathExistsAfter: true,
+      isReparseAfter: false,
+    },
+  }))
+})
+
+test('holds directory identities while a concurrent attacker attempts cleanup substitution', async (t) => {
   await withFixture({}, async (fixture) => {
     const attacker = runCleanupAttacker(fixture)
-    const result = await runWrapper(fixture, 'cleanup-race-after-push')
-    const attackResult = await attacker
+    const [result, attackResult] = await Promise.all([
+      runWrapper(fixture, 'cleanup-race-after-push'),
+      attacker,
+    ])
 
     assert.equal(result.code, 0, `${result.stderr}\nattack=${JSON.stringify(attackResult)}`)
-    assert.match(attackResult.subdirectory, /^blocked:/)
-    assert.match(attackResult.tempBase, /^blocked:/)
+    assertCleanupAttackEvidence(attackResult)
+    t.diagnostic(JSON.stringify({
+      observedCleanup: attackResult.observedCleanup,
+      attemptedBothDuringCleanup: attackResult.attemptedBothDuringCleanup,
+      initialCount: attackResult.initialCount,
+      remainingAtObservation: attackResult.remainingAtObservation,
+      remainingAfterAttempts: attackResult.remainingAfterAttempts,
+      subdirectory: {
+        status: attackResult.subdirectory.status,
+        win32Error: attackResult.subdirectory.win32Error,
+        pathExistsAfter: attackResult.subdirectory.pathExistsAfter,
+        isReparseAfter: attackResult.subdirectory.isReparseAfter,
+      },
+      tempBase: {
+        status: attackResult.tempBase.status,
+        win32Error: attackResult.tempBase.win32Error,
+        pathExistsAfter: attackResult.tempBase.pathExistsAfter,
+        isReparseAfter: attackResult.tempBase.isReparseAfter,
+      },
+    }))
     assert.equal(await readFile(fixture.junctionSentinel, 'utf8'), 'external preserve\n')
     assert.equal(await readFile(fixture.tempBaseSentinel, 'utf8'), 'temp base preserve\n')
     await assertExactCleanup(fixture)
