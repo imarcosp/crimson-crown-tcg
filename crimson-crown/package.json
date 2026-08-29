@@ -16,6 +16,7 @@
     "test:release": "node --test scripts/release/*.test.mjs scripts/dependency-compatibility.test.mjs",
     "test:dependencies": "node --test scripts/dependency-compatibility.test.mjs",
     "release:dry-run": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/run-linked-dry-run.ps1",
+    "test:privileged-surfaces": "node --test scripts/local-db/privileged-surface-contract.test.mjs",
     "test:local-security": "node scripts/local-db/security-matrix.mjs",
     "test:local-financial": "node scripts/local-db/financial-matrix.mjs",
     "test:local-atomic-checkout": "node scripts/local-db/checkout-atomic-matrix.mjs",

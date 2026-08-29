@@ -1,0 +1,371 @@
+[
+  {
+    "signature": "assign_import_order_number()",
+    "security": "definer",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.import_orders.trg_assign_import_order_number (BEFORE INSERT), presente en local y producción.",
+    "authorization": "Sólo el trigger asigna la secuencia; el grant objetivo a service_role impide la invocación directa desde Data API.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "definer", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 123, "detail": "definición de la función"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2096, "detail": "trigger trg_assign_import_order_number"}
+    ]
+  },
+  {
+    "signature": "calculate_import_order_total(bigint)",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "public.refresh_commission_period(text, numeric, numeric, boolean), ejecutada por la Server Action administrativa de comisiones.",
+    "authorization": "El total recorre import_items de una orden; queda exclusivamente detrás del cliente service-role y requireCommissionAdmin de la Server Action.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 159, "detail": "definición del total"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 901, "detail": "consumo desde refresh_commission_period"},
+      {"location": "src/app/actions/commissions.ts", "line": 256, "detail": "Server Action con cliente service-role"}
+    ]
+  },
+  {
+    "signature": "delete_trash_products(integer)",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Script operacional scripts/cleanup-stock-zero.mjs; no existe trigger ni consumidor de navegador.",
+    "authorization": "El script exige SUPABASE_SERVICE_ROLE_KEY y la función elimina productos en lote; no se autoriza a roles Data API.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "scripts/cleanup-stock-zero.mjs", "line": 5, "detail": "requiere service-role"},
+      {"location": "scripts/cleanup-stock-zero.mjs", "line": 27, "detail": "llamada RPC"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 196, "detail": "operación DELETE en lote"}
+    ]
+  },
+  {
+    "signature": "find_orders_by_id_part(text)",
+    "security": "definer",
+    "allowedRoles": ["service_role"],
+    "consumer": "Sin consumidor en src/, scripts/ o pg_trigger; helper de mantenimiento conservado por compatibilidad.",
+    "authorization": "Expone identificadores de órdenes y no tiene consumidor browser; el destino service_role elimina la exposición autenticada residual del local.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "definer", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 210, "detail": "implementación local con public.is_admin()"},
+      {"location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 310, "detail": "ACL local residual"}
+    ]
+  },
+  {
+    "signature": "generate_import_order_number()",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.import_orders.set_import_order_number (BEFORE INSERT), presente en local y producción.",
+    "authorization": "Función trigger; el grant objetivo a service_role evita RPC directa mientras el propietario conserva ejecución por trigger.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 245, "detail": "definición de la función"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2092, "detail": "trigger set_import_order_number"}
+    ]
+  },
+  {
+    "signature": "generate_next_import_order_number()",
+    "security": "definer",
+    "allowedRoles": ["service_role"],
+    "consumer": "Sin consumidor en src/, scripts/ o pg_trigger; helper de numeración conservado por compatibilidad.",
+    "authorization": "Lee y bloquea la secuencia lógica de import_orders; queda sólo para operaciones server-side.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "definer", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 259, "detail": "lectura y bloqueo de numeración"},
+      {"location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 312, "detail": "ACL local service-only"}
+    ]
+  },
+  {
+    "signature": "get_inventory_valuation()",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Sin consumidor en src/, scripts/ o pg_trigger; helper de valorización de inventario.",
+    "authorization": "Agrega stock y precios de todo el catálogo; se clasifica como lectura financiera interna service-only.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 295, "detail": "agregación de stock por precio"}
+    ]
+  },
+  {
+    "signature": "get_trash_products(integer)",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Sin consumidor en src/, scripts/ o pg_trigger; helper de mantenimiento masivo.",
+    "authorization": "Enumera candidatos de limpieza de productos; no existe caso de uso de cliente autenticado.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 307, "detail": "definición del helper de limpieza"}
+    ]
+  },
+  {
+    "signature": "handle_new_user()",
+    "security": "definer",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger productivo auth.users.on_auth_user_created (AFTER INSERT); la dependencia falta en el espejo local y queda registrada como drift.",
+    "authorization": "Sólo debe ejecutarse como trigger de Auth; el grant objetivo service_role bloquea la invocación directa por anon/authenticated.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "definer", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 342, "detail": "creación de profile desde Auth"},
+      {"location": "catalog:production pg_trigger", "line": 1, "detail": "auth.users.on_auth_user_created; ausente en pg_trigger local"},
+      {"location": "supabase/migrations/20260823050711_local_write_surface_hardening.sql", "line": 19, "detail": "ACL local service-only"}
+    ]
+  },
+  {
+    "signature": "is_commission_admin()",
+    "security": "invoker",
+    "allowedRoles": ["authenticated", "service_role"],
+    "consumer": "Cinco políticas SELECT de commission_adjustments, commission_payment_allocations, commission_payments, commission_period_lines y commission_periods.",
+    "authorization": "Es la única firma del lote evaluada por authenticated; la implementación local delega en public.is_admin() y las políticas sólo la usan como predicado.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "supabase/migrations/20260823043637_local_security_baseline.sql", "line": 453, "detail": "función local delega en public.is_admin()"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2365, "detail": "primera de cinco políticas de comisiones"},
+      {"location": "supabase/migrations/20260823050711_local_write_surface_hardening.sql", "line": 29, "detail": "revoca PUBLIC y anon"}
+    ]
+  },
+  {
+    "signature": "merge_duplicate_products(integer)",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Script operacional scripts/cleanup-duplicates.mjs; no existe trigger ni consumidor de navegador.",
+    "authorization": "El script exige SUPABASE_SERVICE_ROLE_KEY; la implementación local además valida service_role o public.is_admin(), pero el grant objetivo elimina authenticated.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": "public, pg_temp", "executeRoles": ["authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "scripts/cleanup-duplicates.mjs", "line": 5, "detail": "requiere service-role"},
+      {"location": "scripts/cleanup-duplicates.mjs", "line": 27, "detail": "llamada RPC"},
+      {"location": "supabase/migrations/20260823044210_fix_merge_duplicate_products_lint.sql", "line": 10, "detail": "guard interno service-role/admin"}
+    ]
+  },
+  {
+    "signature": "notify_buylist_manager()",
+    "security": "definer",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.buylist_orders.on_buylist_change (AFTER INSERT OR UPDATE), presente en local y producción.",
+    "authorization": "Función de notificación invocada por trigger; no tiene ruta RPC de navegador autorizada.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "definer", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 473, "detail": "definición SECURITY DEFINER"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2068, "detail": "trigger on_buylist_change"}
+    ]
+  },
+  {
+    "signature": "notify_credit_change()",
+    "security": "definer",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.profiles.on_credit_change (AFTER UPDATE), presente en local y producción.",
+    "authorization": "Función de notificación invocada por trigger; no tiene ruta RPC de navegador autorizada.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "definer", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 508, "detail": "definición SECURITY DEFINER"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2072, "detail": "trigger on_credit_change"}
+    ]
+  },
+  {
+    "signature": "notify_import_manager()",
+    "security": "definer",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.import_orders.on_import_change (AFTER INSERT OR UPDATE), presente en local y producción.",
+    "authorization": "Función de notificación invocada por trigger; no tiene ruta RPC de navegador autorizada.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "definer", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 543, "detail": "definición SECURITY DEFINER"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2080, "detail": "trigger on_import_change"}
+    ]
+  },
+  {
+    "signature": "notify_order_manager()",
+    "security": "definer",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.orders.on_order_change (AFTER INSERT OR UPDATE), presente en local y producción.",
+    "authorization": "Función de notificación invocada por trigger; no tiene ruta RPC de navegador autorizada.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "definer", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 583, "detail": "definición SECURITY DEFINER"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2084, "detail": "trigger on_order_change"}
+    ]
+  },
+  {
+    "signature": "notify_stock_alert()",
+    "security": "definer",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.products.on_product_restock (AFTER UPDATE), presente en local y producción.",
+    "authorization": "Función de notificación invocada por trigger; no tiene ruta RPC de navegador autorizada.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "definer", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "definer", "searchPath": null, "executeRoles": ["service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 624, "detail": "definición SECURITY DEFINER"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2088, "detail": "trigger on_product_restock"}
+    ]
+  },
+  {
+    "signature": "on_commission_adjustments_change()",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.commission_adjustments.trg_commission_adjustments_change; llama recalculate_commission_period_status(uuid).",
+    "authorization": "La operación deriva de cambios autorizados sobre commission_adjustments; la RPC directa se revoca a roles Data API.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 656, "detail": "función y dependencia de recálculo"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2100, "detail": "trigger de ajustes"}
+    ]
+  },
+  {
+    "signature": "on_commission_allocations_change()",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.commission_payment_allocations.trg_commission_allocations_change; llama recalculate_commission_period_status(uuid).",
+    "authorization": "La operación deriva de cambios autorizados sobre asignaciones; la RPC directa se revoca a roles Data API.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 674, "detail": "función y dependencia de recálculo"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2104, "detail": "trigger de asignaciones"}
+    ]
+  },
+  {
+    "signature": "recalculate_commission_period_status(uuid)",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Server Action lockCommissionPeriodAction, ambos triggers on_commission_* y refresh_commission_period de cuatro argumentos.",
+    "authorization": "La Server Action exige requireCommissionAdmin y usa createServiceRoleClient; los otros consumidores son funciones internas activadas por trigger/servicio.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "src/app/actions/commissions.ts", "line": 268, "detail": "guard requireCommissionAdmin"},
+      {"location": "src/app/actions/commissions.ts", "line": 277, "detail": "cliente service-role"},
+      {"location": "src/app/actions/commissions.ts", "line": 305, "detail": "llamada RPC"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 692, "detail": "actualización del estado del período"}
+    ]
+  },
+  {
+    "signature": "refresh_commission_period(text)",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Server Actions refreshCommissionPeriodAction y lockCommissionPeriodAction mediante cliente service-role.",
+    "authorization": "Ambas acciones exigen requireCommissionAdmin antes de construir el cliente service-role; no existe consumidor browser directo.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "src/app/actions/commissions.ts", "line": 252, "detail": "guard requireCommissionAdmin"},
+      {"location": "src/app/actions/commissions.ts", "line": 255, "detail": "cliente service-role"},
+      {"location": "src/app/actions/commissions.ts", "line": 256, "detail": "llamada RPC"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 741, "detail": "wrapper del overload completo"}
+    ]
+  },
+  {
+    "signature": "refresh_commission_period(text, numeric, numeric, boolean)",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Wrapper refresh_commission_period(text); proceso interno de comisiones llamado por Server Actions administrativas.",
+    "authorization": "La ruta de aplicación exige requireCommissionAdmin y usa service-role; modifica tablas financieras de comisiones y no se expone a clientes.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 744, "detail": "wrapper llama al overload completo"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 756, "detail": "implementación completa"},
+      {"location": "src/app/actions/commissions.ts", "line": 256, "detail": "entrada service-only"}
+    ]
+  },
+  {
+    "signature": "set_import_order_commission_eligible()",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.import_orders.trg_import_orders_set_commission_eligible (BEFORE INSERT OR UPDATE), presente en local y producción.",
+    "authorization": "La elegibilidad se deriva en el trigger; se revoca invocación RPC directa a roles Data API.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 968, "detail": "función de elegibilidad"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2108, "detail": "trigger de importaciones"}
+    ]
+  },
+  {
+    "signature": "set_order_commission_eligible()",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Trigger public.orders.trg_orders_set_commission_eligible (BEFORE INSERT OR UPDATE), presente en local y producción.",
+    "authorization": "La elegibilidad se deriva en el trigger; se revoca invocación RPC directa a roles Data API.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 1018, "detail": "función de elegibilidad"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2112, "detail": "trigger de órdenes"}
+    ]
+  },
+  {
+    "signature": "sync_product_prices()",
+    "security": "invoker",
+    "allowedRoles": ["service_role"],
+    "consumer": "Triggers public.external_prices.on_external_price_update y trigger_sync_product_prices, ambos presentes en local y producción.",
+    "authorization": "La sincronización se dispara por cambios de external_prices; no existe ruta RPC directa autorizada a Data API.",
+    "catalog": {
+      "production": {"target": "djfqozfaqkqdoqeoqbzt", "owner": "postgres", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]},
+      "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
+    },
+    "evidence": [
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 1048, "detail": "función de sincronización"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2076, "detail": "trigger on_external_price_update"},
+      {"location": "$LOCALAPPDATA/CrimsonCrown/supabase-mirror/raw/schema.sql", "line": 2116, "detail": "trigger_sync_product_prices"}
+    ]
+  }
+]
