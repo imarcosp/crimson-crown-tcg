@@ -55,38 +55,253 @@ function isRawPackageSpecifier(specifier) {
   )
 }
 
-function collectStaticStringBindings(sourceFile) {
-  const bindings = new Map()
-
-  function visit(node) {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.initializer &&
-      ts.isVariableDeclarationList(node.parent) &&
-      (node.parent.flags & ts.NodeFlags.Const) !== 0
-    ) {
-      bindings.set(node.name.text, node.initializer)
-    }
-
-    ts.forEachChild(node, visit)
-  }
-
-  visit(sourceFile)
-  return bindings
+function isFunctionLikeScope(node) {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node) ||
+    ts.isConstructorDeclaration(node)
+  )
 }
 
-function resolveStaticString(expression, bindings, resolving = new Set()) {
-  if (ts.isStringLiteralLike(expression)) return expression.text
-
-  if (ts.isParenthesizedExpression(expression)) {
-    return resolveStaticString(expression.expression, bindings, resolving)
+function createLexicalModel(sourceFile) {
+  const nodeScopes = new WeakMap()
+  const rootScope = {
+    bindings: new Map(),
+    kind: 'source',
+    node: sourceFile,
+    parent: null,
   }
 
-  if (ts.isTemplateExpression(expression)) {
-    let value = expression.head.text
-    for (const span of expression.templateSpans) {
-      const substitution = resolveStaticString(span.expression, bindings, resolving)
+  function childScope(parent, node, kind) {
+    return { bindings: new Map(), kind, node, parent }
+  }
+
+  function addBinding(scope, name, binding) {
+    const bindings = scope.bindings.get(name) ?? []
+    bindings.push({ ...binding, scope })
+    scope.bindings.set(name, bindings)
+  }
+
+  function addBindingPattern(scope, name, binding) {
+    if (ts.isIdentifier(name)) {
+      addBinding(scope, name.text, binding)
+      return
+    }
+
+    for (const element of name.elements) {
+      if (ts.isOmittedExpression(element)) continue
+      addBindingPattern(scope, element.name, {
+        ...binding,
+        initializer: null,
+      })
+    }
+  }
+
+  function nearestFunctionOrSourceScope(scope) {
+    let current = scope
+    while (current.kind !== 'function' && current.kind !== 'source') {
+      current = current.parent
+    }
+    return current
+  }
+
+  function registerImport(statement, scope) {
+    const importClause = statement.importClause
+    if (
+      !importClause ||
+      importClause.isTypeOnly ||
+      !ts.isStringLiteralLike(statement.moduleSpecifier)
+    ) return
+
+    const isNodeModule =
+      statement.moduleSpecifier.text === 'node:module' ||
+      statement.moduleSpecifier.text === 'module'
+    if (importClause.name) {
+      addBinding(scope, importClause.name.text, {
+        declaration: statement,
+        initializer: null,
+        kind: isNodeModule ? 'module-namespace' : 'other',
+      })
+    }
+
+    if (importClause.namedBindings && ts.isNamespaceImport(importClause.namedBindings)) {
+      addBinding(scope, importClause.namedBindings.name.text, {
+        declaration: statement,
+        initializer: null,
+        kind: isNodeModule ? 'module-namespace' : 'other',
+      })
+    }
+
+    if (importClause.namedBindings && ts.isNamedImports(importClause.namedBindings)) {
+      for (const element of importClause.namedBindings.elements) {
+        if (element.isTypeOnly) continue
+        const importedName = element.propertyName?.text ?? element.name.text
+        addBinding(scope, element.name.text, {
+          declaration: element,
+          initializer: null,
+          kind: isNodeModule && importedName === 'createRequire'
+            ? 'create-require-factory'
+            : 'other',
+        })
+      }
+    }
+  }
+
+  function visit(node, scope) {
+    nodeScopes.set(node, scope)
+
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      addBinding(scope, node.name.text, {
+        declaration: node,
+        initializer: null,
+        kind: 'other',
+      })
+    }
+
+    if (ts.isClassDeclaration(node) && node.name) {
+      addBinding(scope, node.name.text, {
+        declaration: node,
+        initializer: null,
+        kind: 'other',
+      })
+    }
+
+    if (isFunctionLikeScope(node)) {
+      const functionScope = childScope(scope, node, 'function')
+      if (ts.isFunctionExpression(node) && node.name) {
+        addBinding(functionScope, node.name.text, {
+          declaration: node,
+          initializer: null,
+          kind: 'other',
+        })
+      }
+      for (const parameter of node.parameters) {
+        addBindingPattern(functionScope, parameter.name, {
+          declaration: parameter,
+          initializer: null,
+          kind: 'other',
+        })
+        visit(parameter, functionScope)
+      }
+      if (node.body) visit(node.body, functionScope)
+      return
+    }
+
+    if (ts.isBlock(node) || ts.isCaseBlock(node) || ts.isModuleBlock(node)) {
+      const blockScope = childScope(scope, node, 'block')
+      nodeScopes.set(node, blockScope)
+      ts.forEachChild(node, (child) => visit(child, blockScope))
+      return
+    }
+
+    if (ts.isForStatement(node) || ts.isForInStatement(node) || ts.isForOfStatement(node)) {
+      const loopScope = childScope(scope, node, 'block')
+      nodeScopes.set(node, loopScope)
+      ts.forEachChild(node, (child) => visit(child, loopScope))
+      return
+    }
+
+    if (ts.isCatchClause(node)) {
+      const catchScope = childScope(scope, node, 'block')
+      nodeScopes.set(node, catchScope)
+      if (node.variableDeclaration) {
+        addBindingPattern(catchScope, node.variableDeclaration.name, {
+          declaration: node.variableDeclaration,
+          initializer: null,
+          kind: 'other',
+        })
+      }
+      ts.forEachChild(node, (child) => visit(child, catchScope))
+      return
+    }
+
+    if (ts.isImportDeclaration(node)) registerImport(node, scope)
+
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isVariableDeclarationList(node.parent)
+    ) {
+      const flags = node.parent.flags
+      const kind = (flags & ts.NodeFlags.Const) !== 0 ? 'const' : 'other'
+      const bindingScope = (flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0
+        ? scope
+        : nearestFunctionOrSourceScope(scope)
+      addBindingPattern(bindingScope, node.name, {
+        declaration: node,
+        initializer: ts.isIdentifier(node.name) ? node.initializer ?? null : null,
+        kind,
+      })
+    }
+
+    ts.forEachChild(node, (child) => visit(child, scope))
+  }
+
+  nodeScopes.set(sourceFile, rootScope)
+  ts.forEachChild(sourceFile, (node) => visit(node, rootScope))
+  return { nodeScopes, rootScope, sourceFile }
+}
+
+function unwrapTransparentExpression(expression) {
+  let current = expression
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isPartiallyEmittedExpression(current)
+  ) {
+    current = current.expression
+  }
+  return current
+}
+
+function lookupBinding(identifier, model) {
+  let scope = model.nodeScopes.get(identifier) ?? model.rootScope
+  const usePosition = identifier.getStart(model.sourceFile)
+
+  while (scope) {
+    const candidates = scope.bindings.get(identifier.text)
+    if (candidates?.length) {
+      const preceding = candidates
+        .filter((binding) => binding.declaration.getStart(model.sourceFile) <= usePosition)
+        .sort(
+          (left, right) =>
+            right.declaration.getStart(model.sourceFile) -
+            left.declaration.getStart(model.sourceFile),
+        )
+      return preceding[0] ?? candidates[0]
+    }
+    scope = scope.parent
+  }
+
+  return null
+}
+
+function constBindingIsReadable(binding, identifier, model) {
+  if (binding.kind !== 'const' || !binding.initializer) return false
+  if (binding.declaration.getEnd() <= identifier.getStart(model.sourceFile)) return true
+
+  let scope = model.nodeScopes.get(identifier)
+  while (scope && scope !== binding.scope) {
+    if (scope.kind === 'function') return true
+    scope = scope.parent
+  }
+  return false
+}
+
+function resolveStaticString(expression, model, resolving = new Set()) {
+  const current = unwrapTransparentExpression(expression)
+  if (ts.isStringLiteralLike(current)) return current.text
+
+  if (ts.isTemplateExpression(current)) {
+    let value = current.head.text
+    for (const span of current.templateSpans) {
+      const substitution = resolveStaticString(span.expression, model, resolving)
       if (substitution === null) return null
       value += substitution + span.literal.text
     }
@@ -94,30 +309,107 @@ function resolveStaticString(expression, bindings, resolving = new Set()) {
   }
 
   if (
-    ts.isBinaryExpression(expression) &&
-    expression.operatorToken.kind === ts.SyntaxKind.PlusToken
+    ts.isBinaryExpression(current) &&
+    current.operatorToken.kind === ts.SyntaxKind.PlusToken
   ) {
-    const left = resolveStaticString(expression.left, bindings, resolving)
-    const right = resolveStaticString(expression.right, bindings, resolving)
+    const left = resolveStaticString(current.left, model, resolving)
+    const right = resolveStaticString(current.right, model, resolving)
     return left === null || right === null ? null : left + right
   }
 
-  if (ts.isIdentifier(expression)) {
-    if (resolving.has(expression.text)) return null
-    const initializer = bindings.get(expression.text)
-    if (!initializer) return null
+  if (ts.isIdentifier(current)) {
+    const binding = lookupBinding(current, model)
+    if (!binding || resolving.has(binding) || !constBindingIsReadable(binding, current, model)) {
+      return null
+    }
 
     const nextResolving = new Set(resolving)
-    nextResolving.add(expression.text)
-    return resolveStaticString(initializer, bindings, nextResolving)
+    nextResolving.add(binding)
+    return resolveStaticString(binding.initializer, model, nextResolving)
   }
 
   return null
 }
 
-function rawPackageSpecifier(expression, bindings) {
-  const specifier = resolveStaticString(expression, bindings)
+function rawPackageSpecifier(expression, model) {
+  const specifier = resolveStaticString(expression, model)
   return specifier !== null && isRawPackageSpecifier(specifier) ? specifier : null
+}
+
+function isUnshadowedGlobal(expression, name, model) {
+  const current = unwrapTransparentExpression(expression)
+  return ts.isIdentifier(current) && current.text === name && !lookupBinding(current, model)
+}
+
+function propertyAccessParts(expression, model) {
+  const current = unwrapTransparentExpression(expression)
+  if (ts.isPropertyAccessExpression(current)) {
+    return { base: current.expression, name: current.name.text }
+  }
+  if (ts.isElementAccessExpression(current) && current.argumentExpression) {
+    const name = resolveStaticString(current.argumentExpression, model)
+    return name === null ? null : { base: current.expression, name }
+  }
+  return null
+}
+
+function isModuleNamespaceExpression(expression, model, resolving = new Set()) {
+  const current = unwrapTransparentExpression(expression)
+  if (!ts.isIdentifier(current)) return false
+
+  const binding = lookupBinding(current, model)
+  if (!binding || resolving.has(binding)) return false
+  if (binding.kind === 'module-namespace') return true
+  if (!constBindingIsReadable(binding, current, model)) return false
+
+  const nextResolving = new Set(resolving)
+  nextResolving.add(binding)
+  return isModuleNamespaceExpression(binding.initializer, model, nextResolving)
+}
+
+function isCreateRequireFactory(expression, model, resolving = new Set()) {
+  const current = unwrapTransparentExpression(expression)
+  if (ts.isIdentifier(current)) {
+    const binding = lookupBinding(current, model)
+    if (!binding || resolving.has(binding)) return false
+    if (binding.kind === 'create-require-factory') return true
+    if (!constBindingIsReadable(binding, current, model)) return false
+
+    const nextResolving = new Set(resolving)
+    nextResolving.add(binding)
+    return isCreateRequireFactory(binding.initializer, model, nextResolving)
+  }
+
+  const access = propertyAccessParts(current, model)
+  return Boolean(
+    access &&
+    access.name === 'createRequire' &&
+    isModuleNamespaceExpression(access.base, model),
+  )
+}
+
+function isLoaderExpression(expression, model, resolving = new Set()) {
+  const current = unwrapTransparentExpression(expression)
+  if (ts.isIdentifier(current)) {
+    const binding = lookupBinding(current, model)
+    if (!binding) return current.text === 'require'
+    if (resolving.has(binding) || !constBindingIsReadable(binding, current, model)) return false
+
+    const nextResolving = new Set(resolving)
+    nextResolving.add(binding)
+    return isLoaderExpression(binding.initializer, model, nextResolving)
+  }
+
+  const access = propertyAccessParts(current, model)
+  if (
+    access &&
+    access.name === 'require' &&
+    isUnshadowedGlobal(access.base, 'module', model)
+  ) {
+    return true
+  }
+
+  return ts.isCallExpression(current) && isCreateRequireFactory(current.expression, model)
 }
 
 function importHasRuntimeReference(statement) {
@@ -153,7 +445,7 @@ function inspectFile(filePath) {
     true,
     filePath.endsWith('.tsx') || filePath.endsWith('.jsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   )
-  const staticStringBindings = collectStaticStringBindings(sourceFile)
+  const lexicalModel = createLexicalModel(sourceFile)
   const constructorBindings = new Map()
   const namespaceBindings = new Set()
   const rawImports = []
@@ -165,7 +457,7 @@ function inspectFile(filePath) {
     if (
       ts.isExportDeclaration(statement) &&
       statement.moduleSpecifier &&
-      rawPackageSpecifier(statement.moduleSpecifier, staticStringBindings) &&
+      rawPackageSpecifier(statement.moduleSpecifier, lexicalModel) &&
       exportHasRuntimeReference(statement) &&
       !rawImportAllowed
     ) {
@@ -177,7 +469,7 @@ function inspectFile(filePath) {
       !statement.isTypeOnly &&
       ts.isExternalModuleReference(statement.moduleReference) &&
       statement.moduleReference.expression &&
-      rawPackageSpecifier(statement.moduleReference.expression, staticStringBindings)
+      rawPackageSpecifier(statement.moduleReference.expression, lexicalModel)
     ) {
       namespaceBindings.add(statement.name.text)
       if (!rawImportAllowed) {
@@ -187,7 +479,7 @@ function inspectFile(filePath) {
 
     if (
       !ts.isImportDeclaration(statement) ||
-      !rawPackageSpecifier(statement.moduleSpecifier, staticStringBindings)
+      !rawPackageSpecifier(statement.moduleSpecifier, lexicalModel)
     ) continue
 
     const importClause = statement.importClause
@@ -247,12 +539,15 @@ function inspectFile(filePath) {
         constructorCalls.push(`${locationOf(sourceFile, node)} ${constructorName} call`)
       }
 
-      if (!rawImportAllowed) {
-        for (const argument of node.arguments) {
-          const specifier = rawPackageSpecifier(argument, staticStringBindings)
-          if (specifier) {
-            rawImports.push(`${locationOf(sourceFile, argument)} raw package loader reference`)
-          }
+      const isDynamicImport = expression.kind === ts.SyntaxKind.ImportKeyword
+      if (
+        !rawImportAllowed &&
+        node.arguments.length > 0 &&
+        (isDynamicImport || isLoaderExpression(expression, lexicalModel))
+      ) {
+        const specifier = rawPackageSpecifier(node.arguments[0], lexicalModel)
+        if (specifier) {
+          rawImports.push(`${locationOf(sourceFile, node.arguments[0])} raw package loader reference`)
         }
       }
     }
@@ -328,6 +623,32 @@ test('raw Supabase subpaths and loader aliases cannot bypass the runtime contrac
       name: 'star raw re-export subpath',
       source: "export * from '@supabase/ssr/server'",
     },
+    {
+      name: 'earlier raw binding survives a later function shadow',
+      source: "const dependency = '@supabase/ssr'; require(dependency); function later() { const dependency = 'ordinary-package'; return dependency }",
+    },
+    {
+      name: 'outer raw binding survives a nested block shadow',
+      source: "const dependency = '@supabase/supabase-js'; { const dependency = 'ordinary-package'; void dependency } require(dependency)",
+    },
+    {
+      name: 'function-local raw binding survives a later outer declaration',
+      source: "function loadRaw() { const dependency = '@supabase/ssr/server'; module.require(dependency) } const dependency = 'ordinary-package'",
+    },
+    {
+      name: 'same-name declarations resolve independently in sibling blocks',
+      source: "{ const dependency = '@supabase/supabase-js/runtime'; require(dependency) } { const dependency = 'ordinary-package'; console.log(dependency) }",
+    },
+    {
+      name: 'TypeScript transparent assertions preserve raw strings and loader aliases',
+      extension: '.ts',
+      source: "const dependency = ((('@supabase/' as const) + ('ssr' as string)) satisfies string)!; const load = (require as typeof require)!; (load as typeof require)(dependency as string)",
+    },
+    {
+      name: 'TypeScript angle assertion preserves module.require',
+      extension: '.ts',
+      source: "const dependency = <string>('@supabase/' + 'supabase-js'); (module.require as typeof module.require)(dependency!)",
+    },
   ]
   const fixtureDirectory = mkdtempSync(path.join(tmpdir(), 'crimson-supabase-contract-'))
 
@@ -343,6 +664,60 @@ test('raw Supabase subpaths and loader aliases cannot bypass the runtime contrac
     })
 
     assert.deepEqual(missed, [])
+  } finally {
+    rmSync(fixtureDirectory, { recursive: true, force: true })
+  }
+})
+
+test('ordinary calls, shadowed loaders, and non-module text are not loader boundaries', () => {
+  const fixtures = [
+    {
+      name: 'comment and unrelated string',
+      source: "// require('@supabase/ssr')\nconst documentation = '@supabase/supabase-js'",
+    },
+    {
+      name: 'console.log argument',
+      source: "console.log('@supabase/ssr/server')",
+    },
+    {
+      name: 'ordinary helper argument',
+      source: "function helper(value) { return value }; helper('@supabase/supabase-js/runtime')",
+    },
+    {
+      name: 'parameter shadows global require',
+      source: "function inspect(require) { require('@supabase/ssr') }",
+    },
+    {
+      name: 'parameter shadows global module',
+      source: "function inspect(module) { module.require('@supabase/supabase-js') }",
+    },
+    {
+      name: 'block helper shadows outer loader alias',
+      source: "const load = require; { const load = helper; load('@supabase/ssr') }",
+    },
+    {
+      name: 'function parameter shadows outer loader alias',
+      source: "const load = require; function inspect(load) { load('@supabase/supabase-js') }",
+    },
+    {
+      name: 'same-scope TDZ prevents a later raw constant from becoming an earlier argument',
+      source: "require(dependency); const dependency = '@supabase/ssr'",
+    },
+  ]
+  const fixtureDirectory = mkdtempSync(path.join(tmpdir(), 'crimson-supabase-negative-contract-'))
+
+  try {
+    const falsePositives = []
+    fixtures.forEach((fixture, index) => {
+      const filePath = path.join(fixtureDirectory, `fixture-${index}.mjs`)
+      writeFileSync(filePath, fixture.source, 'utf8')
+      const findings = inspectFile(filePath)
+      if (findings.rawImports.length > 0 || findings.constructorCalls.length > 0) {
+        falsePositives.push(fixture.name)
+      }
+    })
+
+    assert.deepEqual(falsePositives, [])
   } finally {
     rmSync(fixtureDirectory, { recursive: true, force: true })
   }
