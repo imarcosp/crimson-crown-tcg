@@ -150,11 +150,13 @@ function pathForUpload(
 }
 
 async function authorizeUpload(
-  input: CreateUploadTicketInput,
   intent: ValidatedUploadIntent,
   actor: UploadActor,
+  canonicalPath: string,
   assertRecordAccess: CreateUploadTicketDependencies['assertRecordAccess'],
 ): Promise<void> {
+  const canonicalSegments = canonicalPath.split('/')
+
   switch (intent.kind) {
     case 'customer-product-request':
       return
@@ -163,19 +165,19 @@ async function authorizeUpload(
       return
     case 'admin-product-image': {
       if (!actor.isAdmin) throw createError()
-      const inventoryId = requireRecordId(input.inventoryId)
+      const inventoryId = requireRecordId(canonicalSegments[1])
       await assertRecordAccess({ kind: intent.kind, recordId: inventoryId, actor })
       return
     }
     case 'commission-proof': {
       if (!actor.isCommissionAdmin) throw createError()
-      const recordId = requireRecordId(input.recordId)
+      const recordId = requireRecordId(canonicalSegments[1])
       await assertRecordAccess({ kind: intent.kind, recordId, actor })
       return
     }
     case 'order-proof':
     case 'import-proof': {
-      const recordId = requireRecordId(input.recordId)
+      const recordId = requireRecordId(canonicalSegments[2])
       await assertRecordAccess({ kind: intent.kind, recordId, actor })
     }
   }
@@ -188,9 +190,9 @@ export async function createUploadTicketCore(
   try {
     const actor = requireActor(await dependencies.getActor())
     const intent = validateUploadIntent(input)
-    await authorizeUpload(input, intent, actor, dependencies.assertRecordAccess)
-
     const path = pathForUpload(input, intent, actor, dependencies.randomUUID())
+    await authorizeUpload(intent, actor, path, dependencies.assertRecordAccess)
+
     const bucket = bucketForKind(intent.kind)
     const signed = await dependencies.createSignedUploadUrl(bucket, path, { upsert: false })
 

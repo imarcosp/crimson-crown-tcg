@@ -40,7 +40,7 @@ function makeTicketDependencies(
   }
 }
 
-test('authenticates and authorizes an order before signing one exact non-upsert path', async () => {
+test('authenticates, canonicalizes and authorizes an order before signing one exact non-upsert path', async () => {
   const calls: string[] = []
   const ticket = await createUploadTicketCore(
     { kind: 'order-proof', recordId, name: 'proof.png', size: 8, mimeType: 'image/png' },
@@ -67,7 +67,7 @@ test('authenticates and authorizes an order before signing one exact non-upsert 
     }),
   )
 
-  assert.deepEqual(calls, ['authenticate', 'authorize-record', 'random-path', 'sign'])
+  assert.deepEqual(calls, ['authenticate', 'random-path', 'authorize-record', 'sign'])
   assert.deepEqual(ticket, {
     bucket: 'payment_proofs',
     path: orderPath,
@@ -134,6 +134,75 @@ test('derives each bucket and canonical identity scope before signing', async ()
       fixture.expectedRecord === null ? [] : [fixture.expectedRecord],
     )
   }
+})
+
+test('validates and canonicalizes every path locator before record access or signing', async () => {
+  const malformedCases = [
+    {
+      input: { kind: 'admin-product-image', inventoryId: 'not-a-uuid', name: 'card.png', size: 8, mimeType: 'image/png' } as const,
+      actor: { ...standardActor, isAdmin: true },
+      randomUUID: objectId,
+    },
+    {
+      input: { kind: 'order-proof', recordId: 'not-a-uuid', name: 'proof.png', size: 8, mimeType: 'image/png' } as const,
+      actor: standardActor,
+      randomUUID: objectId,
+    },
+    {
+      input: { kind: 'import-proof', recordId: '9'.repeat(5_000), name: 'proof.pdf', size: 8, mimeType: 'application/pdf' } as const,
+      actor: standardActor,
+      randomUUID: objectId,
+    },
+    {
+      input: { kind: 'order-proof', recordId, name: 'proof.png', size: 8, mimeType: 'image/png' } as const,
+      actor: { ...standardActor, userId: 'not-a-uuid' },
+      randomUUID: objectId,
+    },
+    {
+      input: { kind: 'order-proof', recordId, name: 'proof.png', size: 8, mimeType: 'image/png' } as const,
+      actor: standardActor,
+      randomUUID: 'not-a-uuid',
+    },
+  ]
+
+  for (const fixture of malformedCases) {
+    let accessCalls = 0
+    let signCalls = 0
+
+    await assert.rejects(
+      createUploadTicketCore(
+        fixture.input,
+        makeTicketDependencies({
+          getActor: async () => fixture.actor,
+          randomUUID: () => fixture.randomUUID,
+          assertRecordAccess: async () => {
+            accessCalls += 1
+          },
+          createSignedUploadUrl: async (_bucket, path) => {
+            signCalls += 1
+            return { token: 'signed-token', path }
+          },
+        }),
+      ),
+      { name: 'Error', message: 'No se pudo autorizar la carga.' },
+    )
+
+    assert.equal(accessCalls, 0)
+    assert.equal(signCalls, 0)
+  }
+
+  const uppercaseRecordId = recordId.toUpperCase()
+  const canonicalRecordIds: string[] = []
+  await createUploadTicketCore(
+    { kind: 'order-proof', recordId: uppercaseRecordId, name: 'proof.png', size: 8, mimeType: 'image/png' },
+    makeTicketDependencies({
+      assertRecordAccess: async ({ recordId: authorizedRecordId }) => {
+        canonicalRecordIds.push(authorizedRecordId)
+      },
+    }),
+  )
+
+  assert.deepEqual(canonicalRecordIds, [recordId])
 })
 
 test('rejects catalog and banner tickets for non-admins before record access or signing', async () => {
