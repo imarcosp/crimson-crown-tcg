@@ -82,3 +82,19 @@ test('uploadToSignedUrl remains isolated to the browser upload helper', async ()
 
   assert.deepEqual(matches, ['src/lib/storage/upload-client.ts'])
 })
+
+test('admin import modal routes every open and close through image upload cleanup', async () => {
+  const importDetail = await source('src/app/admin/imports/[id]/page.tsx')
+
+  assert.match(
+    importDetail,
+    /const openModal = \(item\?: any\) => \{[\s\S]*?resetImportImageState\(item\?\.image_url \|\| ''\)[\s\S]*?setShowModal\(true\)/u,
+  )
+  assert.match(
+    importDetail,
+    /const closeItemModal = \(\) => \{[\s\S]*?resetImportImageState\(\)[\s\S]*?setShowModal\(false\)/u,
+  )
+  assert.equal(importDetail.match(/onClick=\{closeItemModal\}/gu)?.length, 2)
+  assert.match(importDetail, /closeItemModal\(\);\s*fetchOrder\(\)/u)
+  assert.doesNotMatch(importDetail, /onClick=\{\(\) => setShowModal\(false\)\}/u)
+})

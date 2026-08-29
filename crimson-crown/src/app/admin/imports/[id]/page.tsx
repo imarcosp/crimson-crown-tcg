@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, use } from 'react'
+import { useEffect, useRef, useState, use } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, Save, Plus, Trash2, Search, Edit, CheckCircle, Package, Truck, Upload, Sparkles, Loader2, Image as ImageIcon, Bell, ZoomIn, X, Calendar, FileText, DollarSign, Phone, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
@@ -9,6 +9,12 @@ import { sendImportNotification } from '@/app/actions/email'
 import { getAdminInventories, type Inventory } from '@/app/actions/admin-inventories'
 import { createUploadTicketAction } from '@/app/actions/storage-uploads'
 import { uploadWithTicket } from '@/lib/storage/upload-client'
+import {
+  createImportImageUploadState,
+  replaceImportImageUploadFile,
+  resetImportImageUploadState,
+  type ImportImageUploadState,
+} from '@/lib/storage/import-image-upload-state'
 
 type Platform = 'Coolstuffinc' | 'Cardkingdom' | 'Manapool' | 'TCG Player' | 'EBay' | 'Amazon' | 'Full Moon' | 'Ideal808' | 'CoreTCG' | 'Troll and Toad' | 'Spellfinder' | 'Otro'
 
@@ -36,9 +42,12 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [isFoil, setIsFoil] = useState(false)
   
   // UPLOAD
-  const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState('')
+  const [imageUploadState, setImageUploadState] = useState<ImportImageUploadState>(() => createImportImageUploadState())
+  const imageUploadStateRef = useRef(imageUploadState)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const file = imageUploadState.file
+  const previewUrl = imageUploadState.previewUrl
   const [activeInventories, setActiveInventories] = useState<Inventory[]>([])
   const [selectedActiveInventoryId, setSelectedActiveInventoryId] = useState('')
 
@@ -133,6 +142,28 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       loadActiveInventories()
       return () => { mounted = false }
   }, [])
+
+  useEffect(() => () => {
+      resetImportImageUploadState(
+          imageUploadStateRef.current,
+          '',
+          (objectUrl) => URL.revokeObjectURL(objectUrl),
+      )
+  }, [])
+
+  const commitImportImageState = (nextState: ImportImageUploadState) => {
+      imageUploadStateRef.current = nextState
+      setImageUploadState(nextState)
+  }
+
+  const resetImportImageState = (nextPreviewUrl = '') => {
+      commitImportImageState(resetImportImageUploadState(
+          imageUploadStateRef.current,
+          nextPreviewUrl,
+          (objectUrl) => URL.revokeObjectURL(objectUrl),
+      ))
+      if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const getCustomerName = () => {
       if (!order?.profiles) return 'Cliente'
@@ -235,13 +266,19 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           set_name: card.set_name || card.setName || '',
           collector_number: card.collector_number || card.collectorNumber || ''
       }))
-      setPreviewUrl(img); setSearchResults([]); setSearchQuery('')
+      resetImportImageState(img); setSearchResults([]); setSearchQuery('')
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!e.target.files?.length) return
       const f = e.target.files[0]
-      setFile(f); setPreviewUrl(URL.createObjectURL(f))
+      commitImportImageState(replaceImportImageUploadFile(
+          imageUploadStateRef.current,
+          f,
+          (nextFile) => URL.createObjectURL(nextFile),
+          (objectUrl) => URL.revokeObjectURL(objectUrl),
+      ))
+      e.target.value = ''
   }
 
   const uploadImageToSupabase = async (): Promise<string> => {
@@ -271,6 +308,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   }
 
   const openModal = (item?: any) => {
+      resetImportImageState(item?.image_url || '')
       if (item) {
           const isItemFoil = item.product_name.includes('(Foil)')
           const cleanName = item.product_name.replace(' (Foil)', '')
@@ -287,13 +325,18 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               collector_number: item.collector_number || '',
               product_url: item.product_url || ''
           })
-          setPreviewUrl(item.image_url); setIsFoil(isItemFoil); setMode('Manual')
+          setIsFoil(isItemFoil); setMode('Manual')
       } else {
           setEditItem(null)
           setFormData({ product_name: '', image_url: '', quantity: 1, platform: 'Cardkingdom', unit_price: 0, tax_percent: 10, shipping_cost: 0, set_name: '', collector_number: '', product_url: '' })
-          setPreviewUrl(''); setFile(null); setIsFoil(false); setMode('Buscador'); setSearchQuery(''); setSearchResults([])
+          setIsFoil(false); setMode('Buscador'); setSearchQuery(''); setSearchResults([])
       }
       setShowModal(true)
+  }
+
+  const closeItemModal = () => {
+      resetImportImageState()
+      setShowModal(false)
   }
 
   const saveItem = async () => {
@@ -347,7 +390,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           await updateOrder({ status: 'En cotización' })
       }
 
-      setShowModal(false); fetchOrder()
+      closeItemModal(); fetchOrder()
   }
 
   const toggleCart = async (itemId: number, currentVal: boolean) => {
@@ -562,7 +605,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
                   <div className="p-4 border-b flex items-center justify-between">
                       <h3 className="font-bold text-lg">{editItem ? 'Editar Item' : 'Agregar Item'}</h3>
-                      <button onClick={() => setShowModal(false)} className="cursor-pointer"><X size={20}/></button>
+                      <button onClick={closeItemModal} className="cursor-pointer"><X size={20}/></button>
                   </div>
                   <div className="flex border-b">
                     <button onClick={() => setMode('Buscador')} className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors cursor-pointer ${mode === 'Buscador' ? 'border-purple-600 text-purple-700 bg-purple-50' : 'border-transparent text-slate-500'}`}>✨ Buscador Web</button>
@@ -644,13 +687,13 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                                   <div className="flex-1 space-y-2">
                                       {mode === 'Manual' && (
                                           <div className="relative">
-                                              <input type="file" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
+                                              <input ref={fileInputRef} type="file" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
                                               <div className="w-full px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors">
                                                   <Upload size={14}/> {file ? "Imagen Seleccionada" : "Subir archivo"}
                                               </div>
                                           </div>
                                       )}
-                                      <input value={formData.image_url} onChange={e => {setFormData({...formData, image_url: e.target.value}); setPreviewUrl(e.target.value)}} className="w-full px-3 py-2 border rounded-lg text-xs" placeholder="https://..." disabled={mode === 'Manual' && !!file}/>
+                                      <input value={formData.image_url} onChange={e => {setFormData({...formData, image_url: e.target.value}); resetImportImageState(e.target.value)}} className="w-full px-3 py-2 border rounded-lg text-xs" placeholder="https://..." disabled={mode === 'Manual' && !!file}/>
                                   </div>
                               </div>
                           </div>
@@ -684,7 +727,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                       </div>
                   </div>
                   <div className="p-4 border-t flex justify-end gap-3">
-                      <button onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-lg cursor-pointer">Cancelar</button>
+                      <button onClick={closeItemModal} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-lg cursor-pointer">Cancelar</button>
                       <button onClick={saveItem} disabled={uploading} className="px-6 py-2 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 flex items-center gap-2 cursor-pointer">
                           {uploading ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar
                       </button>
