@@ -184,6 +184,34 @@ test('validation errors never echo untrusted manifest values', async () => {
       ]),
       expectedMessage: 'hash SHA-256 inválido',
     },
+    {
+      manifest: completeFixtureManifest([
+        {
+          class: 'remote_applied',
+          version: '20240101000000',
+          remoteName: { marker },
+          file: alphaFile,
+          sha256: alphaHash,
+          equivalence: 'candidate',
+        },
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+      expectedMessage: 'nombre remoto inválido',
+    },
+    {
+      manifest: completeFixtureManifest([
+        {
+          class: 'remote_applied',
+          version: '20240101000000',
+          remoteName: 'fixture_remote',
+          file: alphaFile,
+          sha256: alphaHash,
+          equivalence: { marker },
+        },
+        { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+      ]),
+      expectedMessage: 'equivalencia remota inválida',
+    },
   ]
 
   for (const { manifest, expectedMessage } of cases) {
@@ -195,6 +223,37 @@ test('validation errors never echo untrusted manifest values', async () => {
       manifest,
     )
   }
+})
+
+test('malformed manifest JSON errors never echo parser details', async () => {
+  const marker = 'untrusted-malformed-json-detail'
+
+  await withFixture(async (rootDir, manifestPath) => {
+    await writeFile(manifestPath, `{"entries":"${marker}`)
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
+      (error) => error.message === 'no se pudo leer el manifiesto de migraciones' && !error.message.includes(marker),
+    )
+  })
+})
+
+test('migration content read errors never echo raw filesystem paths', async () => {
+  const marker = '20240103000000_untrusted-filesystem-path.sql'
+  const manifest = completeFixtureManifest([
+    { class: 'baseline_present', version: '20240103000000', file: marker, sha256: alphaHash },
+    { class: 'baseline_present', version: '20240101000000', file: alphaFile, sha256: alphaHash },
+    { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+  ])
+
+  await withFixture(async (rootDir) => {
+    await mkdir(join(rootDir, 'supabase', 'migrations', marker))
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir, allowCandidates: true }),
+      (error) => error.message === 'hash SHA-256 no disponible' && !error.message.includes(marker),
+    )
+  }, manifest)
 })
 
 test('rejects a migration assigned to two classes', async () => {

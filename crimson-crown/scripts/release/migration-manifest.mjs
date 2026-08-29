@@ -127,7 +127,13 @@ export async function loadAndValidateManifest({ rootDir, allowCandidates }) {
   }
 
   for (const entry of manifest.entries) {
-    const actualHash = sha256(await readFile(join(migrationsPath, entry.file)))
+    let migrationBytes
+    try {
+      migrationBytes = await readFile(join(migrationsPath, entry.file))
+    } catch {
+      fail('hash SHA-256 no disponible')
+    }
+    const actualHash = sha256(migrationBytes)
     if (entry.sha256 !== actualHash) {
       fail('hash SHA-256 no coincide')
     }
