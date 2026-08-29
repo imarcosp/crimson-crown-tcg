@@ -94,8 +94,10 @@ async function loadSingleMigration(suffix) {
 }
 
 test('la migración futura endurece la vista y fija los 24 search_path', async () => {
-  const sql = (await loadSingleMigration('_harden_privileged_surfaces.sql')).toLowerCase()
+  const sql = (await loadSingleMigration('_harden_privileged_surfaces.sql')).toLowerCase().trim()
 
+  assert.match(sql, /^begin;/)
+  assert.match(sql, /commit;$/)
   assert.match(sql, /alter view public\.admin_users set \(security_invoker\s*=\s*true\)/)
   assert.match(sql, /revoke all on (table )?public\.admin_users from public, anon, authenticated/)
 
@@ -104,7 +106,30 @@ test('la migración futura endurece la vista y fija los 24 search_path', async (
       sql.includes(`alter function public.${signature} set search_path = public, pg_temp`),
       `falta search_path fijo: ${signature}`,
     )
+
+    const revokedRoles = signature === authenticatedSignature
+      ? 'public, anon'
+      : 'public, anon, authenticated'
+    const grantedRoles = signature === authenticatedSignature
+      ? 'authenticated, service_role'
+      : 'service_role'
+    assert.ok(
+      sql.includes(`revoke all on function public.${signature} from ${revokedRoles}`),
+      `falta revoke exacto: ${signature}`,
+    )
+    assert.ok(
+      sql.includes(`grant execute on function public.${signature} to ${grantedRoles}`),
+      `falta grant exacto: ${signature}`,
+    )
   }
+
+  assert.equal((sql.match(/alter function public\./g) ?? []).length, 24)
+  assert.equal((sql.match(/revoke all on function public\./g) ?? []).length, 24)
+  assert.equal((sql.match(/grant execute on function public\./g) ?? []).length, 24)
+  assert.doesNotMatch(sql, /\bexecute\s+format\s*\(/)
+  assert.doesNotMatch(sql, /\bexecute\s+'[^']*'/)
+  assert.doesNotMatch(sql, /\b(insert|update|truncate|drop|create)\b/)
+  assert.doesNotMatch(sql, /\bowner\s+to\b/)
 })
 
 test('el inventario clasifica exactamente las 24 superficies reportadas', async () => {
