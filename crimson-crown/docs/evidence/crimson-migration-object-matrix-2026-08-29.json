@@ -87,11 +87,39 @@
       "definitionSha256": "SHA-256 of the exact authored local constraint clause or exact pg_get_constraintdef text after CRLF/CR to LF and outer whitespace trim only. No case, qualification, cast, parenthesis, literal, or whitespace rewriting is performed."
     },
     "grants": "Effective ACLs are exploded. Function comparison includes only EXECUTE for API roles. Relation comparison uses the exact per-role privilege object; owner privileges are excluded. For REVOKE-only baselines, unmentioned privileges are preserved from the observed capture and the explicit local deltas are applied to form expected.",
-    "expressionCapture": {
-      "indexKey": "The structural outer key-list parentheses are located with a quote/comment/dollar-quote-aware balanced scanner; only the exact payload inside those delimiters is hashed.",
-      "indexPredicate": "The exact text after the top-level WHERE keyword is hashed.",
-      "policyUsing": "The structural USING parentheses are located with a quote/comment/dollar-quote-aware balanced scanner; only the exact payload inside those delimiters is hashed.",
-      "policyCheck": "The structural WITH CHECK parentheses are located with a quote/comment/dollar-quote-aware balanced scanner; only the exact payload inside those delimiters is hashed."
+    "boundaryExtraction": {
+      "algorithm": "strict-boundary-v1.1",
+      "input": "Local migration sources are decoded as UTF-8. Retained catalog fields are already-decoded strings. Boundary scanning runs before any hash normalization.",
+      "scannerState": {
+        "code": "Only CODE-state characters can open/close parentheses or match keywords, commas, and semicolons. Parenthesis depth is incremented/decremented only in CODE.",
+        "singleQuoted": "A single-quoted string is opaque. A doubled single quote is consumed as an escaped quote. Backslash escapes consume the following character only for PostgreSQL escape-string or Unicode-escape prefixes; ordinary strings do not treat backslash specially.",
+        "doubleQuoted": "A double-quoted identifier is opaque. A doubled double quote is consumed as an escaped quote.",
+        "lineComment": "A line comment is opaque through CR or LF.",
+        "blockComment": "A block comment is opaque and nesting depth is counted until the matching outer terminator.",
+        "dollarQuoted": "An untagged or identifier-tagged dollar quote is opaque through the next identical tag; other tags inside are content.",
+        "captureRetention": "Opaque strings/comments/dollar bodies are skipped for delimiter recognition but their exact bytes remain in any enclosing captured slice."
+      },
+      "statementBoundary": "A local statement begins at file start or immediately after a CODE-state depth-0 semicolon and ends immediately before the next such semicolon or at EOF. The terminal semicolon is excluded. A dollar-quoted procedural payload is scanned recursively only when locating an authored nested DDL statement.",
+      "structuralItems": "CREATE TABLE column/constraint items are split only at CODE-state commas at depth one inside the table list; ALTER TABLE action items are split only at CODE-state depth-0 commas. The separating comma and enclosing table parenthesis are excluded.",
+      "payloads": {
+        "localDefault": "Within the matched column item, capture starts immediately after the CODE-state depth-0 DEFAULT word. The first non-whitespace lexical token is always payload. Capture ends immediately before the first subsequent CODE-state depth-0 column-clause starter COLLATE, CONSTRAINT, GENERATED, NOT NULL, NULL, CHECK, REFERENCES, UNIQUE, or PRIMARY KEY, or at item end. Terminal item commas, table-closing parentheses, and statement semicolons are excluded. Ambiguous or unsupported retained syntax rejects the row rather than shortening the payload.",
+        "localNamedConstraint": "For ADD CONSTRAINT or a named table constraint, capture starts immediately after the exact constraint-name token and ends at its item/statement boundary. The terminal comma, enclosing table parenthesis, or semicolon is excluded.",
+        "localInlineConstraint": "PRIMARY KEY capture starts at PRIMARY and ends after KEY. CHECK capture starts at CHECK and ends after its balanced closing parenthesis. REFERENCES capture starts at REFERENCES and consumes the referenced relation/column list and its MATCH, ON DELETE, ON UPDATE, and deferrability clauses, ending before the next distinct depth-0 column-constraint starter or item boundary. Separators are excluded.",
+        "indexKey": "For both local CREATE INDEX and exact pg_get_indexdef output, locate the CODE-state depth-0 ON word and the first following CODE-state depth-0 key-list opening parenthesis; capture exactly inside that parenthesis through its balanced close. Both structural parentheses are excluded.",
+        "indexPredicate": "After the index key-list close, locate the CODE-state depth-0 WHERE word. Capture starts immediately after WHERE and ends at the statement boundary. The terminal semicolon is excluded. No WHERE means a null predicate.",
+        "localPolicy": "After matching the exact CREATE POLICY identifier, locate CODE-state depth-0 USING and WITH CHECK words. For each present clause, capture exactly inside its opening parenthesis through the balanced close; structural parentheses are excluded. Missing clauses are null.",
+        "localFunctionBody": "Locate the dollar delimiter following the function AS token and capture through the next identical delimiter; both tags are excluded.",
+        "localComment": "Capture the exact SQL string-literal value after SQL quote-escape decoding; the literal delimiters are excluded."
+      },
+      "catalogPassThrough": {
+        "columnDefault": "The exact retained catalog default field is hashed directly; no structural extraction.",
+        "constraintDefinition": "The exact retained pg_get_constraintdef field is hashed directly; no structural extraction.",
+        "policyExpressions": "The exact retained catalog USING and WITH CHECK expression fields are hashed directly; no structural extraction.",
+        "functionBody": "The exact retained pg_proc.prosrc field is hashed directly; no structural extraction.",
+        "comment": "The exact retained catalog comment field is hashed directly; no structural extraction.",
+        "indexDefinition": "The retained pg_get_indexdef field is full DDL, so only indexKey/indexPredicate structural extraction above is applied."
+      },
+      "postCapture": "For expression, default, and constraint-definition hashes, the captured/pass-through payload then receives only CRLF/CR to LF and outer whitespace trim before UTF-8 SHA-256. Internal whitespace, case, qualification, casts, grouping, parentheses, comments, and literal text are unchanged."
     }
   },
   "summary": {
@@ -8074,5 +8102,104 @@
       },
       "notes": []
     }
-  ]
+  ],
+  "boundaryValidation": {
+    "algorithm": "strict-boundary-v1.1",
+    "inputs": {
+      "localMigrationFiles": [
+        {
+          "file": "20231218_add_tcg_columns.sql",
+          "sha256": "e16166248daf1b0f72c31ae7a3b6b12530c064a73c919841a2468ed2617c2647"
+        },
+        {
+          "file": "202606100001_commission_start_guard.sql",
+          "sha256": "575625b8ecc97aa4341641be6b04ef2338533d73a0f87fabc1c9a306dd9a7d78"
+        },
+        {
+          "file": "202606100002_add_external_prices_catalog_support.sql",
+          "sha256": "145aa681403d1f2e39596ef5a357f32ac6dc8de4311556328d5568eaf22d278a"
+        },
+        {
+          "file": "20260615000300_add_admin_manual_buylist_quotes.sql",
+          "sha256": "75f371bc5d7ed25eb44e5076fbbffed152ba0e3792df1bb91f434c428fce4762"
+        },
+        {
+          "file": "20260823043637_local_security_baseline.sql",
+          "sha256": "d5ad794f2e8fcc5d9e14abd3469f74a801787f8067e831add8e825c69affe9ad"
+        },
+        {
+          "file": "20260823050711_local_write_surface_hardening.sql",
+          "sha256": "48e67fb9df596622e3df6484b2b71b7396ab43b541ba29514254d03ec461f4a1"
+        },
+        {
+          "file": "20260823142117_normalize_import_admin_policies.sql",
+          "sha256": "6e60d1bebc0024d3769d32d38a2dc133fd928950282150b59f5a521e305844da"
+        },
+        {
+          "file": "20260827020755_create_multi_inventory_system.sql",
+          "sha256": "71f827c3d33fad843e1324fa4566be56d662c27d9da9e0f781eaacfa418a0080"
+        },
+        {
+          "file": "20260827024000_add_external_prices_name_search_index.sql",
+          "sha256": "3deec1275e2079c80c5f0c5782c2b8580ee17433f28cb4ff21e998a70f1be39f"
+        }
+      ],
+      "retainedCatalog": {
+        "file": "remote-object-catalog.json",
+        "sha256": "0d369a36002b5f63a3562af9b9a87e89e23bb269bdc5a7488022f82d62691e58",
+        "rows": 441
+      },
+      "sourceSetSha256": "9680b9a4fe3055e9b3836542561c8bf21dcfae852e8b9b88bab4e0a5e337eb93",
+      "sourceSetDigestRule": "UTF-8 SHA-256 of compact JSON with keys local then catalog; local rows are filename-sorted and each row keys are file then sha256; catalog keys are file, sha256, rows."
+    },
+    "replay": {
+      "rows": 110,
+      "hashChangesFromRound2": 0,
+      "resultChangesFromRound2": 0,
+      "replaySha256": "c656c2530df803ef33f2b2b19f586382576c3cde340b31973544251323c1321b",
+      "replayDigestRule": "UTF-8 SHA-256 of compact JSON array in matrix object order. Each row keys are id, expected, observed, result; expected/observed contain only the affected hash fields in canonical signature order."
+    },
+    "captureCounts": {
+      "localDefaultPayloads": 10,
+      "localDefaultAbsences": 39,
+      "serverDefaultPayloads": 13,
+      "serverDefaultAbsences": 36,
+      "localConstraintPayloads": 13,
+      "localConstraintAbsences": 1,
+      "serverConstraintPayloads": 7,
+      "serverConstraintAbsences": 7,
+      "localIndexKeys": 13,
+      "localIndexPredicates": 3,
+      "serverIndexKeys": 13,
+      "serverIndexPredicates": 3,
+      "localPolicyUsing": 31,
+      "localPolicyCheck": 18,
+      "serverPolicyUsing": 2,
+      "serverPolicyCheck": 1
+    },
+    "scannerConformance": {
+      "passed": 14,
+      "failed": 0,
+      "names": [
+        "single-quote-doubled",
+        "escape-string-backslash",
+        "unicode-escape-string",
+        "double-quote-doubled",
+        "line-comment-lf",
+        "line-comment-cr",
+        "nested-block-comment",
+        "untagged-dollar",
+        "tagged-dollar",
+        "nested-parentheses",
+        "where-hidden",
+        "default-literal-keyword",
+        "default-nested",
+        "constraint-nested-and-actions"
+      ]
+    },
+    "retainedSyntaxCheck": {
+      "escapePrefixedStringRows": 0,
+      "note": "The v1.1 backslash-escape branch was conformance-tested; none of the nine retained local sources uses an escape-string or Unicode-escape prefix."
+    }
+  }
 }
