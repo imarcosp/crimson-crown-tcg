@@ -288,6 +288,37 @@ test('accepts only positive canonical PostgreSQL bigint IDs for import proof pat
   }
 })
 
+test('rejects an arbitrarily long import ID before attempting bigint conversion', () => {
+  const originalBigInt = globalThis.BigInt
+  let conversions = 0
+
+  Object.defineProperty(globalThis, 'BigInt', {
+    configurable: true,
+    value(value: string | number | bigint | boolean) {
+      conversions += 1
+      return originalBigInt(value)
+    },
+  })
+
+  try {
+    assert.throws(() =>
+      buildStoragePath({
+        kind: 'import-proof',
+        userId,
+        recordId: '9'.repeat(5_000),
+        objectId,
+        extension: 'pdf',
+      }),
+    )
+    assert.equal(conversions, 0)
+  } finally {
+    Object.defineProperty(globalThis, 'BigInt', {
+      configurable: true,
+      value: originalBigInt,
+    })
+  }
+})
+
 test('normalizes valid uppercase UUIDs to canonical lowercase paths', () => {
   assert.equal(
     buildStoragePath({

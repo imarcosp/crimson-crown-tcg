@@ -93,7 +93,7 @@ const MIME_EXTENSIONS: Readonly<
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
 const POSITIVE_BIGINT_PATTERN = /^[1-9][0-9]*$/u
-const POSTGRES_BIGINT_MAX = BigInt('9223372036854775807')
+const POSTGRES_BIGINT_MAX_DECIMAL = '9223372036854775807'
 
 function isUploadKind(value: unknown): value is UploadKind {
   return typeof value === 'string' && ALL_UPLOAD_KINDS.has(value as UploadKind)
@@ -137,8 +137,10 @@ function normalizeUuid(value: unknown): string {
 function normalizePositivePostgresBigint(value: unknown): string {
   if (
     typeof value !== 'string' ||
+    value.length > POSTGRES_BIGINT_MAX_DECIMAL.length ||
     !POSITIVE_BIGINT_PATTERN.test(value) ||
-    BigInt(value) > POSTGRES_BIGINT_MAX
+    (value.length === POSTGRES_BIGINT_MAX_DECIMAL.length &&
+      value > POSTGRES_BIGINT_MAX_DECIMAL)
   ) {
     throw new Error('Identificador de almacenamiento inválido.')
   }
