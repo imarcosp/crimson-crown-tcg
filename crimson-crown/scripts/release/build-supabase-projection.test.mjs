@@ -170,13 +170,66 @@ test('builds a migration-only projection from a verified manifest', async () => 
   })
 })
 
-test('returns an immutable forward summary from the validated manifest snapshot', async () => {
+test('returns an exact deep-frozen projection summary from the validated manifest snapshot', async () => {
   await withFixture(async ({ rootDir, outputDir }) => {
     const summary = await buildProjection({ rootDir, outputDir })
 
-    assert.deepEqual(summary, { forwardPendingCount: 1 })
+    assert.deepEqual(summary, {
+      forwardPendingCount: 1,
+      forwardPendingVersions: ['20260829021742'],
+      forwardPendingFilenames: ['20260829021742_admin_product_mutations.sql'],
+      projectedRemoteVersions: [
+        '20260826210617',
+        '20260826210725',
+        '20260827051550',
+        '20260827051604',
+        '20260827051615',
+      ],
+      projectedRemoteFilenames: [
+        '20260826210617_production_runtime_functions.sql',
+        '20260826210725_revoke_is_admin_anon.sql',
+        '20260827051550_create_multi_inventory_system.sql',
+        '20260827051604_multi_inventory_runtime_functions.sql',
+        '20260827051615_add_external_prices_name_search_index.sql',
+      ],
+    })
     assert.equal(Object.isFrozen(summary), true)
+    assert.equal(Object.isFrozen(summary.forwardPendingVersions), true)
+    assert.equal(Object.isFrozen(summary.forwardPendingFilenames), true)
+    assert.equal(Object.isFrozen(summary.projectedRemoteVersions), true)
+    assert.equal(Object.isFrozen(summary.projectedRemoteFilenames), true)
+    assert.throws(() => summary.forwardPendingVersions.push('20260830000000'), TypeError)
+    assert.throws(() => summary.projectedRemoteFilenames.reverse(), TypeError)
   })
+})
+
+test('rejects an unsafe projected remote filename before reserving the output directory', async () => {
+  const entries = fixtureEntries.map((entry) => (
+    entry.class === 'remote_applied' && entry.version === '20260826210617'
+      ? { ...entry, remoteName: 'unsafe remote name' }
+      : entry
+  ))
+
+  await withFixture(async ({ rootDir, outputDir, outputParent }) => {
+    await assert.rejects(
+      () => buildProjection({ rootDir, outputDir }),
+      /nombre remoto de migración no seguro/,
+    )
+    assert.deepEqual(await readdir(outputParent), [])
+  }, { entries })
+})
+
+test('rejects unordered projected remote versions before reserving the output directory', async () => {
+  const entries = [...fixtureEntries]
+  ;[entries[0], entries[1]] = [entries[1], entries[0]]
+
+  await withFixture(async ({ rootDir, outputDir, outputParent }) => {
+    await assert.rejects(
+      () => buildProjection({ rootDir, outputDir }),
+      /orden de migraciones remotas inválido/,
+    )
+    assert.deepEqual(await readdir(outputParent), [])
+  }, { entries })
 })
 
 test('rejects a projection destination inside the repository outside release evidence', async () => {

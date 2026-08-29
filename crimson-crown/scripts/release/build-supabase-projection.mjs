@@ -131,11 +131,46 @@ function remoteMarker(entry) {
   return `-- release projection: remote_version=${entry.version} remote_name=${entry.remoteName} local_source_sha256=${entry.sha256}\n`
 }
 
+function validateStrictlyIncreasing(values, message) {
+  for (let index = 1; index < values.length; index += 1) {
+    if (values[index - 1] >= values[index]) fail(message)
+  }
+}
+
+function buildProjectionSummary(entries) {
+  const forwardEntries = entries.filter((entry) => entry.class === 'forward_pending')
+  const remoteEntries = entries.filter((entry) => entry.class === 'remote_applied')
+  const forwardPendingVersions = forwardEntries.map((entry) => entry.version)
+  const forwardPendingFilenames = forwardEntries.map((entry) => entry.file)
+  const projectedRemoteVersions = remoteEntries.map((entry) => entry.version)
+  const projectedRemoteFilenames = remoteEntries.map((entry) => `${entry.version}_${entry.remoteName}.sql`)
+
+  if (
+    forwardPendingFilenames.some((file) => !projectedRemoteFilePattern.test(file))
+    || projectedRemoteFilenames.some((file) => !projectedRemoteFilePattern.test(file))
+  ) {
+    fail('nombre remoto de migración no seguro')
+  }
+  validateStrictlyIncreasing(forwardPendingVersions, 'orden de migraciones forward inválido')
+  validateStrictlyIncreasing(forwardPendingFilenames, 'orden de migraciones forward inválido')
+  validateStrictlyIncreasing(projectedRemoteVersions, 'orden de migraciones remotas inválido')
+  validateStrictlyIncreasing(projectedRemoteFilenames, 'orden de migraciones remotas inválido')
+
+  return Object.freeze({
+    forwardPendingCount: forwardPendingVersions.length,
+    forwardPendingVersions: Object.freeze(forwardPendingVersions),
+    forwardPendingFilenames: Object.freeze(forwardPendingFilenames),
+    projectedRemoteVersions: Object.freeze(projectedRemoteVersions),
+    projectedRemoteFilenames: Object.freeze(projectedRemoteFilenames),
+  })
+}
+
 export async function buildProjection({ rootDir, outputDir, allowCandidates = false }) {
   const { physicalRoot, physicalOutput } = await resolvePhysicalPaths({ rootDir, outputDir })
   const { migrationsPath } = getMigrationManifestPaths({ rootDir: physicalRoot })
 
   const manifest = await loadAndValidateManifest({ rootDir: physicalRoot, allowCandidates })
+  const summary = buildProjectionSummary(manifest.entries)
   const sourceConfigPath = join(physicalRoot, 'supabase', 'config.toml')
   let projectedConfig
   try {
@@ -177,7 +212,5 @@ export async function buildProjection({ rootDir, outputDir, allowCandidates = fa
     await writeExclusive(join(projectedMigrationsPath, entry.file), forwardBytes)
   }
 
-  return Object.freeze({
-    forwardPendingCount: manifest.entries.filter((entry) => entry.class === 'forward_pending').length,
-  })
+  return summary
 }

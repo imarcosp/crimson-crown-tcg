@@ -13,15 +13,19 @@ const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const sourceWrapper = join(sourceRoot, 'scripts', 'release', 'run-linked-dry-run.ps1')
 const productionRef = 'djfqozfaqkqdoqeoqbzt'
 const remoteFile = '20240101000000_verified_remote.sql'
-const forwardFile = '20240102000000_forward.sql'
+const projectedRemoteFile = '20240101010101_verified_remote.sql'
+const forwardFiles = [
+  '20240102000000_forward_one.sql',
+  '20240103000000_forward_two.sql',
+]
 const remoteSql = '-- verified remote migration\n'
-const forwardSql = 'select 1;\n'
+const forwardSql = ['select 1;\n', 'select 2;\n']
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
 }
 
-function verifiedManifest() {
+function verifiedManifest({ zeroForward = false } = {}) {
   return {
     schemaVersion: 2,
     productionProjectRef: productionRef,
@@ -38,12 +42,16 @@ function verifiedManifest() {
           remediationVersions: [],
         },
       },
-      {
-        class: 'forward_pending',
-        version: '20240102000000',
-        file: forwardFile,
-        sha256: sha256(forwardSql),
-      },
+      ...(
+        zeroForward
+          ? []
+          : forwardFiles.map((file, index) => ({
+            class: 'forward_pending',
+            version: file.slice(0, file.indexOf('_')),
+            file,
+            sha256: sha256(forwardSql[index]),
+          }))
+      ),
     ],
   }
 }
@@ -51,6 +59,16 @@ function verifiedManifest() {
 const fakeCliSource = String.raw`$cliArgs = @($args | ForEach-Object { [string]$_ })
 $record = ConvertTo-Json -Compress -InputObject @($cliArgs)
 Add-Content -LiteralPath $env:FAKE_SUPABASE_LOG -Value $record
+
+if ($cliArgs.Count -eq 1 -and $cliArgs[0] -ceq '--version') {
+  switch ($env:FAKE_SUPABASE_MODE) {
+    'version-wrong' { Write-Output '2.112.0'; exit 0 }
+    'version-multiline' { Write-Output '2.113.0'; Write-Output 'unexpected second line'; exit 0 }
+    'version-missing' { exit 0 }
+    'version-malformed' { Write-Output 'v2.113.0'; exit 0 }
+    default { Write-Output '2.113.0'; exit 0 }
+  }
+}
 
 $workdirIndex = [Array]::IndexOf($cliArgs, '--workdir')
 if ($workdirIndex -lt 0 -or $workdirIndex + 2 -ge $cliArgs.Count) { exit 90 }
@@ -71,8 +89,35 @@ if ($command -eq 'link') {
 
 if ($command -eq 'migration') {
   if ($env:FAKE_SUPABASE_MODE -eq 'list-fail') { exit 42 }
-  Write-Output 'LOCAL | REMOTE | TIME'
-  Write-Output '20240102000000 | | 2024-01-02'
+  $rows = [Collections.Generic.List[string]]::new()
+  $rows.Add('   20240101010101 | 20240101010101 | 2024-01-01 01:01:01')
+  if ($env:FAKE_ZERO_FORWARD -cne '1') {
+    $rows.Add('   20240102000000 |                | 2024-01-02 00:00:00')
+    $rows.Add('   20240103000000 |                | 2024-01-03 00:00:00')
+  }
+  switch ($env:FAKE_SUPABASE_MODE) {
+    'list-missing-forward' { $rows.RemoveAt($rows.Count - 1) }
+    'list-extra-forward' { $rows.Add('   20240104000000 |                | 2024-01-04 00:00:00') }
+    'list-duplicate-forward' { $rows.Insert($rows.Count - 1, '   20240102000000 |                | 2024-01-02 00:00:00') }
+    'list-reordered-forward' {
+      $row = $rows[1]
+      $rows[1] = $rows[2]
+      $rows[2] = $row
+    }
+    'list-remote-only' { $rows.Insert(0, '                  | 20231231000000 | 2023-12-31 00:00:00') }
+    'list-local-only-marker' { $rows[0] = '   20240101010101 |                | 2024-01-01 01:01:01' }
+    'list-additional-local-history' { $rows.Insert(1, '   20231231000000 |                | 2023-12-31 00:00:00') }
+    'list-duplicate-remote' { $rows.Insert(1, $rows[0]) }
+    'list-malformed' { $rows[0] = '   not-a-version  | 20240101010101 | 2024-01-01 01:01:01' }
+  }
+  Write-Output 'Connecting to remote database...'
+  Write-Output ''
+  Write-Output '   Local          | Remote         | Time (UTC)'
+  Write-Output '  ----------------|----------------|---------------------'
+  $rows | Write-Output
+  if ($env:FAKE_SUPABASE_MODE -eq 'list-unknown-grammar') {
+    Write-Output 'unexpected parser drift'
+  }
   exit 0
 }
 
@@ -97,10 +142,38 @@ if ($command -eq 'db') {
     }
     if (($junction.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { exit 45 }
   }
-  if ($env:FAKE_SUPABASE_MODE -eq 'up-to-date') {
+  $pending = [Collections.Generic.List[string]]::new()
+  if ($env:FAKE_ZERO_FORWARD -cne '1') {
+    $pending.Add('20240102000000_forward_one.sql')
+    $pending.Add('20240103000000_forward_two.sql')
+  }
+  switch ($env:FAKE_SUPABASE_MODE) {
+    'push-missing-forward' { $pending.RemoveAt($pending.Count - 1) }
+    'push-extra-forward' { $pending.Add('20240104000000_extra.sql') }
+    'push-duplicate-forward' { $pending.Insert($pending.Count - 1, $pending[0]) }
+    'push-reordered-forward' {
+      $file = $pending[0]
+      $pending[0] = $pending[1]
+      $pending[1] = $file
+    }
+    'push-renamed-forward' { $pending[0] = '20240102000000_renamed.sql' }
+    'push-remote-marker' { $pending.Insert(0, '20240101010101_verified_remote.sql') }
+    'push-baseline' { $pending.Insert(0, '20231231000000_baseline.sql') }
+    'zero-forward-pending' { $pending.Add('20240104000000_unapproved.sql') }
+  }
+  Write-Output 'DRY RUN: migrations will *not* be pushed to the database.'
+  Write-Output 'Connecting to remote database...'
+  if ($env:FAKE_SUPABASE_MODE -eq 'up-to-date' -or ($env:FAKE_ZERO_FORWARD -ceq '1' -and $env:FAKE_SUPABASE_MODE -ne 'zero-forward-pending')) {
     Write-Output 'Remote database is up to date.'
   } else {
-    Write-Output 'DRY RUN: 20240102000000_forward.sql'
+    Write-Output 'Would push these migrations:'
+    foreach ($file in $pending) {
+      Write-Output (' {0} {1}' -f [char]0x2022, $file)
+    }
+    Write-Output 'Finished supabase db push.'
+  }
+  if ($env:FAKE_SUPABASE_MODE -eq 'push-unknown-grammar') {
+    Write-Output 'unexpected parser drift'
   }
   exit 0
 }
@@ -272,8 +345,9 @@ export async function buildProjection(options) {
   const summary = await buildRealProjection(options)
   const manifestPath = join(options.rootDir, 'scripts', 'release', 'migration-manifest.json')
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-  const forward = manifest.entries.find((entry) => entry.class === 'forward_pending')
-  forward.class = 'baseline_present'
+  for (const forward of manifest.entries.filter((entry) => entry.class === 'forward_pending')) {
+    forward.class = 'baseline_present'
+  }
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\\n')
   return summary
 }
@@ -284,22 +358,42 @@ function overrideProjectionSummarySource(value) {
 
 export async function buildProjection(options) {
   await buildRealProjection(options)
-  return { forwardPendingCount: ${JSON.stringify(value)} }
+  return ${JSON.stringify(value)}
 }
 `
+}
+
+function validProjectionSummary({ zeroForward = false } = {}) {
+  return {
+    forwardPendingCount: zeroForward ? 0 : 2,
+    forwardPendingVersions: zeroForward ? [] : ['20240102000000', '20240103000000'],
+    forwardPendingFilenames: zeroForward ? [] : [...forwardFiles],
+    projectedRemoteVersions: ['20240101010101'],
+    projectedRemoteFilenames: [projectedRemoteFile],
+  }
 }
 
 async function git(rootDir, args) {
   await execFileAsync('git', ['-C', rootDir, ...args], { windowsHide: true })
 }
 
-async function makeFixture({ candidate = false, dirty = false, mutateManifestAfterBuild = false, projectionSummaryOverride } = {}) {
+async function makeFixture({
+  candidate = false,
+  dirty = false,
+  mutateManifestAfterBuild = false,
+  projectionSummaryOverride,
+  zeroForward = false,
+} = {}) {
   const fixtureParent = await mkdtemp(join(tmpdir(), 'crimson-wrapper-fixture-'))
   const rootDir = join(fixtureParent, 'repo')
   const releaseDir = join(rootDir, 'scripts', 'release')
   const migrationsDir = join(rootDir, 'supabase', 'migrations')
-  const fakeCli = join(fixtureParent, 'fake-supabase.cmd')
-  const fakeCliImplementation = join(fixtureParent, 'fake-supabase-impl.ps1')
+  const explicitCliDir = join(fixtureParent, 'cli space & (literal) ^!')
+  const fakeCli = join(explicitCliDir, 'fake supabase & cli.cmd')
+  const fakeCliImplementation = join(explicitCliDir, 'fake-supabase-impl.ps1')
+  const defaultCliDir = join(rootDir, 'node_modules', '.bin')
+  const defaultCli = join(defaultCliDir, 'supabase.cmd')
+  const defaultCliImplementation = join(defaultCliDir, 'fake-supabase-impl.ps1')
   const cleanupAttacker = join(fixtureParent, 'cleanup-attacker.ps1')
   const logPath = join(fixtureParent, 'fake-cli-log.jsonl')
   const tempBase = join(fixtureParent, 'temp')
@@ -310,7 +404,7 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
   const tempBaseJunction = join(fixtureParent, 'temp-base-junction')
   const tempBaseSentinel = join(tempBaseTarget, 'must-survive.txt')
   const raceReady = join(fixtureParent, 'race-ready.txt')
-  const manifest = verifiedManifest()
+  const manifest = verifiedManifest({ zeroForward })
 
   if (candidate) {
     manifest.entries[0].releaseProof = { status: 'candidate', evidence: null, remediationVersions: [] }
@@ -318,6 +412,8 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
 
   await mkdir(releaseDir, { recursive: true })
   await mkdir(migrationsDir, { recursive: true })
+  await mkdir(explicitCliDir, { recursive: true })
+  await mkdir(defaultCliDir, { recursive: true })
   await mkdir(tempBase)
   await mkdir(junctionTarget)
   await mkdir(tempBaseTarget)
@@ -335,9 +431,13 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
   await writeFile(join(releaseDir, 'migration-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
   await writeFile(join(rootDir, 'supabase', 'config.toml'), '[db.migrations]\nenabled = false\n')
   await writeFile(join(migrationsDir, remoteFile), remoteSql)
-  await writeFile(join(migrationsDir, forwardFile), forwardSql)
+  if (!zeroForward) {
+    await Promise.all(forwardFiles.map((file, index) => writeFile(join(migrationsDir, file), forwardSql[index])))
+  }
   await writeFile(fakeCli, fakeCliLauncher)
   await writeFile(fakeCliImplementation, fakeCliSource)
+  await writeFile(defaultCli, fakeCliLauncher)
+  await writeFile(defaultCliImplementation, fakeCliSource)
   await writeFile(cleanupAttacker, cleanupAttackerSource)
   await writeFile(sentinel, 'preserve\n')
   await writeFile(junctionSentinel, 'external preserve\n')
@@ -354,6 +454,7 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
     fixtureParent,
     rootDir,
     fakeCli,
+    defaultCli,
     logPath,
     tempBase,
     sentinel,
@@ -364,22 +465,27 @@ async function makeFixture({ candidate = false, dirty = false, mutateManifestAft
     tempBaseSentinel,
     raceReady,
     cleanupAttacker,
+    zeroForward,
   }
 }
 
-function runWrapper(fixture, mode = 'success', { tempBase = fixture.tempBase } = {}) {
+function runWrapper(fixture, mode = 'success', {
+  tempBase = fixture.tempBase,
+  useDefaultCli = false,
+  cliPath = fixture.fakeCli,
+} = {}) {
   const path = `${dirname(process.execPath)};${process.env.PATH ?? ''}`
+  const wrapperArgs = [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    join(fixture.rootDir, 'scripts', 'release', 'run-linked-dry-run.ps1'),
+  ]
+  if (!useDefaultCli) wrapperArgs.push('-SupabaseCli', cliPath)
   const child = spawn(
     'powershell.exe',
-    [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      join(fixture.rootDir, 'scripts', 'release', 'run-linked-dry-run.ps1'),
-      '-SupabaseCli',
-      fixture.fakeCli,
-    ],
+    wrapperArgs,
     {
       cwd: fixture.rootDir,
       env: {
@@ -389,6 +495,7 @@ function runWrapper(fixture, mode = 'success', { tempBase = fixture.tempBase } =
         TMP: tempBase,
         FAKE_SUPABASE_LOG: fixture.logPath,
         FAKE_SUPABASE_MODE: mode,
+        FAKE_ZERO_FORWARD: fixture.zeroForward ? '1' : '0',
         FAKE_JUNCTION_TARGET: fixture.junctionTarget,
         FAKE_RACE_READY: fixture.raceReady,
       },
@@ -424,6 +531,22 @@ async function readCalls(logPath) {
 async function assertExactCleanup(fixture) {
   assert.equal(await readFile(fixture.sentinel, 'utf8'), 'preserve\n')
   assert.deepEqual((await readdir(fixture.tempBase)).sort(), ['keep-me.txt'])
+}
+
+function assertNormalizedSuccess(result, { zeroForward = false } = {}) {
+  assert.equal(result.code, 0, result.stderr)
+  const lines = result.stdout.trim().split(/\r?\n/)
+  assert.equal(lines.length, 9)
+  assert.equal(lines[0], 'Supabase CLI version: 2.113.0')
+  assert.match(lines[1], /^Git SHA: [a-f0-9]{40}$/)
+  assert.equal(lines[2], 'Projected remote versions: 20240101010101')
+  assert.equal(lines[3], `Projected remote filenames: ${projectedRemoteFile}`)
+  assert.equal(lines[4], `Approved forward count: ${zeroForward ? 0 : 2}`)
+  assert.equal(lines[5], `Approved forward versions: ${zeroForward ? '<none>' : '20240102000000, 20240103000000'}`)
+  assert.equal(lines[6], `Approved forward filenames: ${zeroForward ? '<none>' : forwardFiles.join(', ')}`)
+  assert.equal(lines[7], 'Migration list outcome: exact')
+  assert.equal(lines[8], `Dry-run outcome: ${zeroForward ? 'up to date' : 'exact batch'}`)
+  assert.doesNotMatch(result.stdout, /Connecting to|Time \(UTC\)|DRY RUN|Would push|Finished supabase|crimson-release-/i)
 }
 
 function runCleanupAttacker(fixture) {
@@ -507,22 +630,59 @@ test('uses the exact linked dry-run command sequence and exposes only review out
     const result = await runWrapper(fixture)
     const calls = await readCalls(fixture.logPath)
 
-    assert.equal(result.code, 0, result.stderr)
-    assert.equal(calls.length, 3)
-    const projection = calls[0][1]
+    assertNormalizedSuccess(result)
+    assert.match(fixture.fakeCli, /cli space & \(literal\) \^![\\/]fake supabase & cli\.cmd$/)
+    assert.equal(calls.length, 4)
+    const projection = calls[1][1]
     assert.deepEqual(calls, [
+      ['--version'],
       ['--workdir', projection, 'link', '--project-ref', productionRef],
       ['--workdir', projection, 'migration', 'list', '--linked'],
       ['--workdir', projection, 'db', 'push', '--linked', '--dry-run'],
     ])
     assert.match(projection, /crimson-release-[0-9a-f]{32}[\\/]projection$/i)
-    assert.match(result.stdout, /LOCAL \| REMOTE \| TIME/)
-    assert.match(result.stdout, /DRY RUN: 20240102000000_forward\.sql/)
     assert.doesNotMatch(result.stdout, /fake link output/)
     assert.equal(calls.some((call) => call.join(' ') === '--workdir ' + projection + ' db push --linked'), false)
     await assertExactCleanup(fixture)
   })
 })
+
+test('resolves and invokes the literal default node_modules Supabase cmd path', async () => {
+  await withFixture({}, async (fixture) => {
+    const result = await runWrapper(fixture, 'success', { useDefaultCli: true })
+    const calls = await readCalls(fixture.logPath)
+
+    assertNormalizedSuccess(result)
+    assert.equal(calls[0][0], '--version')
+    assert.equal(calls[1][2], 'link')
+    assert.equal(resolve(fixture.defaultCli), join(fixture.rootDir, 'node_modules', '.bin', 'supabase.cmd'))
+    await assertExactCleanup(fixture)
+  })
+})
+
+test('does not let the default cmd path bypass the exact version gate', async () => {
+  await withFixture({}, async (fixture) => {
+    const result = await runWrapper(fixture, 'version-wrong', { useDefaultCli: true })
+
+    assert.notEqual(result.code, 0)
+    assert.deepEqual(await readCalls(fixture.logPath), [['--version']])
+    assert.equal(result.stdout, '')
+    await assertExactCleanup(fixture)
+  })
+})
+
+for (const mode of ['version-wrong', 'version-multiline', 'version-missing', 'version-malformed']) {
+  test(`blocks ${mode} before link`, async () => {
+    await withFixture({}, async (fixture) => {
+      const result = await runWrapper(fixture, mode)
+
+      assert.notEqual(result.code, 0)
+      assert.deepEqual(await readCalls(fixture.logPath), [['--version']])
+      assert.equal(result.stdout, '')
+      await assertExactCleanup(fixture)
+    })
+  })
+}
 
 for (const mode of ['missing-ref', 'foreign-ref']) {
   test(`blocks ${mode} after link and cleans only its temporary root`, async () => {
@@ -531,8 +691,9 @@ for (const mode of ['missing-ref', 'foreign-ref']) {
       const calls = await readCalls(fixture.logPath)
 
       assert.notEqual(result.code, 0)
-      assert.equal(calls.length, 1)
-      assert.equal(calls[0][2], 'link')
+      assert.equal(calls.length, 2)
+      assert.deepEqual(calls[0], ['--version'])
+      assert.equal(calls[1][2], 'link')
       await assertExactCleanup(fixture)
     })
   })
@@ -553,7 +714,7 @@ test('blocks a candidate manifest without an allow-candidates bypass', async () 
     const result = await runWrapper(fixture)
 
     assert.notEqual(result.code, 0)
-    assert.deepEqual(await readCalls(fixture.logPath), [])
+    assert.deepEqual(await readCalls(fixture.logPath), [['--version']])
     await assertExactCleanup(fixture)
   })
 })
@@ -564,8 +725,8 @@ test('blocks an up-to-date result when the verified manifest has a forward migra
     const calls = await readCalls(fixture.logPath)
 
     assert.notEqual(result.code, 0)
-    assert.equal(calls.length, 3)
-    assert.equal(calls[2].at(-1), '--dry-run')
+    assert.equal(calls.length, 4)
+    assert.equal(calls[3].at(-1), '--dry-run')
     assert.equal(result.stdout, '')
     await assertExactCleanup(fixture)
   })
@@ -573,29 +734,140 @@ test('blocks an up-to-date result when the verified manifest has a forward migra
 
 test('uses the materialized projection snapshot when the manifest changes after build', async () => {
   await withFixture({ mutateManifestAfterBuild: true }, async (fixture) => {
-    const result = await runWrapper(fixture, 'up-to-date')
+    const result = await runWrapper(fixture)
     const calls = await readCalls(fixture.logPath)
     const changedManifest = JSON.parse(await readFile(join(fixture.rootDir, 'scripts', 'release', 'migration-manifest.json'), 'utf8'))
 
     assert.equal(changedManifest.entries.some((entry) => entry.class === 'forward_pending'), false)
+    assertNormalizedSuccess(result)
+    assert.equal(calls.length, 4)
+    await assertExactCleanup(fixture)
+  })
+})
+
+const summaryValidationCases = [
+  { name: 'a scalar summary', value: 2 },
+  { name: 'an unknown field', value: { ...validProjectionSummary(), unknown: true } },
+  {
+    name: 'a missing field',
+    value: {
+      forwardPendingCount: 2,
+      forwardPendingVersions: ['20240102000000', '20240103000000'],
+      forwardPendingFilenames: [...forwardFiles],
+      projectedRemoteVersions: ['20240101010101'],
+    },
+  },
+  { name: 'a string count', value: { ...validProjectionSummary(), forwardPendingCount: '2' } },
+  { name: 'an inconsistent count', value: { ...validProjectionSummary(), forwardPendingCount: 1 } },
+  { name: 'a scalar array field', value: { ...validProjectionSummary(), forwardPendingVersions: '20240102000000' } },
+  { name: 'a numeric-coerced version', value: { ...validProjectionSummary(), forwardPendingVersions: [20240102000000, '20240103000000'] } },
+  { name: 'duplicate forward versions', value: { ...validProjectionSummary(), forwardPendingVersions: ['20240102000000', '20240102000000'] } },
+  { name: 'duplicate forward filenames', value: { ...validProjectionSummary(), forwardPendingFilenames: [forwardFiles[0], forwardFiles[0]] } },
+  { name: 'unordered forward versions', value: { ...validProjectionSummary(), forwardPendingVersions: ['20240103000000', '20240102000000'] } },
+  { name: 'unordered remote versions', value: { ...validProjectionSummary(), projectedRemoteVersions: ['20240101010102', '20240101010101'], projectedRemoteFilenames: ['20240101010102_second.sql', projectedRemoteFile] } },
+  { name: 'a mismatched forward filename version', value: { ...validProjectionSummary(), forwardPendingFilenames: ['20240104000000_wrong.sql', forwardFiles[1]] } },
+  { name: 'an unsafe projected filename', value: { ...validProjectionSummary(), projectedRemoteFilenames: ['20240101010101_unsafe name.sql'] } },
+]
+
+for (const invalidSummary of summaryValidationCases) {
+  test(`rejects projection summary with ${invalidSummary.name}`, async () => {
+    await withFixture({ projectionSummaryOverride: invalidSummary.value }, async (fixture) => {
+      const result = await runWrapper(fixture)
+
+      assert.notEqual(result.code, 0)
+      assert.deepEqual(await readCalls(fixture.logPath), [['--version']])
+      await assertExactCleanup(fixture)
+    })
+  })
+}
+
+for (const mode of [
+  'list-missing-forward',
+  'list-extra-forward',
+  'list-duplicate-forward',
+  'list-reordered-forward',
+  'list-remote-only',
+  'list-local-only-marker',
+  'list-additional-local-history',
+  'list-duplicate-remote',
+  'list-malformed',
+  'list-unknown-grammar',
+]) {
+  test(`rejects migration list mode ${mode} before dry-run`, async () => {
+    await withFixture({}, async (fixture) => {
+      const result = await runWrapper(fixture, mode)
+      const calls = await readCalls(fixture.logPath)
+
+      assert.notEqual(result.code, 0)
+      assert.equal(calls.length, 3)
+      assert.deepEqual(calls[0], ['--version'])
+      assert.equal(calls[2][2], 'migration')
+      assert.equal(result.stdout, '')
+      assert.doesNotMatch(result.stderr, /unexpected parser drift/)
+      await assertExactCleanup(fixture)
+    })
+  })
+}
+
+for (const mode of [
+  'push-missing-forward',
+  'push-extra-forward',
+  'push-duplicate-forward',
+  'push-reordered-forward',
+  'push-renamed-forward',
+  'push-remote-marker',
+  'push-baseline',
+  'push-unknown-grammar',
+]) {
+  test(`rejects dry-run mode ${mode}`, async () => {
+    await withFixture({}, async (fixture) => {
+      const result = await runWrapper(fixture, mode)
+      const calls = await readCalls(fixture.logPath)
+
+      assert.notEqual(result.code, 0)
+      assert.equal(calls.length, 4)
+      assert.deepEqual(calls[0], ['--version'])
+      assert.equal(calls[3].at(-1), '--dry-run')
+      assert.equal(result.stdout, '')
+      assert.doesNotMatch(result.stderr, /unexpected parser drift/)
+      await assertExactCleanup(fixture)
+    })
+  })
+}
+
+test('accepts zero approved forwards only when list and dry-run prove exact up-to-date state', async () => {
+  await withFixture({ zeroForward: true }, async (fixture) => {
+    const result = await runWrapper(fixture)
+    const calls = await readCalls(fixture.logPath)
+
+    assertNormalizedSuccess(result, { zeroForward: true })
+    assert.equal(calls.length, 4)
+    assert.equal(calls[3].at(-1), '--dry-run')
+    await assertExactCleanup(fixture)
+  })
+})
+
+test('rejects a pending dry-run batch when zero forwards are approved', async () => {
+  await withFixture({ zeroForward: true }, async (fixture) => {
+    const result = await runWrapper(fixture, 'zero-forward-pending')
+
     assert.notEqual(result.code, 0)
-    assert.equal(calls.length, 3)
+    assert.equal((await readCalls(fixture.logPath)).length, 4)
     assert.equal(result.stdout, '')
     await assertExactCleanup(fixture)
   })
 })
 
-for (const invalidSummary of ['1', true, 1.5, { count: 1 }]) {
-  test(`rejects non-integer projection summary ${JSON.stringify(invalidSummary)}`, async () => {
-    await withFixture({ projectionSummaryOverride: invalidSummary }, async (fixture) => {
-      const result = await runWrapper(fixture)
+test('rejects a local-only migration-list row when zero forwards are approved', async () => {
+  await withFixture({ zeroForward: true }, async (fixture) => {
+    const result = await runWrapper(fixture, 'list-extra-forward')
 
-      assert.notEqual(result.code, 0)
-      assert.deepEqual(await readCalls(fixture.logPath), [])
-      await assertExactCleanup(fixture)
-    })
+    assert.notEqual(result.code, 0)
+    assert.equal((await readCalls(fixture.logPath)).length, 3)
+    assert.equal(result.stdout, '')
+    await assertExactCleanup(fixture)
   })
-}
+})
 
 test('removes a substituted temporary-root junction without traversing its external target', async (t) => {
   await withFixture({}, async (fixture) => {
@@ -739,9 +1011,9 @@ test('holds directory identities while a concurrent attacker attempts cleanup su
 })
 
 for (const failure of [
-  { mode: 'link-fail', expectedCalls: 1 },
-  { mode: 'list-fail', expectedCalls: 2 },
-  { mode: 'push-fail', expectedCalls: 3 },
+  { mode: 'link-fail', expectedCalls: 2 },
+  { mode: 'list-fail', expectedCalls: 3 },
+  { mode: 'push-fail', expectedCalls: 4 },
 ]) {
   test(`propagates ${failure.mode} without executing later commands`, async () => {
     await withFixture({}, async (fixture) => {

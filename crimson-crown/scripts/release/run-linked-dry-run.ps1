@@ -6,8 +6,12 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = $Utf8NoBom
+$OutputEncoding = $Utf8NoBom
 
 $ProductionProjectRef = 'djfqozfaqkqdoqeoqbzt'
+$RequiredSupabaseCliVersion = '2.113.0'
 $RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $TempRoot = $null
 $DirectorySeparators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
@@ -232,6 +236,190 @@ function Invoke-Supabase {
   return @($Output | ForEach-Object { $_.ToString() })
 }
 
+function Assert-ExactPropertyNames {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Value,
+    [Parameter(Mandatory = $true)]
+    [string[]]$ExpectedNames
+  )
+
+  $ActualNames = @($Value.PSObject.Properties.Name)
+  if ($ActualNames.Count -ne $ExpectedNames.Count) { throw 'summary inválido' }
+  for ($Index = 0; $Index -lt $ExpectedNames.Count; $Index += 1) {
+    if ($ActualNames[$Index] -cne $ExpectedNames[$Index]) { throw 'summary inválido' }
+  }
+}
+
+function ConvertTo-StrictStringArray {
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [object]$Value,
+    [Parameter(Mandatory = $true)]
+    [string]$Pattern
+  )
+
+  if ($null -eq $Value -or $Value -isnot [System.Array]) { throw 'summary inválido' }
+  $Result = [Collections.Generic.List[string]]::new()
+  foreach ($Item in $Value) {
+    if ($null -eq $Item -or $Item.GetType() -ne [string] -or $Item -cnotmatch $Pattern) {
+      throw 'summary inválido'
+    }
+    $Result.Add([string]$Item)
+  }
+  return $Result.ToArray()
+}
+
+function Assert-StrictlyIncreasing {
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [string[]]$Values
+  )
+
+  for ($Index = 1; $Index -lt $Values.Count; $Index += 1) {
+    if ([StringComparer]::Ordinal.Compare($Values[$Index - 1], $Values[$Index]) -ge 0) {
+      throw 'summary inválido'
+    }
+  }
+}
+
+function Assert-VersionedFilenames {
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [string[]]$Versions,
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [string[]]$Filenames
+  )
+
+  if ($Versions.Count -ne $Filenames.Count) { throw 'summary inválido' }
+  for ($Index = 0; $Index -lt $Versions.Count; $Index += 1) {
+    if (-not $Filenames[$Index].StartsWith("$($Versions[$Index])_", [StringComparison]::Ordinal)) {
+      throw 'summary inválido'
+    }
+  }
+}
+
+function Remove-OuterBlankLines {
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [AllowEmptyString()]
+    [string[]]$Lines
+  )
+
+  $First = 0
+  while ($First -lt $Lines.Count -and [string]::IsNullOrWhiteSpace($Lines[$First])) { $First += 1 }
+  if ($First -eq $Lines.Count) { return @() }
+  $Last = $Lines.Count - 1
+  while ($Last -ge $First -and [string]::IsNullOrWhiteSpace($Lines[$Last])) { $Last -= 1 }
+  return @($Lines[$First..$Last])
+}
+
+function Assert-ExactMigrationList {
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [AllowEmptyString()]
+    [string[]]$OutputLines,
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [string[]]$RemoteVersions,
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [string[]]$ForwardVersions
+  )
+
+  $Lines = @(Remove-OuterBlankLines -Lines $OutputLines)
+  if (
+    $Lines.Count -lt 4 -or
+    $Lines[0] -cne 'Connecting to remote database...' -or
+    $Lines[1] -cne '' -or
+    $Lines[2] -cne '   Local          | Remote         | Time (UTC)' -or
+    $Lines[3] -cne '  ----------------|----------------|---------------------'
+  ) {
+    throw 'Salida de migration list inválida.'
+  }
+
+  $ExpectedRows = [Collections.Generic.List[object]]::new()
+  foreach ($Version in $RemoteVersions) {
+    $ExpectedRows.Add(@($Version, $Version))
+  }
+  foreach ($Version in $ForwardVersions) {
+    $ExpectedRows.Add(@($Version, ''))
+  }
+  $Rows = @($Lines | Select-Object -Skip 4)
+  if ($Rows.Count -ne $ExpectedRows.Count) { throw 'Salida de migration list inválida.' }
+
+  for ($Index = 0; $Index -lt $Rows.Count; $Index += 1) {
+    $Match = [regex]::Match(
+      $Rows[$Index],
+      '^ {3}(?<local>\d{8,})? *\| *(?<remote>\d{8,})? *\| *(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) *$'
+    )
+    if (-not $Match.Success) { throw 'Salida de migration list inválida.' }
+    if (
+      $Match.Groups['local'].Value -cne $ExpectedRows[$Index][0] -or
+      $Match.Groups['remote'].Value -cne $ExpectedRows[$Index][1]
+    ) {
+      throw 'Salida de migration list inválida.'
+    }
+  }
+}
+
+function Assert-ExactDryRun {
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [AllowEmptyString()]
+    [string[]]$OutputLines,
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [string[]]$ForwardFilenames
+  )
+
+  $Lines = @(Remove-OuterBlankLines -Lines $OutputLines)
+  if (
+    $Lines.Count -lt 3 -or
+    $Lines[0] -cne 'DRY RUN: migrations will *not* be pushed to the database.' -or
+    $Lines[1] -cne 'Connecting to remote database...'
+  ) {
+    throw 'Salida de db push dry-run inválida.'
+  }
+
+  if ($ForwardFilenames.Count -eq 0) {
+    if ($Lines.Count -ne 3 -or $Lines[2] -cne 'Remote database is up to date.') {
+      throw 'Salida de db push dry-run inválida.'
+    }
+    return
+  }
+
+  if (
+    $Lines.Count -ne ($ForwardFilenames.Count + 4) -or
+    $Lines[2] -cne 'Would push these migrations:' -or
+    $Lines[$Lines.Count - 1] -cne 'Finished supabase db push.'
+  ) {
+    throw 'Salida de db push dry-run inválida.'
+  }
+  for ($Index = 0; $Index -lt $ForwardFilenames.Count; $Index += 1) {
+    $ExpectedLine = " $([char]0x2022) $($ForwardFilenames[$Index])"
+    if ($Lines[$Index + 3] -cne $ExpectedLine) { throw 'Salida de db push dry-run inválida.' }
+  }
+}
+
+function Format-EvidenceArray {
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [string[]]$Values
+  )
+
+  if ($Values.Count -eq 0) { return '<none>' }
+  return ($Values -join ', ')
+}
+
 $InitialTempBaseLock = Open-SafeTempBaseLock
 $InitialTempBaseLock.Dispose()
 
@@ -248,6 +436,14 @@ try {
   if ($GitStatus.Count -ne 0) {
     throw 'El worktree Git debe estar limpio.'
   }
+  $GitShaOutput = @(& $GitExecutable -C $RepositoryRoot rev-parse --verify HEAD 2>&1)
+  if ($LASTEXITCODE -ne 0 -or $GitShaOutput.Count -ne 1) {
+    throw 'No se pudo verificar el commit Git.'
+  }
+  $GitSha = $GitShaOutput[0].ToString().Trim()
+  if ($GitSha -cnotmatch '^[a-f0-9]{40}$') {
+    throw 'No se pudo verificar el commit Git.'
+  }
 
   if ([string]::IsNullOrWhiteSpace($SupabaseCli)) {
     $SupabaseCli = Join-Path $RepositoryRoot 'node_modules\.bin\supabase.cmd'
@@ -259,6 +455,17 @@ try {
   } catch {
     throw 'Node.js no disponible.'
   }
+
+  $CliVersionOutput = @(Invoke-Supabase -Executable $ResolvedSupabaseCli -Arguments @(
+    '--version'
+  ) -FailureMessage 'No se pudo verificar la versión de Supabase CLI.')
+  if (
+    $CliVersionOutput.Count -ne 1 -or
+    $CliVersionOutput[0].Trim() -cne $RequiredSupabaseCliVersion
+  ) {
+    throw 'Versión de Supabase CLI no permitida.'
+  }
+  $CliVersion = $RequiredSupabaseCliVersion
 
   $TempRoot = Join-Path $TempBase ("crimson-release-{0}" -f [Guid]::NewGuid().ToString('N'))
   $CreationBaseLock = Open-SafeTempBaseLock
@@ -286,7 +493,13 @@ process.stdout.write(JSON.stringify(summary));
 
   try {
     $ProjectionSummary = ($ProjectionOutput -join '') | ConvertFrom-Json
-    $SummaryProperties = @($ProjectionSummary.PSObject.Properties.Name)
+    Assert-ExactPropertyNames -Value $ProjectionSummary -ExpectedNames @(
+      'forwardPendingCount',
+      'forwardPendingVersions',
+      'forwardPendingFilenames',
+      'projectedRemoteVersions',
+      'projectedRemoteFilenames'
+    )
     $IntegerTypes = @(
       [System.Byte],
       [System.SByte],
@@ -298,8 +511,6 @@ process.stdout.write(JSON.stringify(summary));
       [System.UInt64]
     )
     if (
-      $SummaryProperties.Count -ne 1 -or
-      $SummaryProperties[0] -cne 'forwardPendingCount' -or
       $null -eq $ProjectionSummary.forwardPendingCount -or
       $IntegerTypes -notcontains $ProjectionSummary.forwardPendingCount.GetType()
     ) {
@@ -307,6 +518,32 @@ process.stdout.write(JSON.stringify(summary));
     }
     $ForwardPendingCount = [long]$ProjectionSummary.forwardPendingCount
     if ($ForwardPendingCount -lt 0) { throw 'summary inválido' }
+    $ForwardPendingVersions = @(ConvertTo-StrictStringArray `
+      -Value $ProjectionSummary.forwardPendingVersions `
+      -Pattern '^\d{8,}$')
+    $ForwardPendingFilenames = @(ConvertTo-StrictStringArray `
+      -Value $ProjectionSummary.forwardPendingFilenames `
+      -Pattern '^\d{8,}_[A-Za-z0-9][A-Za-z0-9_-]*\.sql$')
+    $ProjectedRemoteVersions = @(ConvertTo-StrictStringArray `
+      -Value $ProjectionSummary.projectedRemoteVersions `
+      -Pattern '^\d{8,}$')
+    $ProjectedRemoteFilenames = @(ConvertTo-StrictStringArray `
+      -Value $ProjectionSummary.projectedRemoteFilenames `
+      -Pattern '^\d{8,}_[A-Za-z0-9][A-Za-z0-9_-]*\.sql$')
+    if (
+      $ForwardPendingCount -ne $ForwardPendingVersions.Count -or
+      $ForwardPendingCount -ne $ForwardPendingFilenames.Count -or
+      $ProjectedRemoteVersions.Count -ne $ProjectedRemoteFilenames.Count
+    ) {
+      throw 'summary inválido'
+    }
+    Assert-StrictlyIncreasing -Values $ForwardPendingVersions
+    Assert-StrictlyIncreasing -Values $ForwardPendingFilenames
+    Assert-StrictlyIncreasing -Values $ProjectedRemoteVersions
+    Assert-StrictlyIncreasing -Values $ProjectedRemoteFilenames
+    Assert-StrictlyIncreasing -Values @($ProjectedRemoteVersions + $ForwardPendingVersions)
+    Assert-VersionedFilenames -Versions $ForwardPendingVersions -Filenames $ForwardPendingFilenames
+    Assert-VersionedFilenames -Versions $ProjectedRemoteVersions -Filenames $ProjectedRemoteFilenames
   } catch {
     throw 'Summary de proyección inválido.'
   }
@@ -329,16 +566,26 @@ process.stdout.write(JSON.stringify(summary));
     '--workdir', $Projection, 'migration', 'list', '--linked'
   ) -FailureMessage 'Supabase migration list falló.'
 
+  Assert-ExactMigrationList `
+    -OutputLines @($MigrationOutput) `
+    -RemoteVersions $ProjectedRemoteVersions `
+    -ForwardVersions $ForwardPendingVersions
+
   $PushOutput = Invoke-Supabase -Executable $ResolvedSupabaseCli -Arguments @(
     '--workdir', $Projection, 'db', 'push', '--linked', '--dry-run'
   ) -FailureMessage 'Supabase db push dry-run falló.'
 
-  if ($ForwardPendingCount -gt 0 -and (($PushOutput -join "`n") -match '(?i)up[ -]?to[ -]?date')) {
-    throw 'Resultado up to date incompatible con migraciones forward pendientes.'
-  }
+  Assert-ExactDryRun -OutputLines @($PushOutput) -ForwardFilenames $ForwardPendingFilenames
 
-  Write-Output $MigrationOutput
-  Write-Output $PushOutput
+  Write-Output "Supabase CLI version: $CliVersion"
+  Write-Output "Git SHA: $GitSha"
+  Write-Output "Projected remote versions: $(Format-EvidenceArray -Values $ProjectedRemoteVersions)"
+  Write-Output "Projected remote filenames: $(Format-EvidenceArray -Values $ProjectedRemoteFilenames)"
+  Write-Output "Approved forward count: $ForwardPendingCount"
+  Write-Output "Approved forward versions: $(Format-EvidenceArray -Values $ForwardPendingVersions)"
+  Write-Output "Approved forward filenames: $(Format-EvidenceArray -Values $ForwardPendingFilenames)"
+  Write-Output 'Migration list outcome: exact'
+  Write-Output "Dry-run outcome: $(if ($ForwardPendingCount -eq 0) { 'up to date' } else { 'exact batch' })"
 } finally {
   if ($null -ne $TempRoot) {
     $CleanupBaseLock = Open-SafeTempBaseLock
