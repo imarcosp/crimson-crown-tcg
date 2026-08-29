@@ -1,6 +1,5 @@
 'use server'
 
-import { processWishlistNotifications } from '@/app/actions/wishlist'
 import { isAdminEmail } from '@/lib/auth/admin-access'
 import {
   createAdminProductActionCore,
@@ -102,6 +101,7 @@ function createGateway(): AdminProductGateway {
     },
 
     async notifyStockArrivals(items) {
+      const { processWishlistNotifications } = await import('@/app/actions/wishlist')
       const result = await processWishlistNotifications(items)
       if (result?.success === false) throw new Error('No se pudieron procesar las alertas de wishlist.')
     },

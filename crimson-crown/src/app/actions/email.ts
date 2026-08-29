@@ -1,5 +1,4 @@
 "use server"
-import { Resend } from 'resend'
 import { render } from '@react-email/render'
 import OrderTemplate from '@/components/emails/OrderTemplate'
 import { createClient } from '@supabase/supabase-js'
@@ -9,8 +8,8 @@ import {
   getBuylistQuotePdfFileName,
   getBuylistQuotePdfSummary,
 } from '@/lib/buylist-quote-pdf'
+import { getResendClient } from '@/lib/email/resend-client'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const ADMIN_EMAIL = siteConfig.socialLinks.email || 'crimsoncrownimports@gmail.com'
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || siteConfig.url
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
@@ -96,7 +95,7 @@ export async function sendOrderEmails(orderId: string, userEmail: string, items:
   }
 
   try {
-    await resend.emails.send({
+    await getResendClient().emails.send({
       from: FROM_HEADER,
       replyTo: REPLY_TO,
       to: userEmail,
@@ -109,7 +108,7 @@ export async function sendOrderEmails(orderId: string, userEmail: string, items:
   }
 
   try {
-    await resend.emails.send({
+    await getResendClient().emails.send({
       from: FROM_HEADER,
       replyTo: REPLY_TO,
       to: ADMIN_EMAIL,
@@ -232,7 +231,7 @@ export async function sendImportNotification(
       </div>`
     }
 
-    await resend.emails.send({
+    await getResendClient().emails.send({
       from: FROM_HEADER,
       replyTo: REPLY_TO,
       to: email,
@@ -322,7 +321,7 @@ export async function sendBuylistNotification(params: {
             ]
         }
 
-        await resend.emails.send(payload)
+        await getResendClient().emails.send(payload)
 
         return { success: true }
     } catch (e: any) {
@@ -339,7 +338,7 @@ export async function notifyAdminOrderUpdated(params: {
     link: string
 }) {
     try {
-        await resend.emails.send({
+        await getResendClient().emails.send({
             from: FROM_HEADER,
             replyTo: REPLY_TO,
             to: ADMIN_EMAIL,

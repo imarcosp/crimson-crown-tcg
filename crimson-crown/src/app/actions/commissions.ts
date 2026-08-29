@@ -2,11 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
-import { Resend } from 'resend'
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'
 import { ADMIN_EMAILS, OWNER_ADMIN_EMAIL } from '@/lib/constants'
 import { COMMISSION_START_PERIOD_KEY, getCurrentCommissionMonthKey } from '@/lib/commissions'
 import { siteConfig } from '@/config/site'
+import { getResendClient } from '@/lib/email/resend-client'
 
 type PaymentInput = {
   periodId: string
@@ -28,7 +28,6 @@ type AdjustmentInput = {
   notes?: string
 }
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 function createServiceRoleClient() {
   return createAdminClient(
@@ -222,7 +221,7 @@ async function sendCommissionPaymentReportedEmail(params: {
 }) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || siteConfig.url
 
-  await resend.emails.send({
+  await getResendClient().emails.send({
     from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
     to: OWNER_ADMIN_EMAIL,
     subject: `💸 Pago de comisión reportado por Epi (${params.periodKey})`,

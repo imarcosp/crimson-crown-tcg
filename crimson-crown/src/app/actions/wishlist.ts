@@ -1,9 +1,8 @@
 "use server"
 import { createClient } from '@/lib/supabase/server'
-import { Resend } from 'resend'
 import { siteConfig } from '@/config/site'
+import { getResendClient } from '@/lib/email/resend-client'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || siteConfig.url
 
 export async function processWishlistNotifications(newItems: { id: string, name: string }[]) {
@@ -58,7 +57,7 @@ export async function processWishlistNotifications(newItems: { id: string, name:
 
           if (email) {
             // EMAIL MEJORADO CON IMAGEN Y DATOS
-            await resend.emails.send({
+            await getResendClient().emails.send({
               from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
               to: email,
               subject: `🔔 ¡Stock Disponible! ${item.name}`,

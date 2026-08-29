@@ -1,10 +1,9 @@
 "use server"
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { Resend } from 'resend'
 import { siteConfig } from '@/config/site'
+import { getResendClient } from '@/lib/email/resend-client'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function updateOrderStatus(orderId: string, newStatus: string) {
   const cookieStore = await cookies()
@@ -58,7 +57,7 @@ if (userEmail && ['shipped', 'completed', 'ready_pickup', 'cancelled'].includes(
         `
       }
 
-      await resend.emails.send({
+      await getResendClient().emails.send({
         from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
         to: userEmail,
         subject: subject,
