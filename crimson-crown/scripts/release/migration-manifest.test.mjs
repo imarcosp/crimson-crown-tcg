@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises'
+import { cp, link, mkdir, mkdtemp, readFile, readdir, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -31,6 +31,19 @@ function reconciledProof(remediationVersions, evidence = 'docs/evidence/fixture-
   return { status: 'forward_reconciled', evidence, remediationVersions }
 }
 
+function manifestWithVerifiedEvidence(evidence) {
+  return completeFixtureManifest([
+    {
+      class: 'baseline_present',
+      version: '20240101000000',
+      file: alphaFile,
+      sha256: alphaHash,
+      releaseProof: verifiedProof(evidence),
+    },
+    { class: 'forward_pending', version: '20240102000000', file: betaFile, sha256: betaHash },
+  ])
+}
+
 function completeFixtureManifest(entries = [
   {
     class: 'baseline_present',
@@ -51,11 +64,18 @@ function completeFixtureManifest(entries = [
 async function withFixture(callback, manifest = completeFixtureManifest(), additionalFiles = []) {
   const rootDir = await mkdtemp(join(tmpdir(), 'crimson-migration-manifest-'))
   const migrationsDir = join(rootDir, 'supabase', 'migrations')
+  const evidenceDir = join(rootDir, 'docs', 'evidence')
   const manifestPath = join(rootDir, 'scripts', 'release', 'migration-manifest.json')
 
   await mkdir(migrationsDir, { recursive: true })
+  await mkdir(evidenceDir, { recursive: true })
   await writeFile(join(migrationsDir, alphaFile), 'alpha\n')
   await writeFile(join(migrationsDir, betaFile), 'beta\n')
+  await writeFile(
+    join(evidenceDir, 'fixture-proof.md'),
+    '<a id="verified"></a>\n<a id="reconciled"></a>\n<a id="verified-remote"></a>\n',
+  )
+  await writeFile(join(evidenceDir, 'proof.md'), '# Baseline 20240101000000\n')
   for (const [file, contents] of additionalFiles) {
     await writeFile(join(migrationsDir, file), contents)
   }
@@ -284,6 +304,132 @@ test('rejects unsafe evidence anchors without echoing them', async () => {
       ]),
     )
   }
+})
+
+test('rejects a syntactically safe evidence path when the file does not exist', async () => {
+  const evidence = 'docs/evidence/missing-proof.md#verified'
+
+  await withFixture(
+    (rootDir) => assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => (
+        error.message === 'evidencia de release inválida'
+        && !error.message.includes(evidence)
+        && !error.message.includes(rootDir)
+      ),
+    ),
+    manifestWithVerifiedEvidence(evidence),
+  )
+})
+
+test('rejects an evidence path that names a directory instead of a regular file', async () => {
+  const evidence = 'docs/evidence/not-a-file.md#verified'
+
+  await withFixture(async (rootDir) => {
+    await mkdir(join(rootDir, 'docs', 'evidence', 'not-a-file.md'))
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    )
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('rejects an evidence file reached through a symbolic-link file', async (t) => {
+  const evidence = 'docs/evidence/linked-proof.md#verified'
+
+  await withFixture(async (rootDir) => {
+    const evidenceDir = join(rootDir, 'docs', 'evidence')
+    const target = join(evidenceDir, 'real-proof.md')
+    const link = join(evidenceDir, 'linked-proof.md')
+    await writeFile(target, '<a id="verified"></a>\n')
+    try {
+      await symlink(target, link, 'file')
+    } catch (error) {
+      t.skip(`file symlink unavailable on this host: ${error.code ?? 'unknown error'}`)
+      return
+    }
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    )
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('rejects an evidence file reached through a hard-link alias', async () => {
+  const evidence = 'docs/evidence/hard-linked-proof.md#verified'
+
+  await withFixture(async (rootDir) => {
+    const evidenceDir = join(rootDir, 'docs', 'evidence')
+    const target = join(evidenceDir, 'hard-link-target.md')
+    const alias = join(evidenceDir, 'hard-linked-proof.md')
+    await writeFile(target, '<a id="verified"></a>\n')
+    await link(target, alias)
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    )
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('rejects an evidence file reached through a junction ancestor', async (t) => {
+  const evidence = 'docs/evidence/linked-section/proof.md#verified'
+
+  await withFixture(async (rootDir) => {
+    const evidenceDir = join(rootDir, 'docs', 'evidence')
+    const target = join(evidenceDir, 'real-section')
+    const link = join(evidenceDir, 'linked-section')
+    await mkdir(target)
+    await writeFile(join(target, 'proof.md'), '<a id="verified"></a>\n')
+    try {
+      await symlink(target, link, 'junction')
+    } catch (error) {
+      t.skip(`junction unavailable on this host: ${error.code ?? 'unknown error'}`)
+      return
+    }
+
+    await assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    )
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('rejects a safe anchor that is absent from the evidence Markdown', async () => {
+  const evidence = 'docs/evidence/fixture-proof.md#missing-anchor'
+
+  await withFixture(
+    (rootDir) => assert.rejects(
+      () => loadAndValidateManifest({ rootDir }),
+      (error) => error.message === 'evidencia de release inválida',
+    ),
+    manifestWithVerifiedEvidence(evidence),
+  )
+})
+
+test('resolves deterministic duplicate ATX heading slugs', async () => {
+  const evidence = 'docs/evidence/duplicate-headings.md#review-proof-1-1'
+
+  await withFixture(async (rootDir) => {
+    await writeFile(
+      join(rootDir, 'docs', 'evidence', 'duplicate-headings.md'),
+      '# Review Proof\n# Review Proof\n# Review Proof-1\n',
+    )
+
+    const manifest = await loadAndValidateManifest({ rootDir })
+    assert.equal(manifest.entries[0].releaseProof.evidence, evidence)
+  }, manifestWithVerifiedEvidence(evidence))
+})
+
+test('accepts a safe explicit Markdown evidence anchor', async () => {
+  const evidence = 'docs/evidence/fixture-proof.md#verified'
+
+  await withFixture(async (rootDir) => {
+    const manifest = await loadAndValidateManifest({ rootDir })
+    assert.equal(manifest.entries[0].releaseProof.evidence, evidence)
+  }, manifestWithVerifiedEvidence(evidence))
 })
 
 test('forward-reconciled proofs reject unknown, duplicate, malformed, and old remediations', async () => {

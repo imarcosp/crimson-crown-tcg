@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
-import { readFile, readdir } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { lstat, readFile, readdir, realpath, stat } from 'node:fs/promises'
+import { isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
+import { TextDecoder } from 'node:util'
 
 const productionProjectRef = 'djfqozfaqkqdoqeoqbzt'
 const manifestRelativePath = join('scripts', 'release', 'migration-manifest.json')
@@ -12,7 +13,11 @@ const sha256Pattern = /^[a-f0-9]{64}$/
 const versionPattern = /^\d{8,}$/
 const evidenceSegmentPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const evidenceAnchorPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/
+const explicitMarkdownAnchorPattern = /^[ ]{0,3}<a id="([A-Za-z0-9][A-Za-z0-9._:-]*)"><\/a>[ \t]*$/
+const atxHeadingPattern = /^[ ]{0,3}#{1,6}(?:[ \t]+|$)(.*)$/
+const simpleHeadingTextPattern = /^[A-Za-z0-9 _-]+$/
 const controlCharacterPattern = /[\u0000-\u001f\u007f-\u009f]/
+const markdownDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
 
 function fail(message) {
   throw new Error(message)
@@ -31,17 +36,30 @@ function validateExactKeys(value, expectedKeys, message = 'campos de manifiesto 
   }
 }
 
-function isSafeEvidenceAnchor(value) {
-  if (typeof value !== 'string' || value.length === 0) return false
-  if (value.includes('\\') || controlCharacterPattern.test(value)) return false
+function isWithin(path, parent) {
+  const relativePath = relative(parent, path)
+  return relativePath === '' || (relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath))
+}
+
+function isSamePath(left, right) {
+  return isWithin(left, right) && isWithin(right, left)
+}
+
+function hasSameIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino
+}
+
+function parseEvidenceReference(value) {
+  if (typeof value !== 'string' || value.length === 0) return null
+  if (value.includes('\\') || controlCharacterPattern.test(value)) return null
 
   const firstHash = value.indexOf('#')
-  if (firstHash !== value.lastIndexOf('#')) return false
+  if (firstHash !== value.lastIndexOf('#')) return null
 
   const evidencePath = firstHash === -1 ? value : value.slice(0, firstHash)
   const anchor = firstHash === -1 ? null : value.slice(firstHash + 1)
-  if (!evidencePath.startsWith('docs/evidence/')) return false
-  if (evidencePath.includes('://') || evidencePath.startsWith('/')) return false
+  if (!evidencePath.startsWith('docs/evidence/')) return null
+  if (evidencePath.includes('://') || evidencePath.startsWith('/')) return null
 
   const segments = evidencePath.split('/')
   if (
@@ -53,10 +71,11 @@ function isSafeEvidenceAnchor(value) {
       || !evidenceSegmentPattern.test(segment)
     ))
   ) {
-    return false
+    return null
   }
 
-  return anchor === null || evidenceAnchorPattern.test(anchor)
+  if (anchor !== null && !evidenceAnchorPattern.test(anchor)) return null
+  return { anchor, evidencePath }
 }
 
 function validateReleaseProof(releaseProof) {
@@ -83,7 +102,7 @@ function validateReleaseProof(releaseProof) {
     return
   }
 
-  if (!isSafeEvidenceAnchor(releaseProof.evidence)) {
+  if (!parseEvidenceReference(releaseProof.evidence)) {
     fail('evidencia de release inválida')
   }
 
@@ -103,6 +122,139 @@ function validateReleaseProof(releaseProof) {
       fail('remediaciones de release inválidas')
     }
     remediationVersions.add(version)
+  }
+}
+
+function fenceDescriptor(line) {
+  const match = line.match(/^[ ]{0,3}(`{3,}|~{3,})(.*)$/)
+  if (!match) return null
+  return { character: match[1][0], length: match[1].length, rest: match[2] }
+}
+
+function githubStyleHeadingSlug(headingText) {
+  if (!simpleHeadingTextPattern.test(headingText)) return null
+  return headingText.trim().toLowerCase().replace(/ +/g, '-') || null
+}
+
+function collectMarkdownAnchors(markdown) {
+  const anchors = new Set()
+  const usedHeadingSlugs = new Set()
+  let openFence = null
+
+  for (const line of markdown.split(/\r\n|\n|\r/)) {
+    const fence = fenceDescriptor(line)
+    if (openFence) {
+      if (
+        fence
+        && fence.character === openFence.character
+        && fence.length >= openFence.length
+        && fence.rest.trim() === ''
+      ) {
+        openFence = null
+      }
+      continue
+    }
+    if (fence) {
+      openFence = fence
+      continue
+    }
+
+    const explicitAnchor = line.match(explicitMarkdownAnchorPattern)
+    if (explicitAnchor) {
+      anchors.add(explicitAnchor[1])
+      continue
+    }
+
+    const atxHeading = line.match(atxHeadingPattern)
+    if (!atxHeading) continue
+    const headingText = atxHeading[1].replace(/[ \t]+#+[ \t]*$/, '').trim()
+    const baseSlug = githubStyleHeadingSlug(headingText)
+    if (!baseSlug) continue
+
+    let headingSlug = baseSlug
+    let suffix = 0
+    while (usedHeadingSlugs.has(headingSlug)) {
+      suffix += 1
+      headingSlug = `${baseSlug}-${suffix}`
+    }
+    usedHeadingSlugs.add(headingSlug)
+    anchors.add(headingSlug)
+  }
+
+  return anchors
+}
+
+async function readNonReparseEvidenceFileIdentity(path) {
+  const absolutePath = resolve(path)
+  const { root } = parse(absolutePath)
+  const components = relative(root, absolutePath).split(sep).filter(Boolean)
+  let currentPath = root
+  let currentIdentity = null
+
+  for (let index = 0; index < components.length; index += 1) {
+    currentPath = join(currentPath, components[index])
+    currentIdentity = await lstat(currentPath, { bigint: true })
+    const isFinalComponent = index === components.length - 1
+    if (
+      currentIdentity.isSymbolicLink()
+      || (isFinalComponent ? !currentIdentity.isFile() : !currentIdentity.isDirectory())
+    ) {
+      fail('evidencia de release inválida')
+    }
+  }
+
+  if (!currentIdentity) fail('evidencia de release inválida')
+  return currentIdentity
+}
+
+async function validatePhysicalEvidenceReference({ evidence, rootDir }) {
+  const reference = parseEvidenceReference(evidence)
+  if (!reference) fail('evidencia de release inválida')
+
+  const absoluteRoot = resolve(rootDir)
+  const evidenceRoot = join(absoluteRoot, 'docs', 'evidence')
+  const evidenceSegments = reference.evidencePath.split('/')
+  const absoluteEvidenceFile = join(absoluteRoot, ...evidenceSegments)
+  const lexicalIdentity = await readNonReparseEvidenceFileIdentity(absoluteEvidenceFile)
+  const physicalRoot = await realpath(absoluteRoot)
+  const physicalEvidenceRoot = await realpath(evidenceRoot)
+  const physicalEvidenceFile = await realpath(absoluteEvidenceFile)
+  const physicalIdentity = await stat(physicalEvidenceFile, { bigint: true })
+  const expectedPhysicalEvidenceRoot = join(physicalRoot, 'docs', 'evidence')
+  const expectedPhysicalEvidenceFile = join(physicalRoot, ...evidenceSegments)
+
+  if (
+    !physicalIdentity.isFile()
+    || lexicalIdentity.nlink !== 1n
+    || physicalIdentity.nlink !== 1n
+    || !hasSameIdentity(lexicalIdentity, physicalIdentity)
+    || !isSamePath(physicalEvidenceRoot, expectedPhysicalEvidenceRoot)
+    || !isWithin(physicalEvidenceFile, physicalEvidenceRoot)
+    || !isSamePath(physicalEvidenceFile, expectedPhysicalEvidenceFile)
+  ) {
+    fail('evidencia de release inválida')
+  }
+
+  if (reference.anchor !== null) {
+    const markdown = markdownDecoder.decode(await readFile(physicalEvidenceFile))
+    if (!collectMarkdownAnchors(markdown).has(reference.anchor)) {
+      fail('evidencia de release inválida')
+    }
+  }
+}
+
+async function validateEvidenceReferences({ entries, rootDir }) {
+  const validatedEvidence = new Set()
+  try {
+    for (const entry of entries) {
+      if (!historicalClasses.has(entry.class) || entry.releaseProof.status === 'candidate') continue
+      const evidence = entry.releaseProof.evidence
+      if (validatedEvidence.has(evidence)) continue
+      await validatePhysicalEvidenceReference({ evidence, rootDir })
+      validatedEvidence.add(evidence)
+    }
+  } catch {
+    fail('evidencia de release inválida')
   }
 }
 
@@ -270,6 +422,7 @@ export async function loadAndValidateManifest({ rootDir, allowCandidates }) {
   }
 
   validateCrossEntryRelationships(manifest.entries)
+  await validateEvidenceReferences({ entries: manifest.entries, rootDir })
 
   if (
     allowCandidates !== true

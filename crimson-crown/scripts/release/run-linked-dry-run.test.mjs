@@ -403,6 +403,7 @@ async function makeFixture({
   const rootDir = join(fixtureParent, 'repo')
   const releaseDir = join(rootDir, 'scripts', 'release')
   const migrationsDir = join(rootDir, 'supabase', 'migrations')
+  const evidenceDir = join(rootDir, 'docs', 'evidence')
   const explicitCliDir = join(fixtureParent, 'cli space & (literal) ^!')
   const fakeCli = join(explicitCliDir, 'fake supabase & cli.cmd')
   const fakeCliImplementation = join(explicitCliDir, 'fake-supabase-impl.ps1')
@@ -435,6 +436,7 @@ async function makeFixture({
 
   await mkdir(releaseDir, { recursive: true })
   await mkdir(migrationsDir, { recursive: true })
+  await mkdir(evidenceDir, { recursive: true })
   await mkdir(explicitCliDir, { recursive: true })
   await mkdir(defaultCliDir, { recursive: true })
   await mkdir(tempBase)
@@ -526,6 +528,7 @@ async function makeFixture({
   }
   await cp(join(sourceRoot, 'scripts', 'release', 'migration-manifest.mjs'), join(releaseDir, 'migration-manifest.mjs'))
   await writeFile(join(releaseDir, 'migration-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  await writeFile(join(evidenceDir, 'fixture-proof.md'), '<a id="verified-remote"></a>\n')
   await writeFile(join(rootDir, 'supabase', 'config.toml'), '[db.migrations]\nenabled = false\n')
   await writeFile(join(migrationsDir, remoteFile), remoteSql)
   if (!zeroForward) {

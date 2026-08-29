@@ -97,10 +97,13 @@ async function withFixture(callback, { config, entries = fixtureEntries } = {}) 
   const outputParent = await mkdtemp(join(tmpdir(), 'crimson-release-projection-output-'))
   const outputDir = join(outputParent, 'projection')
   const migrationsDir = join(rootDir, 'supabase', 'migrations')
+  const evidenceDir = join(rootDir, 'docs', 'evidence')
   const manifestPath = join(rootDir, 'scripts', 'release', 'migration-manifest.json')
 
   await mkdir(migrationsDir, { recursive: true })
+  await mkdir(evidenceDir, { recursive: true })
   await mkdir(dirname(manifestPath), { recursive: true })
+  await writeFile(join(evidenceDir, 'fixture-proof.md'), '<a id="verified"></a>\n')
   await cp(join(sourceRoot, 'supabase', 'config.toml'), join(rootDir, 'supabase', 'config.toml'))
   for (const entry of entries) {
     await cp(join(sourceRoot, 'supabase', 'migrations', entry.file), join(migrationsDir, entry.file))
