@@ -21,6 +21,8 @@ Statement normalization converts CRLF/CR to LF, removes trailing horizontal whit
 
 The anchors below hash canonical JSON with recursively sorted object keys and deterministically sorted catalog rows.
 
+The independently auditable [per-object evidence matrix](./crimson-migration-object-matrix-2026-08-29.json) records 160 object decisions underpinning all five remote pairs and all sixteen `baseline_present` results. Each row carries explicit expected and observed presence, an exact ordered signature, the ordered fields asserted by that decision, mismatched fields, and reciprocal source links. The matrix documents its canonical field and array ordering; it uses SHA-256 instead of plaintext for bodies, expressions, defaults, comments, and constraint definitions. Its committed byte-level SHA-256 is `5d9d123fb546be2b3fe1bf3e8a99cec5daf18c0e0c528fe52accca9e5817ea62`.
+
 | Evidence set | Rows | SHA-256 |
 | --- | ---: | --- |
 | Five normalized statement comparisons | 5 | `3e528e1841ad4c34e5881766eeab4f446e9669e66347b1b3faa965f7084e3cb7` |
@@ -60,7 +62,7 @@ The anchors below hash canonical JSON with recursively sorted object keys and de
 - Local file: `20260827020755_create_multi_inventory_system.sql`
 - Normalized statement SHA-256, remote and local: `57756338624838ea95522141caef6d29597a6adc06d0f23edf4ad80a7bad8fec`
 - Statement comparison: **PASS**.
-- Current object comparison: **FAIL**. Both relations, all expected columns, all seven named indexes, the trigger, table grants, and all six function bodies are present. However, policy `Admins read inventory movements` is absent. The expected named constraint `inventory_stock_movements_idempotency_unique` is also absent; a semantically similar unique constraint exists under a different signature.
+- Current object comparison: **FAIL**. Both relations, all expected columns, all seven named indexes, the trigger, table grants, and all six function bodies are present. However, policy `Admins read inventory movements` is absent. The five expected named foreign-key/check constraints and `inventory_stock_movements_idempotency_unique` are also absent; an alternate unique constraint named `inventory_stock_movements_idempotency` is present and recorded as a distinct catalog signature rather than treated as equivalent.
 - Manifest decision: remain `candidate`.
 
 ### 20260827051604
