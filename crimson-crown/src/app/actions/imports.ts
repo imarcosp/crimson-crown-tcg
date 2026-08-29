@@ -7,6 +7,7 @@ import {
   parseProofUploadReference,
 } from '@/lib/storage/proof-finalization-core'
 import { verifyTrustedUploadedObject } from '@/lib/storage/upload-server'
+import { normalizeProofRecordId } from '@/lib/storage/upload-policy'
 
 const FINALIZE_ERROR_MESSAGE = 'No se pudo finalizar el comprobante.'
 
@@ -20,26 +21,18 @@ async function authenticatedUser() {
   return user
 }
 
-export async function deleteImportItemAction(itemId: number, orderId: string) {
+export async function deleteImportItemAction(itemId: unknown, orderId: unknown) {
   try {
+    const normalizedItemId = normalizeProofRecordId('import-proof', itemId)
+    const normalizedOrderId = normalizeProofRecordId('import-proof', orderId)
     const user = await authenticatedUser()
     const admin = createAdminClient()
-    const { data: order, error: orderError } = await admin
-      .from('import_orders')
-      .select('user_id')
-      .eq('id', orderId)
-      .maybeSingle()
-
-    if (orderError || !order || order.user_id !== user.id) {
-      return { success: false, error: 'No tienes permiso para modificar esta orden' }
-    }
-
-    const { error } = await admin
-      .from('import_items')
-      .delete()
-      .eq('id', itemId)
-      .eq('order_id', orderId)
-    if (error) throw error
+    const { error } = await admin.rpc('delete_import_item_atomic', {
+      item_id_input: normalizedItemId,
+      order_id_input: normalizedOrderId,
+      user_id_input: user.id,
+    })
+    if (error) throw new Error('No se pudo eliminar el artículo.')
     return { success: true }
   } catch {
     return { success: false, error: 'No se pudo eliminar el artículo.' }
@@ -79,6 +72,7 @@ function roundCurrency(value: number): number {
 }
 
 function quotedTotal(items: ReadonlyArray<Record<string, unknown>>): number {
+  if (items.length < 1) throw new Error(FINALIZE_ERROR_MESSAGE)
   const total = items.reduce((sum, item) => {
     const unitPrice = Number(item.unit_price ?? 0)
     const taxPercent = Number(item.tax_percent ?? 0)
@@ -98,16 +92,15 @@ function quotedTotal(items: ReadonlyArray<Record<string, unknown>>): number {
     }
     return sum + (unitPrice * (1 + taxPercent / 100) + shipping) * quantity
   }, 0)
-  if (!Number.isFinite(total) || total < 0) throw new Error(FINALIZE_ERROR_MESSAGE)
-  return roundCurrency(total)
+  const rounded = roundCurrency(total)
+  if (!Number.isFinite(rounded) || rounded <= 0) throw new Error(FINALIZE_ERROR_MESSAGE)
+  return rounded
 }
 
 type ImportFinalizationContext = Readonly<{
   orderId: string
-  orderNumber: string | null
   userId: string
   credits: number
-  fullyPaidWithCredits: boolean
 }>
 
 export async function approveImportQuoteAction(
@@ -132,12 +125,22 @@ export async function approveImportQuoteAction(
         authorize: async (_kind, normalizedOrderId) => {
           const user = await authenticatedUser()
           const admin = createAdminClient()
-          const [orderResult, itemsResult, profileResult] = await Promise.all([
-            admin
-              .from('import_orders')
-              .select('id, user_id, status, order_number')
-              .eq('id', normalizedOrderId)
-              .maybeSingle(),
+          const orderResult = await admin
+            .from('import_orders')
+            .select('id, user_id, status')
+            .eq('id', normalizedOrderId)
+            .maybeSingle()
+          const order = orderResult.data
+          if (
+            orderResult.error ||
+            !order ||
+            order.user_id !== user.id ||
+            order.status !== 'Cotizada'
+          ) {
+            throw new Error(FINALIZE_ERROR_MESSAGE)
+          }
+
+          const [itemsResult, profileResult] = await Promise.all([
             admin
               .from('import_items')
               .select('unit_price, tax_percent, shipping_cost, quantity')
@@ -148,14 +151,10 @@ export async function approveImportQuoteAction(
               .eq('id', user.id)
               .maybeSingle(),
           ])
-          const order = orderResult.data
           if (
-            orderResult.error ||
             itemsResult.error ||
             profileResult.error ||
-            !order ||
-            order.user_id !== user.id ||
-            order.status !== 'Cotizada'
+            !profileResult.data
           ) {
             throw new Error(FINALIZE_ERROR_MESSAGE)
           }
@@ -164,50 +163,32 @@ export async function approveImportQuoteAction(
           const availableCredits = Number(profileResult.data?.credits ?? 0)
           if (
             !Number.isFinite(availableCredits) ||
-            availableCredits < credits - 0.01 ||
-            credits > total + 0.01
+            availableCredits < credits ||
+            credits > total
           ) {
             throw new Error(FINALIZE_ERROR_MESSAGE)
           }
-          const fullyPaidWithCredits = total - credits <= 0.01
+          const fullyPaidWithCredits = credits === total
 
           return Object.freeze({
             actorUserId: user.id,
             proofRequired: !fullyPaidWithCredits,
             context: Object.freeze({
               orderId: normalizedOrderId,
-              orderNumber: typeof order.order_number === 'string' ? order.order_number : null,
               userId: user.id,
               credits,
-              fullyPaidWithCredits,
             }),
           })
         },
         verify: verifyTrustedUploadedObject,
         persist: async (context, proofPath) => {
           const admin = createAdminClient()
-          if (context.credits > 0) {
-            const { error: creditsError } = await admin.rpc('manage_credits', {
-              target_user_id: context.userId,
-              amount_change: -context.credits,
-              transaction_type: 'purchase',
-              transaction_desc: `Pago de Orden de Importación #${context.orderNumber ?? context.orderId}`,
-              ref_id: null,
-            })
-            if (creditsError) throw new Error(FINALIZE_ERROR_MESSAGE)
-          }
-
-          const { error } = await admin
-            .from('import_orders')
-            .update({
-              status: 'Cotización Aprobada',
-              payment_status: context.fullyPaidWithCredits ? 'paid' : 'verifying',
-              payment_proof_path: proofPath,
-              credits_used: context.credits,
-            })
-            .eq('id', context.orderId)
-            .eq('user_id', context.userId)
-            .eq('status', 'Cotizada')
+          const { error } = await admin.rpc('approve_import_quote_atomic', {
+            order_id_input: context.orderId,
+            user_id_input: context.userId,
+            proof_path_input: proofPath,
+            credits_input: context.credits,
+          })
           if (error) throw new Error(FINALIZE_ERROR_MESSAGE)
         },
       },

@@ -27,7 +27,7 @@
     "evidence": [
       {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.calculate_import_order_total(bigint)", "detail": "definición del total"},
       {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.refresh_commission_period(text, numeric, numeric, boolean) -> public.calculate_import_order_total(bigint)", "detail": "consumo desde refresh_commission_period"},
-      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 256, "anchor": "admin.rpc('refresh_commission_period'", "detail": "Server Action con cliente service-role"}
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 260, "anchor": "admin.rpc('refresh_commission_period'", "detail": "Server Action con cliente service-role"}
     ]
   },
   {
@@ -283,9 +283,9 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 271, "anchor": "requireCommissionAdmin(true)", "detail": "guard requireCommissionAdmin"},
-      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 278, "anchor": "createServiceRoleClient()", "detail": "cliente service-role"},
-      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 305, "anchor": "rpc('recalculate_commission_period_status'", "detail": "llamada RPC"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 275, "anchor": "requireCommissionAdmin(true)", "detail": "guard requireCommissionAdmin"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 282, "anchor": "createServiceRoleClient()", "detail": "cliente service-role"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 309, "anchor": "rpc('recalculate_commission_period_status'", "detail": "llamada RPC"},
       {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.recalculate_commission_period_status(uuid)", "detail": "actualización del estado del período"}
     ]
   },
@@ -300,9 +300,9 @@
       "local": {"target": "supabase_db_crimson-crown", "owner": "supabase_admin", "security": "invoker", "searchPath": null, "executeRoles": ["PUBLIC", "anon", "authenticated", "service_role"]}
     },
     "evidence": [
-      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 252, "anchor": "requireCommissionAdmin()", "detail": "guard requireCommissionAdmin"},
-      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 255, "anchor": "createServiceRoleClient()", "detail": "cliente service-role"},
-      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 256, "anchor": "rpc('refresh_commission_period'", "detail": "llamada RPC"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 256, "anchor": "requireCommissionAdmin()", "detail": "guard requireCommissionAdmin"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 259, "anchor": "createServiceRoleClient()", "detail": "cliente service-role"},
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 260, "anchor": "rpc('refresh_commission_period'", "detail": "llamada RPC"},
       {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.refresh_commission_period(text) -> public.refresh_commission_period(text, numeric, numeric, boolean)", "detail": "wrapper del overload completo"}
     ]
   },
@@ -319,7 +319,7 @@
     "evidence": [
       {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.refresh_commission_period(text) -> public.refresh_commission_period(text, numeric, numeric, boolean)", "detail": "wrapper llama al overload completo"},
       {"kind": "catalog", "location": "catalog:production:pg_proc", "object": "public.refresh_commission_period(text, numeric, numeric, boolean)", "detail": "implementación completa"},
-      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 256, "anchor": "rpc('refresh_commission_period'", "detail": "entrada service-only"}
+      {"kind": "repository", "location": "src/app/actions/commissions.ts", "line": 260, "anchor": "rpc('refresh_commission_period'", "detail": "entrada service-only"}
     ]
   },
   {

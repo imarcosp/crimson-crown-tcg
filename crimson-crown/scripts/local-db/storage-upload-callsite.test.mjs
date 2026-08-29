@@ -129,8 +129,9 @@ test('proof finalizers persist canonical paths without changing legacy URL field
   assert.doesNotMatch(storageAction, /submit_order_payment_proof(?!_path)/u)
 
   assert.match(importsAction, /verifyTrustedUploadedObject/u)
-  assert.match(importsAction, /payment_proof_path/u)
-  assert.match(importsAction, /\.eq\(['"]user_id['"],\s*context\.userId\)/u)
+  assert.match(importsAction, /approve_import_quote_atomic/u)
+  assert.match(importsAction, /proof_path_input:\s*proofPath/u)
+  assert.match(importsAction, /user_id_input:\s*context\.userId/u)
   assert.doesNotMatch(importsAction, /payment_proof_url\s*:/u)
 
   assert.match(commissionsAction, /verifyTrustedUploadedObject/u)

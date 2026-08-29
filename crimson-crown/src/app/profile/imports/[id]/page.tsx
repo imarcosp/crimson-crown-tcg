@@ -236,7 +236,7 @@ export default function UserOrderDetailPage() {
   const handleDeleteItem = async (itemId: number) => {
       if (!confirm('¿Seguro que deseas eliminar esta carta de la orden?')) return
       try {
-          const res = await deleteImportItemAction(itemId, order.id)
+          const res = await deleteImportItemAction(String(itemId), String(order.id))
           if (!res.success) throw new Error(res.error)
           setItems(items.filter(i => i.id !== itemId))
       } catch (e: any) {
