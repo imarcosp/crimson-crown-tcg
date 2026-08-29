@@ -394,6 +394,7 @@ async function makeFixture({
   forceIdentityFailureBeforeLink = false,
   mutateManifestAfterBuild = false,
   pauseAtCreationIdentityBoundary = false,
+  pauseAfterRootLockRelease = false,
   postCreateHelperFailure = false,
   projectionSummaryOverride,
   zeroForward = false,
@@ -422,6 +423,8 @@ async function makeFixture({
   const useLockDone = join(fixtureParent, 'use-lock-done.txt')
   const creationLockReady = join(fixtureParent, 'creation-lock-ready.txt')
   const creationLockDone = join(fixtureParent, 'creation-lock-done.txt')
+  const cleanupReleaseReady = join(fixtureParent, 'cleanup-release-ready.txt')
+  const cleanupReleaseDone = join(fixtureParent, 'cleanup-release-done.txt')
   const fixedTempRoot = join(tempBase, `crimson-release-${'a'.repeat(32)}`)
   const fixedTempRootSentinel = join(fixedTempRoot, 'must-survive.txt')
   const manifest = verifiedManifest({ zeroForward })
@@ -494,6 +497,24 @@ async function makeFixture({
       `${wrapperSource.slice(0, markerIndex)}${injectedMarker}${wrapperSource.slice(markerIndex + metadataMarker.length)}`,
     )
   }
+  if (pauseAfterRootLockRelease) {
+    const wrapperSource = await readFile(fixtureWrapper, 'utf8')
+    const cleanupGate = "Assert-TempRootUseIdentity -Phase 'cleanup'"
+    const cleanupGateIndex = wrapperSource.indexOf(cleanupGate)
+    assert.ok(cleanupGateIndex >= 0)
+    const releaseMarker = '$TempRootUseLock = $null'
+    const releaseIndex = wrapperSource.indexOf(releaseMarker, cleanupGateIndex)
+    assert.ok(releaseIndex > cleanupGateIndex)
+    const insertAt = releaseIndex + releaseMarker.length
+    const pauseSource = String.raw`
+          Set-Content -NoNewline -LiteralPath $env:FAKE_CLEANUP_RELEASE_READY -Value $TempRoot
+          $CleanupReleaseDeadline = [DateTime]::UtcNow.AddSeconds(30)
+          while (-not (Test-Path -LiteralPath $env:FAKE_CLEANUP_RELEASE_DONE)) {
+            if ([DateTime]::UtcNow -ge $CleanupReleaseDeadline) { throw 'Hook de release de cleanup agotado.' }
+            Start-Sleep -Milliseconds 5
+          }`
+    await writeFile(fixtureWrapper, `${wrapperSource.slice(0, insertAt)}${pauseSource}${wrapperSource.slice(insertAt)}`)
+  }
   if (mutateManifestAfterBuild || projectionSummaryOverride !== undefined) {
     await cp(join(sourceRoot, 'scripts', 'release', 'build-supabase-projection.mjs'), join(releaseDir, 'build-supabase-projection-real.mjs'))
     await writeFile(
@@ -544,6 +565,8 @@ async function makeFixture({
     useLockDone,
     creationLockReady,
     creationLockDone,
+    cleanupReleaseReady,
+    cleanupReleaseDone,
     fixedTempRoot,
     fixedTempRootSentinel,
     postCreateHelperFailure,
@@ -585,6 +608,8 @@ function runWrapper(fixture, mode = 'success', {
         FAKE_USE_LOCK_DONE: fixture.useLockDone,
         FAKE_CREATION_LOCK_READY: fixture.creationLockReady,
         FAKE_CREATION_LOCK_DONE: fixture.creationLockDone,
+        FAKE_CLEANUP_RELEASE_READY: fixture.cleanupReleaseReady,
+        FAKE_CLEANUP_RELEASE_DONE: fixture.cleanupReleaseDone,
         FAKE_FIXED_TEMP_ROOT: fixture.fixedTempRoot,
         FAKE_POST_CREATE_FAILURE: fixture.postCreateHelperFailure ? '1' : '0',
       },
@@ -650,6 +675,8 @@ async function runRootReplacementAttacker(fixture, readyPath, donePath) {
 
   return {
     reachedActiveWindow: true,
+    tempRoot,
+    backup,
     moveSucceeded,
     moveErrorCode,
     junctionAttempted,
@@ -665,6 +692,30 @@ function runUseLockAttacker(fixture) {
 
 function runCreationBoundaryAttacker(fixture) {
   return runRootReplacementAttacker(fixture, fixture.creationLockReady, fixture.creationLockDone)
+}
+
+function runCleanupReleaseSubstitutionAttacker(fixture) {
+  return runRootReplacementAttacker(fixture, fixture.cleanupReleaseReady, fixture.cleanupReleaseDone)
+}
+
+async function runCleanupReleaseContentAttacker(fixture) {
+  const deadline = Date.now() + 30_000
+  let tempRoot
+  while (Date.now() < deadline) {
+    try {
+      tempRoot = (await readFile(fixture.cleanupReleaseReady, 'utf8')).trim()
+      break
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
+    await delay(5)
+  }
+  if (!tempRoot) return { reachedActiveWindow: false, contentWritten: false }
+
+  const sentinel = join(tempRoot, 'late-content-must-survive.txt')
+  await writeFile(sentinel, 'late preserve\n')
+  await writeFile(fixture.cleanupReleaseDone, 'done\n')
+  return { reachedActiveWindow: true, contentWritten: true, sentinel, tempRoot }
 }
 
 async function readCalls(logPath) {
@@ -1166,6 +1217,44 @@ test('holds directory identities while a concurrent attacker attempts cleanup su
   })
 })
 
+test('never traverses or deletes a substituted root after releasing the exact cleanup lock', async () => {
+  await withFixture({ pauseAfterRootLockRelease: true }, async (fixture) => {
+    const [result, attackResult] = await Promise.all([
+      runWrapper(fixture),
+      runCleanupReleaseSubstitutionAttacker(fixture),
+    ])
+
+    assert.equal(attackResult.reachedActiveWindow, true, JSON.stringify(attackResult))
+    assert.equal(attackResult.moveSucceeded, true, JSON.stringify(attackResult))
+    assert.equal(attackResult.junctionAttempted, true, JSON.stringify(attackResult))
+    assert.equal(attackResult.junctionCreated, true, JSON.stringify(attackResult))
+    assert.notEqual(result.code, 0)
+    assert.equal(result.stdout, '')
+    assert.equal((await readCalls(fixture.logPath)).length, 4)
+    assert.equal(await readFile(fixture.junctionSentinel, 'utf8'), 'external preserve\n')
+    assert.deepEqual(await readdir(fixture.junctionTarget), ['must-survive.txt'])
+    assert.deepEqual(await readdir(attackResult.backup), [])
+    assert.equal((await lstat(attackResult.tempRoot)).isSymbolicLink(), true)
+  })
+})
+
+test('leaves late root content untouched instead of recursively deleting after lock release', async () => {
+  await withFixture({ pauseAfterRootLockRelease: true }, async (fixture) => {
+    const [result, attackResult] = await Promise.all([
+      runWrapper(fixture),
+      runCleanupReleaseContentAttacker(fixture),
+    ])
+
+    assert.equal(attackResult.reachedActiveWindow, true, JSON.stringify(attackResult))
+    assert.equal(attackResult.contentWritten, true, JSON.stringify(attackResult))
+    assert.notEqual(result.code, 0)
+    assert.equal(result.stdout, '')
+    assert.equal((await readCalls(fixture.logPath)).length, 4)
+    assert.equal(await readFile(attackResult.sentinel, 'utf8'), 'late preserve\n')
+    assert.deepEqual(await readdir(attackResult.tempRoot), ['late-content-must-survive.txt'])
+  })
+})
+
 test('holds the exact temporary-root identity throughout projection use and rejects an active rename/junction attack', async () => {
   await withFixture({}, async (fixture) => {
     const [result, attackResult] = await Promise.all([
@@ -1274,6 +1363,9 @@ test('contains no repair, dry-run bypass, or recursive Remove-Item shortcut', as
   assert.doesNotMatch(source, /migration\s+repair/i)
   assert.doesNotMatch(source, /\[switch\][^\r\n]*(?:dry.?run|push|live|apply)/i)
   assert.doesNotMatch(source, /Remove-Item[^\r\n]*-Recurse/i)
+  assert.doesNotMatch(source, /Remove-ExactTree\s+-LiteralPath\s+\$CleanupTarget/)
+  assert.match(source, /Remove-ProvenEmptyRoot/)
+  assert.match(source, /SetFileInformationByHandle/)
 })
 
 test('opens the use lock under the creation-base lock and revalidates identity before each sensitive use', async () => {
@@ -1294,10 +1386,23 @@ test('opens the use lock under the creation-base lock and revalidates identity b
   for (const phase of ['projection-build', 'link', 'linked-ref-read', 'migration-list', 'dry-run', 'cleanup']) {
     assert.match(source, new RegExp(`Assert-TempRootUseIdentity -Phase '${phase}'`))
   }
-  const cleanupRevalidation = source.indexOf("Assert-TempRootUseIdentity -Phase 'cleanup'")
-  const useLockDispose = source.indexOf('$TempRootUseLock.Dispose()', cleanupRevalidation)
-  const removeTree = source.indexOf('Remove-ExactTree -LiteralPath $CleanupTarget', cleanupRevalidation)
-  assert.ok(cleanupRevalidation >= 0 && useLockDispose > cleanupRevalidation && removeTree > useLockDispose)
+  const firstCleanupRevalidation = source.indexOf("Assert-TempRootUseIdentity -Phase 'cleanup'")
+  const rootChildren = source.indexOf('$RootChildren = @(Get-ChildItem', firstCleanupRevalidation)
+  const childDelete = source.indexOf('Remove-ExactTree -LiteralPath $RootChild.FullName', rootChildren)
+  const secondCleanupRevalidation = source.indexOf(
+    "Assert-TempRootUseIdentity -Phase 'cleanup'",
+    firstCleanupRevalidation + 1,
+  )
+  const useLockDispose = source.indexOf('$TempRootUseLock.Dispose()', secondCleanupRevalidation)
+  const emptyRootDelete = source.indexOf('Remove-ProvenEmptyRoot', useLockDispose)
+  assert.ok(
+    firstCleanupRevalidation >= 0 &&
+      rootChildren > firstCleanupRevalidation &&
+      childDelete > rootChildren &&
+      secondCleanupRevalidation > childDelete &&
+      useLockDispose > secondCleanupRevalidation &&
+      emptyRootDelete > useLockDispose,
+  )
 })
 
 test('parses the Win32 identity-lock helper with Windows PowerShell 5.1', async () => {

@@ -16,6 +16,7 @@ $RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $TempRoot = $null
 $TempRootUseLock = $null
 $TempRootOwned = $false
+$ReviewOutput = @()
 $DirectorySeparators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 $TempBaseFull = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $TempBase = $TempBaseFull.TrimEnd($DirectorySeparators)
@@ -43,6 +44,7 @@ public sealed class CrimsonDirectoryIdentityLock : IDisposable
     private const uint FileCreate = 2;
     private const uint FileDirectoryFile = 0x00000001;
     private const uint ObjectCaseInsensitive = 0x00000040;
+    private const int FileDispositionInfoClass = 4;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct UnicodeString
@@ -68,6 +70,13 @@ public sealed class CrimsonDirectoryIdentityLock : IDisposable
     {
         public IntPtr Status;
         public UIntPtr Information;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileDispositionInfo
+    {
+        [MarshalAs(UnmanagedType.Bool)]
+        public bool DeleteFile;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -116,6 +125,13 @@ public sealed class CrimsonDirectoryIdentityLock : IDisposable
 
     [DllImport("ntdll.dll")]
     private static extern uint RtlNtStatusToDosError(int status);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetFileInformationByHandle(
+        SafeFileHandle file,
+        int fileInformationClass,
+        ref FileDispositionInfo fileInformation,
+        uint bufferSize);
 
     private SafeFileHandle handle;
 
@@ -284,6 +300,25 @@ public sealed class CrimsonDirectoryIdentityLock : IDisposable
         }
     }
 
+    public bool HasIdentity(uint volumeSerialNumber, ulong fileIndex)
+    {
+        return VolumeSerialNumber == volumeSerialNumber && FileIndex == fileIndex;
+    }
+
+    public void DeleteEmpty()
+    {
+        FileDispositionInfo disposition = new FileDispositionInfo();
+        disposition.DeleteFile = true;
+        if (!SetFileInformationByHandle(
+            handle,
+            FileDispositionInfoClass,
+            ref disposition,
+            checked((uint)Marshal.SizeOf(typeof(FileDispositionInfo)))))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+    }
+
     public void Dispose()
     {
         if (handle != null)
@@ -398,6 +433,35 @@ function Remove-ExactTree {
     return
   }
   $DeletionEntry.Delete()
+}
+
+function Remove-ProvenEmptyRoot {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$LiteralPath,
+    [Parameter(Mandatory = $true)]
+    [uint32]$ExpectedVolumeSerialNumber,
+    [Parameter(Mandatory = $true)]
+    [uint64]$ExpectedFileIndex
+  )
+
+  $DeletionLock = Open-DirectoryIdentityLock -LiteralPath $LiteralPath
+  try {
+    if (
+      $DeletionLock.IsReparsePoint -or
+      -not $DeletionLock.HasIdentity($ExpectedVolumeSerialNumber, $ExpectedFileIndex)
+    ) {
+      throw 'La raíz temporal cambió antes de su eliminación.'
+    }
+    if (@(Get-ChildItem -LiteralPath $LiteralPath -Force -ErrorAction Stop).Count -ne 0) {
+      throw 'La raíz temporal recibió contenido tardío.'
+    }
+    $DeletionLock.DeleteEmpty()
+  } catch {
+    throw 'No se pudo eliminar de forma segura la raíz temporal vacía.'
+  } finally {
+    $DeletionLock.Dispose()
+  }
 }
 
 function Resolve-ExecutableFile {
@@ -788,15 +852,17 @@ process.stdout.write(JSON.stringify(summary));
 
   Assert-ExactDryRun -OutputLines @($PushOutput) -ForwardFilenames $ForwardPendingFilenames
 
-  Write-Output "Supabase CLI version: $CliVersion"
-  Write-Output "Git SHA: $GitSha"
-  Write-Output "Projected remote versions: $(Format-EvidenceArray -Values $ProjectedRemoteVersions)"
-  Write-Output "Projected remote filenames: $(Format-EvidenceArray -Values $ProjectedRemoteFilenames)"
-  Write-Output "Approved forward count: $ForwardPendingCount"
-  Write-Output "Approved forward versions: $(Format-EvidenceArray -Values $ForwardPendingVersions)"
-  Write-Output "Approved forward filenames: $(Format-EvidenceArray -Values $ForwardPendingFilenames)"
-  Write-Output 'Migration list outcome: exact'
-  Write-Output "Dry-run outcome: $(if ($ForwardPendingCount -eq 0) { 'up to date' } else { 'exact batch' })"
+  $ReviewOutput = @(
+    "Supabase CLI version: $CliVersion"
+    "Git SHA: $GitSha"
+    "Projected remote versions: $(Format-EvidenceArray -Values $ProjectedRemoteVersions)"
+    "Projected remote filenames: $(Format-EvidenceArray -Values $ProjectedRemoteFilenames)"
+    "Approved forward count: $ForwardPendingCount"
+    "Approved forward versions: $(Format-EvidenceArray -Values $ForwardPendingVersions)"
+    "Approved forward filenames: $(Format-EvidenceArray -Values $ForwardPendingFilenames)"
+    'Migration list outcome: exact'
+    "Dry-run outcome: $(if ($ForwardPendingCount -eq 0) { 'up to date' } else { 'exact batch' })"
+  )
 } finally {
   if ($TempRootOwned) {
     if ($null -eq $TempRoot -or $null -eq $TempRootUseLock) {
@@ -813,15 +879,23 @@ process.stdout.write(JSON.stringify(summary));
       ) {
         throw 'Destino temporal de cleanup rechazado.'
       }
-      if ($null -ne $TempRootUseLock) {
-        try {
-          Assert-TempRootUseIdentity -Phase 'cleanup'
-        } finally {
-          $TempRootUseLock.Dispose()
-          $TempRootUseLock = $null
-        }
+      $ExpectedVolumeSerialNumber = [uint32]$TempRootUseLock.VolumeSerialNumber
+      $ExpectedFileIndex = [uint64]$TempRootUseLock.FileIndex
+      Assert-TempRootUseIdentity -Phase 'cleanup'
+      $RootChildren = @(Get-ChildItem -LiteralPath $CleanupTarget -Force -ErrorAction Stop)
+      foreach ($RootChild in $RootChildren) {
+        Remove-ExactTree -LiteralPath $RootChild.FullName
       }
-      Remove-ExactTree -LiteralPath $CleanupTarget
+      if (@(Get-ChildItem -LiteralPath $CleanupTarget -Force -ErrorAction Stop).Count -ne 0) {
+        throw 'La raíz temporal cambió durante el cleanup.'
+      }
+      Assert-TempRootUseIdentity -Phase 'cleanup'
+      $TempRootUseLock.Dispose()
+      $TempRootUseLock = $null
+      Remove-ProvenEmptyRoot `
+        -LiteralPath $CleanupTarget `
+        -ExpectedVolumeSerialNumber $ExpectedVolumeSerialNumber `
+        -ExpectedFileIndex $ExpectedFileIndex
       $TempRootOwned = $false
     } finally {
       if ($null -ne $TempRootUseLock) {
@@ -835,3 +909,5 @@ process.stdout.write(JSON.stringify(summary));
     $TempRootUseLock = $null
   }
 }
+
+$ReviewOutput | Write-Output
