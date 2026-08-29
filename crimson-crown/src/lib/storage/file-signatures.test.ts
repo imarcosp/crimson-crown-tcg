@@ -49,12 +49,15 @@ test('rejects malformed format markers', () => {
   assert.equal(isAllowedFileSignature(encoder.encode('%PDF-1.x'), 'application/pdf'), false)
 })
 
-test('rejects polyglot-like prefixes containing a second recognized file signature', () => {
+test('bases the verdict only on exact leading magic bytes, regardless of arbitrary trailing content', () => {
   const newline = encoder.encode('\n')
-  assert.equal(isAllowedFileSignature(concatBytes(png, pdf), 'image/png'), false)
-  assert.equal(isAllowedFileSignature(concatBytes(jpeg, pdf), 'image/jpeg'), false)
-  assert.equal(isAllowedFileSignature(concatBytes(webp, pdf), 'image/webp'), false)
-  assert.equal(isAllowedFileSignature(concatBytes(pdf, newline, png), 'application/pdf'), false)
+  const arbitraryContent = encoder.encode('<script>arbitrary trailing bytes</script>')
+
+  assert.equal(isAllowedFileSignature(concatBytes(png, pdf), 'image/png'), true)
+  assert.equal(isAllowedFileSignature(concatBytes(jpeg, pdf), 'image/jpeg'), true)
+  assert.equal(isAllowedFileSignature(concatBytes(webp, pdf), 'image/webp'), true)
+  assert.equal(isAllowedFileSignature(concatBytes(pdf, newline, png), 'application/pdf'), true)
+  assert.equal(isAllowedFileSignature(concatBytes(png, arbitraryContent), 'image/png'), true)
 })
 
 test('rejects unknown MIME types even when bytes match a supported format', () => {

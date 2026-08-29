@@ -7,47 +7,53 @@ export type UploadKind =
   | 'commission-proof'
 
 export type UploadIntent = {
-  kind: UploadKind
-  name: string
-  size: number
-  mimeType: string
+  readonly kind: UploadKind
+  readonly name: string
+  readonly size: number
+  readonly mimeType: SupportedUploadMimeType
 }
 
 export type AllowedUploadExtension = 'jpg' | 'jpeg' | 'png' | 'webp' | 'pdf'
 
+export type SupportedUploadMimeType =
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/webp'
+  | 'application/pdf'
+
 export type ValidatedUploadIntent = {
-  kind: UploadKind
-  extension: AllowedUploadExtension
-  size: number
-  mimeType: string
+  readonly kind: UploadKind
+  readonly extension: AllowedUploadExtension
+  readonly size: number
+  readonly mimeType: SupportedUploadMimeType
 }
 
 type ProofUploadKind = 'order-proof' | 'import-proof' | 'commission-proof'
 
 export type StoragePathInput =
   | {
-      kind: 'customer-product-request'
-      userId: string
-      objectId: string
-      extension: Exclude<AllowedUploadExtension, 'pdf'>
+      readonly kind: 'customer-product-request'
+      readonly userId: string
+      readonly objectId: string
+      readonly extension: Exclude<AllowedUploadExtension, 'pdf'>
     }
   | {
-      kind: 'admin-product-image'
-      inventoryId: string
-      objectId: string
-      extension: Exclude<AllowedUploadExtension, 'pdf'>
+      readonly kind: 'admin-product-image'
+      readonly inventoryId: string
+      readonly objectId: string
+      readonly extension: Exclude<AllowedUploadExtension, 'pdf'>
     }
   | {
-      kind: 'banner'
-      objectId: string
-      extension: Exclude<AllowedUploadExtension, 'pdf'>
+      readonly kind: 'banner'
+      readonly objectId: string
+      readonly extension: Exclude<AllowedUploadExtension, 'pdf'>
     }
   | {
-      kind: ProofUploadKind
-      userId: string
-      recordId: string
-      objectId: string
-      extension: AllowedUploadExtension
+      readonly kind: ProofUploadKind
+      readonly userId: string
+      readonly recordId: string
+      readonly objectId: string
+      readonly extension: AllowedUploadExtension
     }
 
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024
@@ -69,12 +75,14 @@ const ALL_UPLOAD_KINDS = new Set<UploadKind>([
   ...PROOF_UPLOAD_KINDS,
 ])
 
-const MIME_EXTENSIONS: Readonly<Record<string, readonly AllowedUploadExtension[]>> = {
-  'image/jpeg': ['jpg', 'jpeg'],
-  'image/png': ['png'],
-  'image/webp': ['webp'],
-  'application/pdf': ['pdf'],
-}
+const MIME_EXTENSIONS: Readonly<
+  Record<SupportedUploadMimeType, readonly AllowedUploadExtension[]>
+> = Object.freeze({
+  'image/jpeg': Object.freeze(['jpg', 'jpeg'] as const),
+  'image/png': Object.freeze(['png'] as const),
+  'image/webp': Object.freeze(['webp'] as const),
+  'application/pdf': Object.freeze(['pdf'] as const),
+})
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
 
@@ -84,6 +92,10 @@ function isUploadKind(value: unknown): value is UploadKind {
 
 function isProofUploadKind(kind: UploadKind): kind is ProofUploadKind {
   return PROOF_UPLOAD_KINDS.has(kind)
+}
+
+function isSupportedUploadMimeType(value: unknown): value is SupportedUploadMimeType {
+  return typeof value === 'string' && Object.hasOwn(MIME_EXTENSIONS, value)
 }
 
 function normalizeExtension(value: unknown): AllowedUploadExtension {
@@ -141,10 +153,10 @@ export function validateUploadIntent(intent: UploadIntent): ValidatedUploadInten
     throw new Error('Tamaño de archivo inválido.')
   }
 
-  const allowedExtensions = MIME_EXTENSIONS[intent.mimeType]
-  if (!allowedExtensions) {
+  if (!isSupportedUploadMimeType(intent.mimeType)) {
     throw new Error('Tipo de archivo no permitido.')
   }
+  const allowedExtensions = MIME_EXTENSIONS[intent.mimeType]
 
   const extension = extensionFromSafeName(intent.name)
   if (!allowedExtensions.includes(extension)) {
@@ -152,12 +164,12 @@ export function validateUploadIntent(intent: UploadIntent): ValidatedUploadInten
   }
   assertExtensionAllowedForKind(intent.kind, extension)
 
-  return {
+  return Object.freeze({
     kind: intent.kind,
     extension,
     size: intent.size,
     mimeType: intent.mimeType,
-  }
+  })
 }
 
 export function buildStoragePath(input: StoragePathInput): string {

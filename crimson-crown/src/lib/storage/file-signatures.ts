@@ -1,4 +1,4 @@
-type SupportedMimeType = 'image/png' | 'image/jpeg' | 'image/webp' | 'application/pdf'
+import type { SupportedUploadMimeType } from './upload-policy.ts'
 
 type SignatureDetector = (bytes: Uint8Array, offset: number) => boolean
 
@@ -49,40 +49,23 @@ const matchesPdf: SignatureDetector = (bytes, offset) =>
   bytes[offset + 7] >= 0x30 &&
   bytes[offset + 7] <= 0x39
 
-const SIGNATURES: Readonly<Record<SupportedMimeType, SignatureDetector>> = {
+const SIGNATURES: Readonly<Record<SupportedUploadMimeType, SignatureDetector>> = {
   'image/png': matchesPng,
   'image/jpeg': matchesJpeg,
   'image/webp': matchesWebp,
   'application/pdf': matchesPdf,
 }
 
-function isSupportedMimeType(mimeType: string): mimeType is SupportedMimeType {
+function isSupportedMimeType(mimeType: string): mimeType is SupportedUploadMimeType {
   return Object.hasOwn(SIGNATURES, mimeType)
 }
 
-function hasConflictingSignature(bytes: Uint8Array, expectedMimeType: SupportedMimeType): boolean {
-  const scanLimit = Math.min(bytes.length, 64)
-
-  for (const [mimeType, detector] of Object.entries(SIGNATURES) as [SupportedMimeType, SignatureDetector][]) {
-    for (let offset = 0; offset < scanLimit; offset += 1) {
-      if (!detector(bytes, offset)) {
-        continue
-      }
-      if (mimeType !== expectedMimeType || offset !== 0) {
-        return true
-      }
-    }
-  }
-
-  return false
-}
-
 export function isAllowedFileSignature(bytes: Uint8Array, mimeType: string): boolean {
-  // This is a fail-closed header gate, not a complete file-format parser. It verifies the
-  // declared leading magic bytes and rejects a second recognized signature in the prefix.
+  // This verifies only the exact leading magic bytes. It is not a complete parser and does
+  // not detect malware or polyglots; trailing content is deliberately outside this gate.
   if (!(bytes instanceof Uint8Array) || !isSupportedMimeType(mimeType)) {
     return false
   }
 
-  return SIGNATURES[mimeType](bytes, 0) && !hasConflictingSignature(bytes, mimeType)
+  return SIGNATURES[mimeType](bytes, 0)
 }

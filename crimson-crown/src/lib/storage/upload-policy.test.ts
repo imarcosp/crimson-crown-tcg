@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { buildStoragePath, validateUploadIntent } from './upload-policy.ts'
+import type { AllowedUploadExtension, SupportedUploadMimeType, UploadIntent } from './upload-policy.ts'
 
 const MiB = 1024 * 1024
 const userId = '11111111-1111-4111-8111-111111111111'
@@ -69,7 +70,7 @@ test('rejects unsupported MIME types and PDF uploads outside proof kinds', () =>
       kind: 'banner',
       name: 'payload.svg',
       size: 100,
-      mimeType: 'image/svg+xml',
+      mimeType: 'image/svg+xml' as SupportedUploadMimeType,
     }),
   )
   assert.throws(() =>
@@ -80,6 +81,38 @@ test('rejects unsupported MIME types and PDF uploads outside proof kinds', () =>
       mimeType: 'application/pdf',
     }),
   )
+})
+
+test('rejects inherited object property names as unsupported MIME types with a stable error', () => {
+  for (const mimeType of ['toString', 'constructor', '__proto__']) {
+    assert.throws(
+      () =>
+        validateUploadIntent({
+          kind: 'banner',
+          name: 'image.png',
+          size: 100,
+          mimeType: mimeType as SupportedUploadMimeType,
+        }),
+      { name: 'Error', message: 'Tipo de archivo no permitido.' },
+    )
+  }
+})
+
+test('returns a frozen validated value that cannot be mutated after authorization', () => {
+  const intent: UploadIntent = Object.freeze({
+    kind: 'order-proof',
+    name: 'proof.png',
+    size: 100,
+    mimeType: 'image/png',
+  })
+  const validated = validateUploadIntent(intent)
+  const mutableView = validated as unknown as { extension: AllowedUploadExtension }
+
+  assert.equal(Object.isFrozen(validated), true)
+  assert.throws(() => {
+    mutableView.extension = 'pdf'
+  }, TypeError)
+  assert.equal(validated.extension, 'png')
 })
 
 test('rejects sizes that are empty, negative, fractional, non-finite, unsafe or over 5 MiB', () => {
