@@ -507,17 +507,18 @@ test('rejects a release-evidence junction that expands the internal exception', 
   })
 })
 
-test('materializes the approved real manifest and both exact forwards without a candidate bypass', async () => {
+test('materializes the approved real manifest and three exact forwards without a candidate bypass', async () => {
   const outputParent = await mkdtemp(join(tmpdir(), 'crimson-release-projection-real-output-'))
   const outputDir = join(outputParent, 'projection')
 
   try {
     const summary = await buildProjection({ rootDir: sourceRoot, outputDir })
-    assert.equal(summary.forwardPendingCount, 2)
-    assert.deepEqual(summary.forwardPendingVersions, ['20260830133000', '20260830170000'])
+    assert.equal(summary.forwardPendingCount, 3)
+    assert.deepEqual(summary.forwardPendingVersions, ['20260830133000', '20260830170000', '20260830203000'])
     assert.deepEqual(summary.forwardPendingFilenames, [
       '20260830133000_add_magic_legalities_to_external_prices.sql',
       '20260830170000_create_home_quick_links.sql',
+      '20260830203000_create_deck_builder_foundation.sql',
     ])
     assert.equal(summary.projectedRemoteVersions.length, 16)
     assert.equal(summary.projectedRemoteFilenames.at(-2), '20260830051537_reconcile_legacy_schema_safely.sql')

@@ -45,6 +45,7 @@ const forwardPending = [
   '20260829235900_harden_storage_buckets_and_policies.sql',
   '20260830133000_add_magic_legalities_to_external_prices.sql',
   '20260830170000_create_home_quick_links.sql',
+  '20260830203000_create_deck_builder_foundation.sql',
 ]
 
 function sha256(bytes) {

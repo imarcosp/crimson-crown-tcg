@@ -92,5 +92,11 @@ test('las 21 exclusiones históricas tienen prueba PASS sin candidatos ni bypass
       file: '20260830170000_create_home_quick_links.sql',
       sha256: 'f3ee016220c8066d7201359c7c93168676aedfd9009bc262ce2900d45a619285',
     },
+    {
+      class: 'forward_pending',
+      version: '20260830203000',
+      file: '20260830203000_create_deck_builder_foundation.sql',
+      sha256: '00e00d8fcd86703777166a6e6f7c6e2c65aeeb5a21ed19888f28c4a2c35f486b',
+    },
   ])
 })

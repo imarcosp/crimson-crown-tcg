@@ -61,6 +61,8 @@ test.describe('checkout financiero local', () => {
 
   test.afterAll(async () => {
     if (orderId) {
+      const movementCleanup = await admin.from('inventory_stock_movements').delete().eq('order_id', orderId)
+      if (movementCleanup.error) throw new Error(`No se pudo limpiar el movimiento del checkout E2E: ${movementCleanup.error.message}`)
       await admin.from('order_items').delete().eq('order_id', orderId)
       await admin.from('orders').delete().eq('id', orderId)
     }

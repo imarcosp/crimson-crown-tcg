@@ -302,6 +302,9 @@ export default function Navbar() {
                           <Link href="/tools/moxfield" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
                               Búsqueda desde Moxfield
                           </Link>
+                          <Link href="/deck-builder/magic" onClick={closeMenus} className="block py-2 text-sm text-slate-500 hover:text-[#9D1B1B] font-medium border-l-2 border-slate-200 pl-3 hover:border-[#9D1B1B] transition-colors cursor-pointer">
+                              Deckbuilder Magic
+                          </Link>
                       </div>
                   )}
                 </>

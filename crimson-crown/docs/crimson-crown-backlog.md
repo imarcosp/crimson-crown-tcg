@@ -84,8 +84,9 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 - Responsive administrativo completado: navegación móvil colapsable, layout sin overflow global, tablas anchas con scroll local verificado, modal de inventarios contenido y matriz E2E en 390/768 px sobre once rutas operativas.
 - Filtros Magic completados: rango inclusivo sobre el precio final, formatos allowlisted con legalidades Scryfall, URL/paginación conservadas y validación responsive. La migración aditiva `20260830133000` y el backfill de metadata están aplicados únicamente en local y pendientes de promoción controlada.
 - Accesos rápidos de Home completados: modelo dinámico, orden, imagen o icono allowlisted, etiqueta, URL segura y estado activo; administración protegida por Server Actions/RLS y CRUD E2E con limpieza. La migración aditiva `20260830170000` está aplicada únicamente en local y pendiente de promoción controlada.
-- Checkpoint local de este lote: entorno 72/72, release 136/136 con un skip de symlink esperado en Windows, `db lint` sin errores, build de 45 páginas y E2E integral 24/24; productos 1.840, stock 2.147, órdenes 58 y perfiles 77 permanecen en su baseline local, con cero fixtures de accesos rápidos residuales.
-- Portar el Deckbuilder de Magic desde El Perchero únicamente mediante lectura y reimplementación dentro de Crimson, sin compartir credenciales, datos, procesos ni escritura de archivos.
+- Deckbuilder Magic reimplementado de forma independiente: selector de formatos, snapshots promocionables, búsqueda, detalle agrupado, cobertura del inventario híbrido, carrito y cotización. EDHREC/MTGTop8 usan adaptadores propios con plan por defecto; El Perchero permaneció estrictamente en sólo lectura y no comparte runtime, datos ni credenciales.
+- La migración aditiva `20260830203000` crea únicamente las tres tablas del deckbuilder y una promoción atómica `service_role`; está aplicada sólo en local. El snapshot local de Commander contiene 8 decks/800 cartas y no alteró los conteos operativos.
+- Checkpoint local cerrado: matriz de seguridad, lint SQL, TypeScript, build de producción (46 páginas), suite de entorno 86/86, release 136/136 con un skip de symlink propio de Windows y E2E 25/25 en verde. El teardown del checkout elimina su movimiento sintético antes que la orden; no quedan snapshots ni precios E2E. Productos 1.840, stock 2.147, órdenes 58, perfiles 77, inventarios 2 y movimientos 55 permanecen idénticos.
 
 ## P2 — calidad y operación
 
@@ -101,9 +102,8 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 
 ## Siguiente backlog recomendado
 
-1. **Deckbuilder.** Reimplementar en Crimson a partir de una inspección estrictamente de solo lectura de El Perchero, sin código compartido en runtime ni acceso a sus datos.
-2. **Operación y calidad.** Automatizar snapshots de esquema/row-counts, documentar backup/restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
-3. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
+1. **Operación y calidad.** Automatizar snapshots de esquema/row-counts, documentar backup/restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
+2. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
 
 ## SaaS — después de todo lo anterior
 

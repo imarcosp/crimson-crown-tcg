@@ -295,6 +295,67 @@ async function main() {
     if (quickLinkCleanupError) throw new Error(`no se pudieron limpiar accesos rápidos de prueba: ${quickLinkCleanupError.message}`)
   }
 
+  const deckBuilderMarker = `local-security-deck-builder-${Date.now()}`
+  const publicDeckBuilderSnapshotsBefore = await countRows(anon, 'deck_builder_snapshots')
+  const { data: deckBuilderSnapshot, error: deckBuilderSnapshotError } = await service
+    .from('deck_builder_snapshots')
+    .insert({ source: 'edhtop16', format: 'vintage', status: 'staging', metadata: { marker: deckBuilderMarker } })
+    .select('id')
+    .single()
+  if (deckBuilderSnapshotError || !deckBuilderSnapshot?.id) {
+    throw deckBuilderSnapshotError || new Error('service role debe poder crear snapshots del deckbuilder')
+  }
+  try {
+    const { data: deckBuilderDeck, error: deckBuilderDeckError } = await service
+      .from('deck_builder_decks')
+      .insert({ snapshot_id: deckBuilderSnapshot.id, external_id: deckBuilderMarker, name: deckBuilderMarker })
+      .select('id')
+      .single()
+    if (deckBuilderDeckError || !deckBuilderDeck?.id) throw deckBuilderDeckError || new Error('no se pudo crear deck de seguridad')
+    const { error: deckBuilderCardError } = await service.from('deck_builder_cards').insert({
+      deck_id: deckBuilderDeck.id,
+      name: 'Black Lotus',
+      role: 'main',
+      quantity: 1,
+      display_order: 0,
+    })
+    if (deckBuilderCardError) throw deckBuilderCardError
+
+    assert.equal(await countRows(anon, 'deck_builder_snapshots'), publicDeckBuilderSnapshotsBefore, 'anon no debe ver el snapshot staging')
+    const hiddenDeck = await anon.from('deck_builder_decks').select('id').eq('id', deckBuilderDeck.id)
+    assert.ifError(hiddenDeck.error)
+    assert.equal(hiddenDeck.data?.length, 0, 'anon no debe ver decks de snapshots staging')
+
+    await expectBlocked('standard no debe crear snapshots del deckbuilder', () => standard
+      .from('deck_builder_snapshots')
+      .insert({ source: 'manual', format: 'vintage', status: 'staging' })
+      .select('id'))
+    await expectBlocked('standard no debe editar decks del deckbuilder', () => standard
+      .from('deck_builder_decks')
+      .update({ name: `${deckBuilderMarker}-blocked` })
+      .eq('id', deckBuilderDeck.id)
+      .select('id'))
+    const standardPromote = await standard.rpc('promote_deck_builder_snapshot', { p_snapshot_id: deckBuilderSnapshot.id })
+    assert.ok(standardPromote.error, 'standard no debe promover snapshots del deckbuilder')
+
+    const adminPromote = await admin.rpc('promote_deck_builder_snapshot', { p_snapshot_id: deckBuilderSnapshot.id })
+    assert.ok(adminPromote.error, 'admin web tampoco debe promover snapshots; la promoción es service-only')
+    const servicePromote = await service.rpc('promote_deck_builder_snapshot', { p_snapshot_id: deckBuilderSnapshot.id })
+    assert.ifError(servicePromote.error)
+    const publicSnapshot = await anon.from('deck_builder_snapshots').select('id').eq('id', deckBuilderSnapshot.id).single()
+    assert.ifError(publicSnapshot.error)
+    const publicDeck = await anon.from('deck_builder_decks').select('id').eq('id', deckBuilderDeck.id).single()
+    assert.ifError(publicDeck.error)
+    const publicCard = await anon.from('deck_builder_cards').select('id').eq('deck_id', deckBuilderDeck.id).single()
+    assert.ifError(publicCard.error)
+  } finally {
+    const { error: deckBuilderCleanupError } = await service
+      .from('deck_builder_snapshots')
+      .delete()
+      .eq('id', deckBuilderSnapshot.id)
+    if (deckBuilderCleanupError) throw new Error(`no se pudo limpiar snapshot del deckbuilder: ${deckBuilderCleanupError.message}`)
+  }
+
   const missingProductId = randomUUID()
   const productInsert = await standard.from('products').insert({
     id: missingProductId,
