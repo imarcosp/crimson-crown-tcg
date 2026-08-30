@@ -90,20 +90,20 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 
 ## P2 — calidad y operación
 
-- Reducir la deuda heredada de ESLint; TypeScript estricto ya está integrado al build y queda ESLint como lote independiente.
-- Actualizar `baseline-browser-mapping` cuando se abra un lote de dependencias.
+- La deuda heredada de ESLint quedó bajo un ratchet por regla: el código mantenido bajó de 633 errores/208 advertencias a 473/176, se excluyeron sólo artefactos generados y toda regresión nueva falla. La reducción restante continúa en lotes pequeños no bloqueantes.
+- `baseline-browser-mapping` está en `2.11.20`, que coincide con la última versión publicada al cerrar este checkpoint; no fue necesario alterar el lockfile y el build ya no muestra la advertencia.
 - Auth/Storage gestionados usan sólo fixtures sintéticos. El preparador Auth recrea exclusivamente el trigger productivo conocido dentro de `supabase_db_crimson-crown`; Storage usa objetos sintéticos y ninguno de los dos importa secretos, identidades u objetos productivos.
 - Storage gestionado no se copia al dump local: las pruebas usan buckets/objetos sintéticos y el runbook documenta esta diferencia. El hardening remoto ya fue aplicado y debe conservarse como invariante en releases futuros.
 - Los verificadores locales de PostgreSQL/Storage aceptan autenticación del stack actual y resuelven el worktree de Crimson dinámicamente, pero conservan nombres de contenedor, proyecto y puertos exactos; las matrices terminan con cero objetos o filas sintéticas residuales.
-- Añadir inventario de esquema, row-counts y clasificación de datos como artefactos externos verificables.
-- Documentar backups locales, restauración y recuperación sin incluir dumps dentro de Git.
+- Snapshot externo implementado: inventario firmado de esquema, conteos y clasificación explícita de 38 objetos, sin valores de filas y con sidecar SHA-256 fuera del repositorio.
+- Backup/restauración local documentados y ensayados: dump lógico externo final de 10.054.425 bytes verificado por hash y restaurado en una base temporal con 35 tablas públicas; la base temporal se elimina siempre y la réplica operativa no se reemplaza.
 - La validación estricta de TypeScript quedó resuelta en el checkpoint `cd2c63c`; mantener `npm run typecheck` como gate obligatorio de cada lote.
-- ESLint sigue fuera del gate de promoción: la ejecución completa actual reporta 497 errores y 178 advertencias en la base heredada (principalmente `no-explicit-any` y reglas de efectos React). Los módulos nuevos de este lote pasan el lint focalizado sin hallazgos. La deuda global requiere lotes dedicados, no una corrección mecánica dentro de una migración de seguridad.
+- Gates finales de este lote: TypeScript PASS, build 46/46, entorno 92/92, operaciones 6/6, release 136/136 con un skip esperado de symlink en Windows, E2E 25/25 y ratchet ESLint PASS. Los módulos nuevos pasan lint estricto sin hallazgos.
 
 ## Siguiente backlog recomendado
 
-1. **Operación y calidad.** Automatizar snapshots de esquema/row-counts, documentar backup/restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
-2. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
+1. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
+2. **Mantenimiento continuo no bloqueante.** Reducir el baseline ESLint por regla sin ampliarlo y regenerar snapshot/backup antes de cada lote de promoción.
 
 ## SaaS — después de todo lo anterior
 

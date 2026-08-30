@@ -374,7 +374,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       
       // FIX FULL MOON: Si la plataforma es "Full Moon", guardamos "Otro" pero lo indicamos en el nombre
       // Esto evita el error de enum en DB sin tener que migrar la base de datos
-      let finalPlatform = formData.platform
+      const finalPlatform = formData.platform
       // Si sospechamos que 'Full Moon' da error, podemos mapearlo aquí. 
       // Si la DB tiene el enum estricto y no incluye 'Full Moon', esto lo soluciona.
       if (finalPlatform === 'Full Moon') {

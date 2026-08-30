@@ -114,7 +114,7 @@ export default function SellImportPage() {
           const json = await res.json()
           const raw = (json.data || []).filter((v: any) => Array.isArray(v.games) && v.games.includes('paper') && !v.digital)
           const ids = raw.map((v: any) => v.id)
-          let priceMap = new Map<string, any>()
+          const priceMap = new Map<string, any>()
           if (ids.length) {
             const { data: ext } = await supabase
               .from('external_prices')

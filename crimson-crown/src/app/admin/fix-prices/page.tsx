@@ -197,7 +197,7 @@ export default function FixPricesPage() {
         const promos = card.promo_types || []
         const frames = card.frame_effects || []
         
-        let details = []
+        const details = []
         if (promos.includes('surgefoil')) details.push('Surge')
         if (promos.includes('confettifoil')) details.push('Confetti')
         if (promos.includes('galaxyfoil')) details.push('Galaxy')

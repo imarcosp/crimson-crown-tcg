@@ -27,6 +27,17 @@ const MIN_CK_PRICE = 3.0       // Precio mínimo en CK para considerar la carta
 const MARGIN_PERCENTAGE = 0.40 // 40% de diferencia mínima
 const SLEEP_MS = 100 
 
+interface OpportunityInput {
+  card_name: string
+  set_name: string
+  image_url?: string
+  local_price: number
+  tcg_low: number
+  diff_percentage: number
+  is_foil: boolean
+  profit: number
+}
+
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 async function main() {
@@ -117,16 +128,19 @@ async function main() {
 
       await delay(SLEEP_MS)
 
-    } catch (e: any) {
+    } catch (error: unknown) {
        // Ignorar errores 404 puntuales
-       if (e.response?.status !== 404) console.error(`Err ${item.scryfall_id}: ${e.message}`)
+       if (!axios.isAxiosError(error) || error.response?.status !== 404) {
+         const message = error instanceof Error ? error.message : 'error desconocido'
+         console.error(`Err ${item.scryfall_id}: ${message}`)
+       }
     }
   }
 
   console.log(`🏁 Finalizado. ${opportunitiesCount} oportunidades encontradas.`)
 }
 
-async function insertOpportunity(data: any) {
+async function insertOpportunity(data: OpportunityInput) {
     const { profit, ...rest } = data
     await supabase.from('price_opportunities').insert({
         ...rest,

@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   let image = ''
   let description = `Compra esta carta en ${siteConfig.name}`
 
-  let product = await findLocalProductByRouteId(supabase, id)
+  const product = await findLocalProductByRouteId(supabase, id)
 
   if (product) {
     name = product.name
@@ -115,7 +115,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
     .select('id, kind')
     .eq('is_active', true)
     .is('archived_at', null)
-  let activeInventoryIds = new Set<string>((activeInventories || []).map((inventory: any) => String(inventory.id)))
+  const activeInventoryIds = new Set<string>((activeInventories || []).map((inventory: any) => String(inventory.id)))
   if (!isImport) {
     const requestedInventoryIsActive = activeInventoryIds.has(String(product.inventory_id || ''))
     const inventoryKinds = new Map((activeInventories || []).map((inventory: any) => [String(inventory.id), inventory.kind]))

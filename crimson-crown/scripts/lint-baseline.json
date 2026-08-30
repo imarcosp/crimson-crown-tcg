@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-08-30",
+  "maximum": {
+    "errors": 473,
+    "warnings": 176
+  },
+  "rules": {
+    "@next/next/no-img-element": {
+      "errors": 0,
+      "warnings": 38
+    },
+    "@typescript-eslint/ban-ts-comment": {
+      "errors": 1,
+      "warnings": 0
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "errors": 427,
+      "warnings": 0
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "errors": 0,
+      "warnings": 107
+    },
+    "jsx-a11y/alt-text": {
+      "errors": 0,
+      "warnings": 7
+    },
+    "react-hooks/exhaustive-deps": {
+      "errors": 0,
+      "warnings": 24
+    },
+    "react-hooks/immutability": {
+      "errors": 1,
+      "warnings": 0
+    },
+    "react-hooks/set-state-in-effect": {
+      "errors": 10,
+      "warnings": 0
+    },
+    "react/no-unescaped-entities": {
+      "errors": 34,
+      "warnings": 0
+    }
+  }
+}

@@ -195,7 +195,7 @@ function MoxfieldToolContent() {
           const json = await res.json()
           const rawVersions = (json.data || []).filter((v: any) => Array.isArray(v.games) && v.games.includes('paper') && !v.digital)
           const ids = rawVersions.map((v: any) => v.id).filter(Boolean)
-          let priceMap = new Map<string, any>()
+          const priceMap = new Map<string, any>()
           if (ids.length) {
             const { data: ext } = await supabase
               .from('external_prices')

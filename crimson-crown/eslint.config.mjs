@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Runtime y evidencia generados localmente; no son código fuente versionado.
+    "supabase/.temp/**",
+    "test-results/**",
+    "playwright-report/**",
   ]),
 ]);
 
