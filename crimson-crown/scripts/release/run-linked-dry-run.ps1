@@ -598,36 +598,43 @@ function Assert-ExactMigrationList {
   )
 
   $Lines = @(Remove-OuterBlankLines -Lines $OutputLines)
-  if (
-    $Lines.Count -lt 4 -or
-    $Lines[0] -cne 'Connecting to remote database...' -or
-    $Lines[1] -cne '' -or
-    $Lines[2] -cne '   Local          | Remote         | Time (UTC)' -or
-    $Lines[3] -cne '  ----------------|----------------|---------------------'
-  ) {
+  $ExpectedPrefix = @('Connecting to remote database...')
+  if ($Lines.Count -gt 0 -and $Lines[0] -ceq 'Initialising login role...') {
+    $ExpectedPrefix = @('Initialising login role...', 'Connecting to remote database...')
+  }
+  if ($Lines.Count -ne ($ExpectedPrefix.Count + 1)) { throw 'Salida de migration list inválida.' }
+  for ($Index = 0; $Index -lt $ExpectedPrefix.Count; $Index += 1) {
+    if ($Lines[$Index] -cne $ExpectedPrefix[$Index]) { throw 'Salida de migration list inválida.' }
+  }
+
+  try {
+    $Payload = $Lines[$Lines.Count - 1] | ConvertFrom-Json
+    Assert-ExactPropertyNames -Value $Payload -ExpectedNames @('migrations', 'message')
+    if ($Payload.message -isnot [string] -or $Payload.message -cne 'Migrations listed') { throw 'payload inválido' }
+    $Rows = @($Payload.migrations)
+  } catch {
     throw 'Salida de migration list inválida.'
   }
 
   $ExpectedRows = [Collections.Generic.List[object]]::new()
-  foreach ($Version in $RemoteVersions) {
-    $ExpectedRows.Add(@($Version, $Version))
-  }
-  foreach ($Version in $ForwardVersions) {
-    $ExpectedRows.Add(@($Version, ''))
-  }
-  $Rows = @($Lines | Select-Object -Skip 4)
+  foreach ($Version in $RemoteVersions) { $ExpectedRows.Add(@($Version, $Version)) }
+  foreach ($Version in $ForwardVersions) { $ExpectedRows.Add(@($Version, '')) }
   if ($Rows.Count -ne $ExpectedRows.Count) { throw 'Salida de migration list inválida.' }
 
   for ($Index = 0; $Index -lt $Rows.Count; $Index += 1) {
-    $Match = [regex]::Match(
-      $Rows[$Index],
-      '^ {3}(?<local>\d{8,})? *\| *(?<remote>\d{8,})? *\| *(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) *$'
-    )
-    if (-not $Match.Success) { throw 'Salida de migration list inválida.' }
-    if (
-      $Match.Groups['local'].Value -cne $ExpectedRows[$Index][0] -or
-      $Match.Groups['remote'].Value -cne $ExpectedRows[$Index][1]
-    ) {
+    try {
+      Assert-ExactPropertyNames -Value $Rows[$Index] -ExpectedNames @('local', 'remote', 'time')
+      if (
+        $Rows[$Index].local -isnot [string] -or
+        $Rows[$Index].remote -isnot [string] -or
+        $Rows[$Index].time -isnot [string] -or
+        $Rows[$Index].time -cnotmatch '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$' -or
+        $Rows[$Index].local -cne $ExpectedRows[$Index][0] -or
+        $Rows[$Index].remote -cne $ExpectedRows[$Index][1]
+      ) {
+        throw 'row inválido'
+      }
+    } catch {
       throw 'Salida de migration list inválida.'
     }
   }
@@ -645,31 +652,48 @@ function Assert-ExactDryRun {
   )
 
   $Lines = @(Remove-OuterBlankLines -Lines $OutputLines)
-  if (
-    $Lines.Count -lt 3 -or
-    $Lines[0] -cne 'DRY RUN: migrations will *not* be pushed to the database.' -or
-    $Lines[1] -cne 'Connecting to remote database...'
-  ) {
-    throw 'Salida de db push dry-run inválida.'
+  $Prefix = [Collections.Generic.List[string]]::new()
+  if ($Lines.Count -gt 0 -and $Lines[0] -ceq 'Initialising login role...') {
+    $Prefix.Add('Initialising login role...')
   }
-
+  $Prefix.Add('DRY RUN: migrations will *not* be pushed to the database.')
+  $Prefix.Add('Connecting to remote database...')
   if ($ForwardFilenames.Count -eq 0) {
-    if ($Lines.Count -ne 3 -or $Lines[2] -cne 'Remote database is up to date.') {
-      throw 'Salida de db push dry-run inválida.'
-    }
-    return
+    $Prefix.Add('Remote database is up to date.')
+  } else {
+    $Prefix.Add('Would push these migrations:')
+    foreach ($Filename in $ForwardFilenames) { $Prefix.Add(" $([char]0x2022) $Filename") }
+  }
+  if ($Lines.Count -ne ($Prefix.Count + 1)) { throw 'Salida de db push dry-run inválida.' }
+  for ($Index = 0; $Index -lt $Prefix.Count; $Index += 1) {
+    if ($Lines[$Index] -cne $Prefix[$Index]) { throw 'Salida de db push dry-run inválida.' }
   }
 
-  if (
-    $Lines.Count -ne ($ForwardFilenames.Count + 4) -or
-    $Lines[2] -cne 'Would push these migrations:' -or
-    $Lines[$Lines.Count - 1] -cne 'Finished supabase db push.'
-  ) {
+  try {
+    $Payload = $Lines[$Lines.Count - 1] | ConvertFrom-Json
+    Assert-ExactPropertyNames -Value $Payload -ExpectedNames @(
+      'upToDate', 'dryRun', 'migrations', 'seeds', 'roles', 'message'
+    )
+    if (
+      $Payload.dryRun -isnot [bool] -or
+      $Payload.upToDate -isnot [bool] -or
+      $Payload.dryRun -ne $true -or
+      $Payload.upToDate -ne ($ForwardFilenames.Count -eq 0) -or
+      $Payload.message -isnot [string] -or
+      $Payload.message -cne $(if ($ForwardFilenames.Count -eq 0) { 'Remote database is up to date.' } else { 'Finished supabase db push.' })
+    ) {
+      throw 'payload inválido'
+    }
+    $Migrations = @(ConvertTo-StrictStringArray `
+      -Value $Payload.migrations `
+      -Pattern '^\d{8,}_[A-Za-z0-9][A-Za-z0-9_-]*\.sql$')
+    if (@($Payload.seeds).Count -ne 0 -or @($Payload.roles).Count -ne 0) { throw 'payload inválido' }
+    if ($Migrations.Count -ne $ForwardFilenames.Count) { throw 'payload inválido' }
+    for ($Index = 0; $Index -lt $ForwardFilenames.Count; $Index += 1) {
+      if ($Migrations[$Index] -cne $ForwardFilenames[$Index]) { throw 'payload inválido' }
+    }
+  } catch {
     throw 'Salida de db push dry-run inválida.'
-  }
-  for ($Index = 0; $Index -lt $ForwardFilenames.Count; $Index += 1) {
-    $ExpectedLine = " $([char]0x2022) $($ForwardFilenames[$Index])"
-    if ($Lines[$Index + 3] -cne $ExpectedLine) { throw 'Salida de db push dry-run inválida.' }
   }
 }
 
@@ -837,7 +861,7 @@ process.stdout.write(JSON.stringify(summary));
 
   Assert-TempRootUseIdentity -Phase 'migration-list'
   $MigrationOutput = Invoke-Supabase -Executable $ResolvedSupabaseCli -Arguments @(
-    '--workdir', $Projection, 'migration', 'list', '--linked'
+    '--output-format', 'json', '--workdir', $Projection, 'migration', 'list', '--linked'
   ) -FailureMessage 'Supabase migration list falló.'
 
   Assert-ExactMigrationList `
@@ -847,7 +871,7 @@ process.stdout.write(JSON.stringify(summary));
 
   Assert-TempRootUseIdentity -Phase 'dry-run'
   $PushOutput = Invoke-Supabase -Executable $ResolvedSupabaseCli -Arguments @(
-    '--workdir', $Projection, 'db', 'push', '--linked', '--dry-run'
+    '--output-format', 'json', '--workdir', $Projection, 'db', 'push', '--linked', '--dry-run'
   ) -FailureMessage 'Supabase db push dry-run falló.'
 
   Assert-ExactDryRun -OutputLines @($PushOutput) -ForwardFilenames $ForwardPendingFilenames

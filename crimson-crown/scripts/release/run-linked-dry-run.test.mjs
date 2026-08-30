@@ -99,35 +99,32 @@ if ($command -eq 'link') {
 
 if ($command -eq 'migration') {
   if ($env:FAKE_SUPABASE_MODE -eq 'list-fail') { exit 42 }
-  $rows = [Collections.Generic.List[string]]::new()
-  $rows.Add('   20240101010101 | 20240101010101 | 2024-01-01 01:01:01')
+  $rows = [Collections.Generic.List[object]]::new()
+  $rows.Add([ordered]@{ local = '20240101010101'; remote = '20240101010101'; time = '2024-01-01 01:01:01' })
   if ($env:FAKE_ZERO_FORWARD -cne '1') {
-    $rows.Add('   20240102000000 |                | 2024-01-02 00:00:00')
-    $rows.Add('   20240103000000 |                | 2024-01-03 00:00:00')
+    $rows.Add([ordered]@{ local = '20240102000000'; remote = ''; time = '2024-01-02 00:00:00' })
+    $rows.Add([ordered]@{ local = '20240103000000'; remote = ''; time = '2024-01-03 00:00:00' })
   }
   switch ($env:FAKE_SUPABASE_MODE) {
     'list-missing-forward' { $rows.RemoveAt($rows.Count - 1) }
-    'list-extra-forward' { $rows.Add('   20240104000000 |                | 2024-01-04 00:00:00') }
-    'list-duplicate-forward' { $rows.Insert($rows.Count - 1, '   20240102000000 |                | 2024-01-02 00:00:00') }
+    'list-extra-forward' { $rows.Add([ordered]@{ local = '20240104000000'; remote = ''; time = '2024-01-04 00:00:00' }) }
+    'list-duplicate-forward' { $rows.Insert($rows.Count - 1, [ordered]@{ local = '20240102000000'; remote = ''; time = '2024-01-02 00:00:00' }) }
     'list-reordered-forward' {
       $row = $rows[1]
       $rows[1] = $rows[2]
       $rows[2] = $row
     }
-    'list-remote-only' { $rows.Insert(0, '                  | 20231231000000 | 2023-12-31 00:00:00') }
-    'list-local-only-marker' { $rows[0] = '   20240101010101 |                | 2024-01-01 01:01:01' }
-    'list-additional-local-history' { $rows.Insert(1, '   20231231000000 |                | 2023-12-31 00:00:00') }
+    'list-remote-only' { $rows.Insert(0, [ordered]@{ local = ''; remote = '20231231000000'; time = '2023-12-31 00:00:00' }) }
+    'list-local-only-marker' { $rows[0].remote = '' }
+    'list-additional-local-history' { $rows.Insert(1, [ordered]@{ local = '20231231000000'; remote = ''; time = '2023-12-31 00:00:00' }) }
     'list-duplicate-remote' { $rows.Insert(1, $rows[0]) }
-    'list-malformed' { $rows[0] = '   not-a-version  | 20240101010101 | 2024-01-01 01:01:01' }
+    'list-malformed' { $rows[0].local = 'not-a-version' }
   }
   Write-Output 'Connecting to remote database...'
-  Write-Output ''
-  Write-Output '   Local          | Remote         | Time (UTC)'
-  Write-Output '  ----------------|----------------|---------------------'
-  $rows | Write-Output
   if ($env:FAKE_SUPABASE_MODE -eq 'list-unknown-grammar') {
     Write-Output 'unexpected parser drift'
   }
+  Write-Output (ConvertTo-Json -Compress -Depth 5 -InputObject ([ordered]@{ migrations = @($rows); message = 'Migrations listed' }))
   exit 0
 }
 
@@ -173,18 +170,29 @@ if ($command -eq 'db') {
   }
   Write-Output 'DRY RUN: migrations will *not* be pushed to the database.'
   Write-Output 'Connecting to remote database...'
-  if ($env:FAKE_SUPABASE_MODE -eq 'up-to-date' -or ($env:FAKE_ZERO_FORWARD -ceq '1' -and $env:FAKE_SUPABASE_MODE -ne 'zero-forward-pending')) {
+  $upToDate = $env:FAKE_SUPABASE_MODE -eq 'up-to-date' -or ($env:FAKE_ZERO_FORWARD -ceq '1' -and $env:FAKE_SUPABASE_MODE -ne 'zero-forward-pending')
+  if ($upToDate) {
     Write-Output 'Remote database is up to date.'
   } else {
     Write-Output 'Would push these migrations:'
     foreach ($file in $pending) {
       Write-Output (' {0} {1}' -f [char]0x2022, $file)
     }
-    Write-Output 'Finished supabase db push.'
   }
   if ($env:FAKE_SUPABASE_MODE -eq 'push-unknown-grammar') {
     Write-Output 'unexpected parser drift'
   }
+  $message = if ($upToDate) { 'Remote database is up to date.' } else { 'Finished supabase db push.' }
+  $migrationPayload = @()
+  if (-not $upToDate) { $migrationPayload = @($pending) }
+  Write-Output (ConvertTo-Json -Compress -Depth 5 -InputObject ([ordered]@{
+    upToDate = $upToDate
+    dryRun = $true
+    migrations = $migrationPayload
+    seeds = @()
+    roles = @()
+    message = $message
+  }))
   exit 0
 }
 
@@ -844,12 +852,12 @@ test('uses the exact linked dry-run command sequence and exposes only review out
     assert.deepEqual(calls, [
       ['--version'],
       ['--workdir', projection, 'link', '--project-ref', productionRef],
-      ['--workdir', projection, 'migration', 'list', '--linked'],
-      ['--workdir', projection, 'db', 'push', '--linked', '--dry-run'],
+      ['--output-format', 'json', '--workdir', projection, 'migration', 'list', '--linked'],
+      ['--output-format', 'json', '--workdir', projection, 'db', 'push', '--linked', '--dry-run'],
     ])
     assert.match(projection, /crimson-release-[0-9a-f]{32}[\\/]projection$/i)
     assert.doesNotMatch(result.stdout, /fake link output/)
-    assert.equal(calls.some((call) => call.join(' ') === '--workdir ' + projection + ' db push --linked'), false)
+    assert.equal(calls.some((call) => call.join(' ') === '--output-format json --workdir ' + projection + ' db push --linked'), false)
     await assertExactCleanup(fixture)
   })
 })
@@ -1008,7 +1016,8 @@ for (const mode of [
       assert.notEqual(result.code, 0)
       assert.equal(calls.length, 3)
       assert.deepEqual(calls[0], ['--version'])
-      assert.equal(calls[2][2], 'migration')
+      assert.deepEqual(calls[2].slice(0, 2), ['--output-format', 'json'])
+      assert.equal(calls[2][4], 'migration')
       assert.equal(result.stdout, '')
       assert.doesNotMatch(result.stderr, /unexpected parser drift/)
       await assertExactCleanup(fixture)
