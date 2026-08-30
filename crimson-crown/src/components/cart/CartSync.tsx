@@ -1,5 +1,6 @@
 "use client"
-import { useEffect, useRef } from 'react'
+import { useEffect, useReducer, useRef } from 'react'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { useCartStore } from '@/store/cartStore'
 
@@ -8,6 +9,7 @@ export default function CartSync() {
   const supabase = createClient()
   const isFirstMount = useRef(true)
   const userIdRef = useRef<string | null>(null)
+  const [authRevision, refreshAuthState] = useReducer((value: number) => value + 1, 0)
 
   // Rehydrate only after the first client render. This keeps the server and
   // initial browser snapshots identical even when a previous session left
@@ -15,6 +17,29 @@ export default function CartSync() {
   useEffect(() => {
     void useCartStore.persist.rehydrate()
   }, [])
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((
+      event: AuthChangeEvent,
+      session: Session | null,
+    ) => {
+      if (event === 'SIGNED_OUT') {
+        userIdRef.current = null
+        refreshAuthState()
+        return
+      }
+
+      if (
+        (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') &&
+        session?.user.id &&
+        session.user.id !== userIdRef.current
+      ) {
+        refreshAuthState()
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [supabase])
 
   useEffect(() => {
     const syncDown = async () => {
@@ -56,7 +81,7 @@ export default function CartSync() {
       }
     }
     syncDown()
-  }, [supabase])
+  }, [authRevision, supabase])
 
   useEffect(() => {
     if (isFirstMount.current) {
@@ -76,17 +101,24 @@ export default function CartSync() {
   }, [items, supabase])
 
   useEffect(() => {
+    let active = true
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
     const subscribeRealtime = async () => {
       const { data: { user } } = await supabase.auth.getUser()
+      if (!active) return
       const uid = user?.id || userIdRef.current
       if (!uid) return
-      const channel = supabase
+      channel = supabase
         .channel('cart-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'cart_items', filter: `user_id=eq.${uid}` }, async () => {
+          if (!active) return
           const { data: cloudItems } = await supabase.from('cart_items').select('*').eq('user_id', uid)
+          if (!active) return
           if (!cloudItems) { useCartStore.setState({ items: [] }); return }
           const productIds = cloudItems.map((i: any) => i.product_id)
           const { data: products } = await supabase.from('products').select('*').in('id', productIds)
+          if (!active) return
           if (!products) return
           const mapped = cloudItems.map((ci: any) => {
             const p = products.find((x: any) => x.id === ci.product_id)
@@ -105,10 +137,14 @@ export default function CartSync() {
           useCartStore.setState({ items: mapped })
         })
         .subscribe()
-      return () => { supabase.removeChannel(channel) }
     }
-    subscribeRealtime()
-  }, [supabase])
+    void subscribeRealtime()
+
+    return () => {
+      active = false
+      if (channel) void supabase.removeChannel(channel)
+    }
+  }, [authRevision, supabase])
 
   return null
 }

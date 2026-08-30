@@ -14,6 +14,7 @@ const webServerEnvironment = Object.fromEntries(
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: '**/staging/**',
   // Las pruebas locales comparten usuarios y fixtures mutables de Supabase.
   // Ejecutarlas en serie evita que un flujo invalide la sesión o los datos de otro.
   workers: 1,
@@ -24,7 +25,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run dev -- --hostname 127.0.0.1',
     env: webServerEnvironment,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
