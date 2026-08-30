@@ -28,6 +28,7 @@ test('construye usuarios sintéticos e IDs deterministas sin correo productivo',
   assert.equal(importOrder.payload.id, '900000000000000001')
   assert.equal(importOrder.payload.status, 'Cotizada')
   assert.equal(importItem.payload.order_id, importOrder.payload.id)
+  assert.equal(importItem.payload.platform, 'Otro')
   assert.equal(importItem.payload.unit_price, 1)
   assert.equal(commissionPeriod.payload.period_key, '2099-12')
   assert.deepEqual(buildSeedPlan(), plan)

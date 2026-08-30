@@ -58,7 +58,7 @@ export function buildSeedPlan() {
     }),
     row('import_items', 'import-item', {
       id: IDS.importItem, order_id: IDS.importOrder, product_name: 'Synthetic Import Card',
-      image_url: '', quantity: 1, platform: 'Synthetic', unit_price: 1,
+      image_url: '', quantity: 1, platform: 'Otro', unit_price: 1,
       tax_percent: 0, shipping_cost: 0, set_name: 'Synthetic Set', collector_number: 'P0',
       product_url: `${FIXTURE_PREFIX}:import-item`,
     }),
