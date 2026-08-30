@@ -30,8 +30,9 @@ El `2026-08-30` se aplicó mediante el conector Supabase y contra el `project_id
 2. las cinco migraciones compatibles que ya estaban en producción;
 3. las seis migraciones forward P0 revisadas;
 4. el hardening de los tres buckets y sus políticas, aplicado después como una migración separada y revisada.
+5. la autorización sintética de comisiones exclusiva de staging, desde `scripts/staging/sql/scope-staging-commission-operator.sql` (SHA-256 `28CA719E8BA88C48F399FF9F9B0534BFF27928DF922CD2B6E77E6FC861DE73FF`).
 
-El ledger remoto resultante contiene exactamente 13 entradas ordenadas: 1 baseline, 5 productivas, 6 forward y 1 de Storage. No se copiaron filas ni objetos desde producción y no se reescribió el historial legacy.
+El ledger remoto resultante contiene exactamente 14 entradas ordenadas: 1 baseline, 5 productivas, 6 forward, 1 de Storage y 1 `staging-only`. La última entrada es `20260830012837 / scope_staging_commission_operator / 4a9d1475cf9375ae02d009ddbddf4b9f290617c262e12e234a53ab59130fac9f`. Ese SQL permanece deliberadamente fuera de `supabase/migrations`: no pertenece al manifest ni a la cadena de producción. No se copiaron filas ni objetos desde producción y no se reescribió el historial legacy.
 
 ### Excepción a `supabase db push`
 
@@ -40,7 +41,7 @@ No se usa `supabase db push` para esta transición. La CLI compara timestamps lo
 - `supabase db push`;
 - `supabase migration repair`;
 - `supabase db reset`;
-- DML remoto destructivo o una reaplicación de las 13 entradas existentes.
+- DML remoto destructivo o una reaplicación de las 14 entradas existentes.
 
 Si una revisión futura detecta un gap real, su aplicación será una operación separada y expresamente aprobada mediante el conector Supabase: `project_id` exacto `ssyeqgtdohwkcucedpwx`, SQL ya revisado y hash de fuente confirmado antes de la llamada. Después se vuelve a ejecutar la verificación read-only. El wrapper de ensayo nunca aplica ese SQL por sí mismo.
 
@@ -50,7 +51,7 @@ Si una revisión futura detecta un gap real, su aplicación será una operación
 
 - enlaza sólo una proyección temporal al branch ref exacto;
 - captura tres snapshots count-only (`before`, `after`, `rollback`);
-- valida el orden y SHA-256 de las 13 entradas remotas;
+- valida el orden y SHA-256 de las 14 entradas remotas, incluida la entrada `staging-only` separada;
 - ejecuta los contratos privilegiados y la matriz de Storage exclusivamente contra el stack local;
 - exige que los tres snapshots remotos sean idénticos y reporta `remoteMutations: 0`.
 

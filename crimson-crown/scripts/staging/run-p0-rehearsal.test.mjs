@@ -25,6 +25,7 @@ const expectedMigrations = [
   ['20260830003106', 'freeze_approved_import_quote_items', '1d2c4ff3c6a5079f37309ab34b3ac415b47bb6a82c6277505ae6cfe6905b14fb'],
   ['20260830003113', 'fix_import_item_guard_rls', '6461df90e0745dbbd6f11e6777d2437aabba3f2248fb13a592b4b1f39c7c4220'],
   ['20260830004907', 'harden_storage_buckets_and_policies', '30ed7942c176e0d6e781d7f73f33be714014d312023dd47764466a34fc0ca811'],
+  ['20260830012837', 'scope_staging_commission_operator', '4a9d1475cf9375ae02d009ddbddf4b9f290617c262e12e234a53ab59130fac9f'],
 ]
 
 function fakeSnapshot(migrations = expectedMigrations) {
@@ -121,6 +122,16 @@ test('snapshot produce sólo firmas y conteos, sin columnas sensibles ni DML', a
   assert.doesNotMatch(sql, /select\s+[*]/iu)
 })
 
+test('ancla la entrada 14 a una fuente staging-only fuera de migraciones productivas', async () => {
+  const wrapper = await readFile(wrapperPath, 'utf8')
+  assert.match(wrapper, /Class = 'staging-only'/u)
+  assert.match(wrapper, /scripts\\staging\\sql\\scope-staging-commission-operator[.]sql/u)
+  assert.match(wrapper, /28ca719e8ba88c48f399ff9f9b0534bff27928df922cd2b6e77e6fc861de73ff/u)
+  assert.match(wrapper, /20260830012837/u)
+  assert.match(wrapper, /4a9d1475cf9375ae02d009ddbddf4b9f290617c262e12e234a53ab59130fac9f/u)
+  assert.doesNotMatch(wrapper, /supabase\\migrations\\scope_staging_commission_operator/iu)
+})
+
 test('verify-only valida guard, hashes y tres snapshots sin comando remoto mutante', async () => {
   await withFakes(async ({ cliLog, nodeLog, fakeCli, fakeNode, evidence }) => {
     const result = invokeWrapper({ fakeCli, fakeNode, evidence })
@@ -128,7 +139,7 @@ test('verify-only valida guard, hashes y tres snapshots sin comando remoto mutan
     assert.deepEqual(JSON.parse(result.stdout), {
       mode: 'verify-only',
       projectRef: stagingRef,
-      migrations: { baseline: 1, production: 5, forward: 6, storage: 1, total: 13 },
+      migrations: { baseline: 1, production: 5, forward: 6, storage: 1, stagingOnly: 1, total: 14 },
       snapshots: ['snapshot-before.json', 'snapshot-after.json', 'snapshot-rollback.json'],
       remoteMutations: 0,
     })
