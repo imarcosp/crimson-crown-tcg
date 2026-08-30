@@ -14,6 +14,7 @@ import {
 
 test('construye usuarios sintéticos e IDs deterministas sin correo productivo', () => {
   const plan = buildSeedPlan()
+  const importOrder = plan.rows.find((row) => row.table === 'import_orders')
   assert.deepEqual(plan.users.map((user) => user.email), [
     'admin.crimson.staging@example.test',
     'buyer.crimson.staging@example.test',
@@ -21,6 +22,8 @@ test('construye usuarios sintéticos e IDs deterministas sin correo productivo',
   ])
   assert.ok(plan.users.every((user) => user.email.endsWith('@example.test')))
   assert.ok(plan.rows.every((row) => row.fixture_key.startsWith('codex-staging-p0:')))
+  assert.match(importOrder.payload.id, /^[1-9][0-9]{0,18}$/u)
+  assert.equal(importOrder.payload.id, '900000000000000001')
   assert.deepEqual(buildSeedPlan(), plan)
   assert.equal(JSON.stringify(plan).includes('mjperchezabala@gmail.com'), false)
 })
@@ -33,7 +36,7 @@ function createFakeService({ foreignProduct = false, missingProof = false } = {}
   const objects = new Map()
   const passwordUpdates = []
 
-  const tableKey = (table, row) => table === 'import_orders' ? row.order_number : row.id
+  const tableKey = (_table, row) => row.id
   const queryFor = (table) => {
     const state = { operation: 'select', payload: null, filters: [], contains: [], conflict: 'id' }
     const query = {
@@ -141,6 +144,18 @@ test('seed se puede repetir sin crecimiento y rota password sólo después de va
   assert.deepEqual(fake.passwordUpdates.map(({ password }) => password), [
     'second-safe-password', 'second-safe-password', 'second-safe-password',
   ])
+})
+
+test('import idempotente usa bigint id y no supone unicidad de order_number', async () => {
+  const fake = createFakeService()
+  fake.tables.get('import_orders').set('42', {
+    id: '42', user_id: 'foreign', order_number: 'CC-STAGING-P0-IMPORT', user_notes: 'foreign',
+  })
+  await seedCrimsonStaging(fake.service, 'first-safe-password')
+  await seedCrimsonStaging(fake.service, 'second-safe-password')
+  assert.equal(fake.tables.get('import_orders').size, 2)
+  assert.ok(fake.tables.get('import_orders').has('900000000000000001'))
+  assert.equal(fake.tables.get('import_orders').get('42').user_notes, 'foreign')
 })
 
 test('seed no sobreescribe una colisión determinista extranjera', async () => {

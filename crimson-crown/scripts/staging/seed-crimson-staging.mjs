@@ -15,6 +15,7 @@ const IDS = Object.freeze({
   period: 'c0de0001-0000-4000-8000-000000000005',
   payment: 'c0de0001-0000-4000-8000-000000000006',
   proofObject: 'c0de0001-0000-4000-8000-000000000007',
+  importOrder: '900000000000000001',
 })
 
 const USERS = Object.freeze([
@@ -50,7 +51,7 @@ export function buildSeedPlan() {
       variant_key: `${FIXTURE_PREFIX}:variant`, source_inventory_name: 'Crimson Staging P0 Inventory',
     }),
     row('import_orders', 'import-order', {
-      user_id: '$buyer', order_number: 'CC-STAGING-P0-IMPORT', status: 'Iniciada',
+      id: IDS.importOrder, user_id: '$buyer', order_number: 'CC-STAGING-P0-IMPORT', status: 'Iniciada',
       user_notes: `${FIXTURE_PREFIX}:import-order`, payment_status: 'pending', credits_used: 0,
     }),
     row('commission_periods', 'commission-period', {
@@ -245,7 +246,7 @@ export async function seedCrimsonStaging(service, password, plan = buildSeedPlan
   let importId = null
   for (const table of orderedTables) {
     const entry = plan.rows.find((candidate) => candidate.table === table)
-    const id = await upsertExact(service, entry, resolvePayload(entry.payload, userIds), table === 'import_orders' ? 'order_number' : 'id')
+    const id = await upsertExact(service, entry, resolvePayload(entry.payload, userIds))
     if (table === 'import_orders') importId = String(id)
   }
   await ensureStorageObjects(service, plan, userIds)
@@ -256,8 +257,8 @@ export async function seedCrimsonStaging(service, password, plan = buildSeedPlan
 
 async function deleteExact(service, table, payload) {
   let query = service.from(table).delete()
-  if (table === 'import_orders') query = query.eq('order_number', payload.order_number).eq('user_notes', payload.user_notes)
-  else query = query.eq('id', payload.id)
+  query = query.eq('id', payload.id)
+  if (table === 'import_orders') query = query.eq('user_notes', payload.user_notes)
   if (table === 'orders') query = query.eq('payment_method', payload.payment_method)
   if (table === 'commission_periods') query = query.eq('notes', payload.notes)
   if (table === 'commission_payments') query = query.eq('reference', payload.reference)
@@ -298,8 +299,7 @@ export async function cleanupCrimsonStaging(service, plan = buildSeedPlan()) {
   }
   for (const entry of plan.rows) {
     const payload = resolvePayload(entry.payload, userIds)
-    const conflict = entry.table === 'import_orders' ? 'order_number' : 'id'
-    const existing = await service.from(entry.table).select('*').eq(conflict, payload[conflict]).maybeSingle()
+    const existing = await service.from(entry.table).select('*').eq('id', payload.id).maybeSingle()
     if (existing.error || !existing.data) throw new Error('Falta una fila del fixture sintético exacto.')
     validateExistingFixtureRow(entry, existing.data)
   }
