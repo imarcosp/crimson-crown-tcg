@@ -99,6 +99,7 @@ if ($command -eq 'link') {
 
 if ($command -eq 'migration') {
   if ($env:FAKE_SUPABASE_MODE -eq 'list-fail') { exit 42 }
+  [Console]::Error.WriteLine('Initialising login role...')
   $rows = [Collections.Generic.List[object]]::new()
   $rows.Add([ordered]@{ local = '20240101010101'; remote = '20240101010101'; time = '2024-01-01 01:01:01' })
   if ($env:FAKE_ZERO_FORWARD -cne '1') {
@@ -130,6 +131,7 @@ if ($command -eq 'migration') {
 
 if ($command -eq 'db') {
   if ($env:FAKE_SUPABASE_MODE -eq 'push-fail') { exit 43 }
+  [Console]::Error.WriteLine('Initialising login role...')
   if ($env:FAKE_SUPABASE_MODE -eq 'cleanup-race-after-push') {
     $tempRoot = Split-Path -Parent $workdir
     $raceDirectory = Join-Path $tempRoot 'race-subdir'

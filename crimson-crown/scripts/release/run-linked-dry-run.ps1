@@ -493,8 +493,20 @@ function Invoke-Supabase {
     [string]$FailureMessage
   )
 
-  $Output = @(& $Executable @Arguments 2>&1)
-  if ($LASTEXITCODE -ne 0) {
+  $PreviousErrorActionPreference = $ErrorActionPreference
+  try {
+    # Windows PowerShell 5.1 promotes native stderr records to non-terminating
+    # errors when ErrorActionPreference is Stop. Supabase writes progress there
+    # even on success, so preserve the bytes and trust the native exit code.
+    $ErrorActionPreference = 'Continue'
+    $Output = @(& $Executable @Arguments 2>&1)
+    $ExitCode = $LASTEXITCODE
+  } catch {
+    throw $FailureMessage
+  } finally {
+    $ErrorActionPreference = $PreviousErrorActionPreference
+  }
+  if ($ExitCode -ne 0) {
     throw $FailureMessage
   }
   return @($Output | ForEach-Object { $_.ToString() })
