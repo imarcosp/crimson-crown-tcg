@@ -6,6 +6,8 @@ import {
   buildCleanupPlan,
   formatSeedPlan,
   assertCompleteFixtureUserIds,
+  cleanupCrimsonStaging,
+  seedCrimsonStaging,
   validateExistingFixtureRow,
   validateFixtureUser,
 } from './seed-crimson-staging.mjs'
@@ -21,6 +23,168 @@ test('construye usuarios sintéticos e IDs deterministas sin correo productivo',
   assert.ok(plan.rows.every((row) => row.fixture_key.startsWith('codex-staging-p0:')))
   assert.deepEqual(buildSeedPlan(), plan)
   assert.equal(JSON.stringify(plan).includes('mjperchezabala@gmail.com'), false)
+})
+
+function createFakeService({ foreignProduct = false, missingProof = false } = {}) {
+  const plan = buildSeedPlan()
+  const tables = new Map(plan.rows.map(({ table }) => [table, new Map()]))
+  tables.set('profiles', new Map())
+  const users = new Map()
+  const objects = new Map()
+  const passwordUpdates = []
+
+  const tableKey = (table, row) => table === 'import_orders' ? row.order_number : row.id
+  const queryFor = (table) => {
+    const state = { operation: 'select', payload: null, filters: [], contains: [], conflict: 'id' }
+    const query = {
+      select() { return query },
+      insert(payload) { state.operation = 'insert'; state.payload = payload; return query },
+      update(payload) { state.operation = 'update'; state.payload = payload; return query },
+      upsert(payload, options = {}) { state.operation = 'upsert'; state.payload = payload; state.conflict = options.onConflict ?? 'id'; return query },
+      delete() { state.operation = 'delete'; return query },
+      eq(name, value) { state.filters.push([name, value]); return query },
+      contains(name, value) { state.contains.push([name, value]); return query },
+      maybeSingle() { return execute(true) },
+      single() { return execute(false) },
+      then(resolve, reject) { return execute(false).then(resolve, reject) },
+    }
+    const matches = (row) => state.filters.every(([name, value]) => row[name] === value) &&
+      state.contains.every(([name, value]) => Object.entries(value).every(([key, expected]) => row[name]?.[key] === expected))
+    async function execute(maybe) {
+      const rows = tables.get(table)
+      const found = [...rows.values()].filter(matches)
+      if (state.operation === 'select') {
+        if (maybe) return { data: found[0] ?? null, error: null }
+        return { data: found, error: null }
+      }
+      if (state.operation === 'insert') {
+        const key = tableKey(table, state.payload)
+        if (rows.has(key)) return { data: null, error: { code: '23505' } }
+        rows.set(key, structuredClone(state.payload))
+        return { data: { id: state.payload.id ?? 9001 }, error: null }
+      }
+      if (state.operation === 'upsert') {
+        const key = state.payload[state.conflict]
+        rows.set(key, structuredClone(state.payload))
+        return { data: { id: state.payload.id }, error: null }
+      }
+      if (state.operation === 'update') {
+        for (const row of found) Object.assign(row, structuredClone(state.payload))
+        return { data: found.map(({ id }) => ({ id: id ?? 9001 })), error: null }
+      }
+      if (state.operation === 'delete') {
+        for (const [key, row] of rows) if (matches(row)) rows.delete(key)
+        return { data: found.map(({ id }) => ({ id: id ?? 9001 })), error: null }
+      }
+      throw new Error('unsupported fake operation')
+    }
+    return query
+  }
+
+  const storageBucket = (bucket) => ({
+    async info(path) {
+      const value = objects.get(`${bucket}/${path}`)
+      return value
+        ? { data: { id: path }, error: null }
+        : { data: null, error: { name: 'StorageApiError', status: 400, statusCode: '404' } }
+    },
+    async download(path) {
+      const value = objects.get(`${bucket}/${path}`)
+      return value ? { data: new Blob([value]), error: null } : { data: null, error: { statusCode: '404' } }
+    },
+    async upload(path, blob) {
+      const key = `${bucket}/${path}`
+      if (objects.has(key)) return { data: null, error: { code: 'Duplicate' } }
+      objects.set(key, new Uint8Array(await blob.arrayBuffer()))
+      return { data: { path }, error: null }
+    },
+    async remove(paths) {
+      const data = []
+      for (const path of paths) {
+        const key = `${bucket}/${path}`
+        if (objects.delete(key)) data.push({ name: path })
+      }
+      return { data, error: null }
+    },
+  })
+
+  const service = {
+    from: queryFor,
+    storage: { from: storageBucket },
+    auth: { admin: {
+      async listUsers() { return { data: { users: [...users.values()], nextPage: null }, error: null } },
+      async createUser(attributes) {
+        const id = `00000000-0000-4000-8000-00000000000${users.size + 1}`
+        const user = { id, email: attributes.email, app_metadata: attributes.app_metadata }
+        users.set(id, user)
+        return { data: { user }, error: null }
+      },
+      async updateUserById(id, attributes) { passwordUpdates.push({ id, password: attributes.password }); return { data: { user: users.get(id) }, error: null } },
+      async deleteUser(id) { const user = users.get(id); users.delete(id); return { data: { user }, error: null } },
+    } },
+  }
+  if (foreignProduct) {
+    const product = plan.rows.find((entry) => entry.table === 'products').payload
+    tables.get('products').set(product.id, { ...structuredClone(product), metadata: { fixture_key: 'foreign' } })
+  }
+  if (missingProof) objects.set('products/unrelated.png', new Uint8Array([1]))
+  return { service, tables, users, objects, passwordUpdates }
+}
+
+test('seed se puede repetir sin crecimiento y rota password sólo después de validar ownership', async () => {
+  const fake = createFakeService()
+  await seedCrimsonStaging(fake.service, 'first-safe-password')
+  const firstCounts = Object.fromEntries([...fake.tables].map(([table, rows]) => [table, rows.size]))
+  await seedCrimsonStaging(fake.service, 'second-safe-password')
+  assert.deepEqual(Object.fromEntries([...fake.tables].map(([table, rows]) => [table, rows.size])), firstCounts)
+  assert.equal(fake.users.size, 3)
+  assert.deepEqual(fake.passwordUpdates.map(({ password }) => password), [
+    'second-safe-password', 'second-safe-password', 'second-safe-password',
+  ])
+})
+
+test('seed no sobreescribe una colisión determinista extranjera', async () => {
+  const fake = createFakeService({ foreignProduct: true })
+  const before = structuredClone([...fake.tables.get('products').values()][0])
+  await assert.rejects(seedCrimsonStaging(fake.service, 'first-safe-password'), /fixture sintético/u)
+  assert.deepEqual([...fake.tables.get('products').values()][0], before)
+})
+
+test('seed no sobreescribe un profile discordante aunque el Auth user sea owned', async () => {
+  const fake = createFakeService()
+  await seedCrimsonStaging(fake.service, 'first-safe-password')
+  const profile = [...fake.tables.get('profiles').values()][0]
+  profile.email = 'foreign@example.test'
+  const before = structuredClone(profile)
+  await assert.rejects(seedCrimsonStaging(fake.service, 'second-safe-password'), /perfil sintético/u)
+  assert.deepEqual(profile, before)
+})
+
+test('cleanup hace preflight completo, borra exactamente y no deja crecimiento', async () => {
+  const fake = createFakeService()
+  await seedCrimsonStaging(fake.service, 'first-safe-password')
+  await cleanupCrimsonStaging(fake.service)
+  assert.equal([...fake.tables.values()].reduce((sum, rows) => sum + rows.size, 0), 0)
+  assert.equal(fake.users.size, 0)
+  assert.equal(fake.objects.size, 0)
+})
+
+test('cleanup no muta nada si una fila falla el preflight exacto', async () => {
+  const fake = createFakeService()
+  await seedCrimsonStaging(fake.service, 'first-safe-password')
+  const product = [...fake.tables.get('products').values()][0]
+  product.metadata.fixture_key = 'foreign'
+  const before = {
+    rows: [...fake.tables.values()].reduce((sum, rows) => sum + rows.size, 0),
+    users: fake.users.size,
+    objects: fake.objects.size,
+  }
+  await assert.rejects(cleanupCrimsonStaging(fake.service), /fixture sintético/u)
+  assert.deepEqual({
+    rows: [...fake.tables.values()].reduce((sum, rows) => sum + rows.size, 0),
+    users: fake.users.size,
+    objects: fake.objects.size,
+  }, before)
 })
 
 test('el plan público imprime sólo tipos y conteos, nunca emails, payloads o claves', () => {

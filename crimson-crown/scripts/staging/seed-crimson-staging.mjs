@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { assertCrimsonStagingEnvironment } from './assert-crimson-staging.mjs'
 
 const FIXTURE_PREFIX = 'codex-staging-p0'
+const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4])
 const IDS = Object.freeze({
   inventory: 'c0de0001-0000-4000-8000-000000000001',
   product: 'c0de0001-0000-4000-8000-000000000002',
@@ -147,6 +148,10 @@ async function ensureUsers(service, plan, password) {
     let user = existing.find((candidate) => candidate.email === expected.email)
     if (user) {
       validateFixtureUser(user, expected)
+      const updated = await service.auth.admin.updateUserById(user.id, { password })
+      if (updated.error || updated.data?.user?.id !== user.id) {
+        throw new Error('No se pudo rotar el password del Auth user sintético.')
+      }
     } else {
       const created = await service.auth.admin.createUser({
         email: expected.email, password, email_confirm: true,
@@ -168,18 +173,43 @@ function resolvePayload(payload, userIds) {
   ]))
 }
 
+function withOwnership(query, entry, payload) {
+  if (entry.table === 'inventories') return query.eq('description', payload.description)
+  if (entry.table === 'products') return query.contains('metadata', { fixture_key: entry.fixture_key })
+  if (entry.table === 'orders') return query.eq('payment_method', payload.payment_method)
+  if (entry.table === 'order_items') return query.eq('order_id', payload.order_id).eq('product_id', payload.product_id).eq('variant_key', payload.variant_key)
+  if (entry.table === 'import_orders') return query.eq('user_notes', payload.user_notes)
+  if (entry.table === 'commission_periods') return query.eq('notes', payload.notes)
+  if (entry.table === 'commission_payments') return query.eq('reference', payload.reference)
+  throw new Error('Tipo de fixture sintético no soportado.')
+}
+
 async function upsertExact(service, entry, payload, conflict = 'id') {
-  const identityValue = payload[conflict]
-  const existing = await service.from(entry.table).select('*').eq(conflict, identityValue).maybeSingle()
-  if (existing.error) throw new Error(`No se pudo verificar el fixture sintético ${entry.table}.`)
-  if (existing.data) validateExistingFixtureRow(entry, existing.data)
-  const result = await service.from(entry.table).upsert(payload, { onConflict: conflict }).select('id').single()
-  if (result.error || !result.data) throw new Error(`No se pudo preparar el fixture sintético ${entry.table}.`)
-  return result.data.id
+  const inserted = await service.from(entry.table).insert(payload).select('id').single()
+  if (!inserted.error && inserted.data) return inserted.data.id
+  if (inserted.error?.code !== '23505') throw new Error(`No se pudo crear el fixture sintético ${entry.table}.`)
+
+  let update = service.from(entry.table).update(payload).eq(conflict, payload[conflict])
+  update = withOwnership(update, entry, payload)
+  const updated = await update.select('id')
+  if (updated.error || !Array.isArray(updated.data) || updated.data.length !== 1) {
+    throw new Error('La fila existente no pertenece al fixture sintético exacto.')
+  }
+  return updated.data[0].id
+}
+
+async function ensureProfile(service, payload) {
+  const inserted = await service.from('profiles').insert(payload).select('id').single()
+  if (!inserted.error && inserted.data) return
+  if (inserted.error?.code !== '23505') throw new Error('No se pudo crear un perfil sintético.')
+  const updated = await service.from('profiles').update(payload)
+    .eq('id', payload.id).eq('email', payload.email).select('id')
+  if (updated.error || !Array.isArray(updated.data) || updated.data.length !== 1) {
+    throw new Error('La fila existente no pertenece al perfil sintético exacto.')
+  }
 }
 
 async function ensureStorageObjects(service, plan, userIds) {
-  const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4])
   for (const object of plan.storage) {
     const path = object.path.replace('$buyer', userIds.buyer)
     const info = await service.storage.from(object.bucket).info(path)
@@ -187,7 +217,7 @@ async function ensureStorageObjects(service, plan, userIds) {
       const downloaded = await service.storage.from(object.bucket).download(path)
       if (downloaded.error || !downloaded.data) throw new Error('No se pudo verificar un objeto sintético de staging.')
       const actual = new Uint8Array(await downloaded.data.arrayBuffer())
-      if (actual.length !== bytes.length || actual.some((value, index) => value !== bytes[index])) {
+      if (actual.length !== PNG_BYTES.length || actual.some((value, index) => value !== PNG_BYTES[index])) {
         throw new Error('El objeto existente no pertenece al fixture sintético exacto.')
       }
       continue
@@ -196,7 +226,7 @@ async function ensureStorageObjects(service, plan, userIds) {
       [400, 404].includes(info.error.status) && String(info.error.statusCode) === '404'
     if (!isMissing) throw new Error('Storage staging no devolvió un estado verificable.')
     const uploaded = await service.storage.from(object.bucket).upload(
-      path, new Blob([bytes], { type: 'image/png' }), { contentType: 'image/png', upsert: false },
+      path, new Blob([PNG_BYTES], { type: 'image/png' }), { contentType: 'image/png', upsert: false },
     )
     if (uploaded.error) throw new Error('No se pudo crear un objeto sintético de staging.')
   }
@@ -206,11 +236,10 @@ export async function seedCrimsonStaging(service, password, plan = buildSeedPlan
   if (typeof password !== 'string' || password.length < 16) throw new Error('Falta password sintético seguro.')
   const userIds = await ensureUsers(service, plan, password)
   for (const user of plan.users) {
-    const profile = await service.from('profiles').upsert({
+    await ensureProfile(service, {
       id: userIds[user.role], email: user.email, role: user.role === 'admin' ? 'admin' : 'user',
       first_name: 'Synthetic', last_name: user.role, full_name: `Synthetic ${user.role}`,
-    }, { onConflict: 'id' }).select('id').single()
-    if (profile.error || !profile.data) throw new Error('No se pudo preparar un perfil sintético.')
+    })
   }
   const orderedTables = ['inventories', 'products', 'orders', 'order_items', 'import_orders', 'commission_periods', 'commission_payments']
   let importId = null
@@ -235,8 +264,21 @@ async function deleteExact(service, table, payload) {
   if (table === 'products') query = query.contains('metadata', { fixture_key: payload.metadata.fixture_key })
   if (table === 'inventories') query = query.eq('description', payload.description)
   if (table === 'order_items') query = query.eq('order_id', payload.order_id).eq('product_id', payload.product_id)
-  const result = await query
-  if (result.error) throw new Error(`No se pudo limpiar el fixture sintético ${table}.`)
+  const result = await query.select('id')
+  if (result.error || !Array.isArray(result.data) || result.data.length !== 1) {
+    throw new Error(`No se pudo limpiar exactamente un fixture sintético ${table}.`)
+  }
+}
+
+async function assertExactStorageObject(service, bucket, path) {
+  const info = await service.storage.from(bucket).info(path)
+  if (info.error || !info.data) throw new Error('Falta un objeto del fixture sintético exacto.')
+  const downloaded = await service.storage.from(bucket).download(path)
+  if (downloaded.error || !downloaded.data) throw new Error('No se pudo verificar un objeto sintético exacto.')
+  const actual = new Uint8Array(await downloaded.data.arrayBuffer())
+  if (actual.length !== PNG_BYTES.length || actual.some((value, index) => value !== PNG_BYTES[index])) {
+    throw new Error('El objeto existente no pertenece al fixture sintético exacto.')
+  }
 }
 
 export async function cleanupCrimsonStaging(service, plan = buildSeedPlan()) {
@@ -249,6 +291,22 @@ export async function cleanupCrimsonStaging(service, plan = buildSeedPlan()) {
     userIds[expected.role] = actual.id
   }
   assertCompleteFixtureUserIds(userIds)
+
+  for (const expected of plan.users) {
+    const profile = await service.from('profiles').select('id,email').eq('id', userIds[expected.role]).eq('email', expected.email).maybeSingle()
+    if (profile.error || !profile.data) throw new Error('Falta un perfil del fixture sintético exacto.')
+  }
+  for (const entry of plan.rows) {
+    const payload = resolvePayload(entry.payload, userIds)
+    const conflict = entry.table === 'import_orders' ? 'order_number' : 'id'
+    const existing = await service.from(entry.table).select('*').eq(conflict, payload[conflict]).maybeSingle()
+    if (existing.error || !existing.data) throw new Error('Falta una fila del fixture sintético exacto.')
+    validateExistingFixtureRow(entry, existing.data)
+  }
+  for (const object of plan.storage) {
+    await assertExactStorageObject(service, object.bucket, object.path.replace('$buyer', userIds.buyer))
+  }
+
   const objectsByBucket = new Map()
   for (const object of plan.storage) {
     const path = object.path.replace('$buyer', userIds.buyer)
@@ -257,7 +315,9 @@ export async function cleanupCrimsonStaging(service, plan = buildSeedPlan()) {
   }
   for (const [bucket, paths] of objectsByBucket) {
     const result = await service.storage.from(bucket).remove(paths)
-    if (result.error) throw new Error('No se pudieron limpiar objetos sintéticos de staging.')
+    if (result.error || !Array.isArray(result.data) || result.data.length !== paths.length) {
+      throw new Error('No se limpiaron exactamente los objetos sintéticos de staging.')
+    }
   }
   for (const table of ['commission_payments', 'commission_periods', 'import_orders', 'order_items', 'orders', 'products', 'inventories']) {
     const entry = plan.rows.find((candidate) => candidate.table === table)
@@ -266,10 +326,10 @@ export async function cleanupCrimsonStaging(service, plan = buildSeedPlan()) {
   for (const expected of plan.users) {
     const id = userIds[expected.role]
     if (!id) continue
-    const profile = await service.from('profiles').delete().eq('id', id).eq('email', expected.email)
-    if (profile.error) throw new Error('No se pudo limpiar un perfil sintético.')
+    const profile = await service.from('profiles').delete().eq('id', id).eq('email', expected.email).select('id')
+    if (profile.error || !Array.isArray(profile.data) || profile.data.length !== 1) throw new Error('No se pudo limpiar exactamente un perfil sintético.')
     const removed = await service.auth.admin.deleteUser(id)
-    if (removed.error) throw new Error('No se pudo limpiar un Auth user sintético.')
+    if (removed.error || removed.data?.user?.id !== id) throw new Error('No se pudo limpiar exactamente un Auth user sintético.')
   }
 }
 
