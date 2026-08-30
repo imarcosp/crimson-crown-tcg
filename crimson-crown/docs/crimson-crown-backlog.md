@@ -51,7 +51,7 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 - Storage local preparado con buckets sintéticos `payment_proofs`, `products` y `banners`; `scripts/local-db/prepare-storage-fixtures.ps1`, `storage-fixtures.sql` y `storage-matrix.mjs` son sólo de pruebas locales y no deben entrar al push de producción sin auditar las políticas remotas.
 - Matriz automatizada `npm run test:local-security`: anon no ve tablas privadas; usuario estándar sólo ve sus recursos, carrito, guardados, órdenes/importaciones/buylists propios y no puede mutar productos, créditos, precios ni tablas administrativas; admin conserva acceso operativo; `supabase db lint` sin errores.
 - Gate estricto de TypeScript habilitado: `npm run typecheck` (`tsc --noEmit`) pasa sin errores y Next.js ya no usa `ignoreBuildErrors`; el build local valida tipos antes de generar artefactos.
-- Suite local completa verificada en este checkpoint: 57 tests de entorno, siete contratos del catálogo privilegiado, matrices de productos/seguridad/finanzas/checkout/liberación/multi-inventario/Storage, build de producción, E2E 18/18 en loopback y release 136/136 con un skip de symlink no disponible en Windows.
+- Suite local completa verificada en este checkpoint: 57 tests de entorno, siete contratos del catálogo privilegiado, matrices de productos/seguridad/finanzas/checkout/liberación/multi-inventario/Storage, build de producción, E2E 21/21 en loopback y release 136/136 con un skip de symlink no disponible en Windows.
 - Pruebas de seguridad local integradas al script `test:environment-safety`.
 - Advertencia de `next/image` del logo corregida.
 - Host local alternativo normalizado en desarrollo a `127.0.0.1` mediante un redirect de navegador, con prueba E2E de regresión; esto evita separar cookies de Supabase entre `localhost` y `127.0.0.1`.
@@ -75,13 +75,13 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 - Warning de múltiples clientes GoTrue resuelto en este lote: `CsvUploader` e Inventario usan el singleton browser compartido; se eliminó el cliente legacy directo.
 - Prueba E2E de contacto completada: un fixture REST aislado verifica que `system_settings` actualiza el Footer y el enlace de WhatsApp sin modificar la base local compartida.
 - Mutaciones administrativas de productos completadas: creación/reposición concurrente exacta, edición con ajuste auditado, rechazo de borrado con historial, borrado seguro sin referencias y CSV parcial sin afectar otro inventario.
-- Playwright usa el puerto configurado y un solo trabajador porque los E2E locales comparten usuarios y fixtures mutables; la suite completa pasa 18/18 sin interferencias y termina sin residuos sintéticos.
+- Playwright usa el puerto configurado y un solo trabajador porque los E2E locales comparten usuarios y fixtures mutables; la suite completa pasa 21/21 sin interferencias y termina sin residuos sintéticos.
 - La suscripción de autenticación del Navbar difiere las consultas de perfil fuera de `onAuthStateChange` y ya no se vuelve a crear al cambiar usuario/perfil; el ciclo usuario estándar/admin pasó 9/9 en repetición focalizada.
-- `CartSync` reacciona a `INITIAL_SESSION`, `SIGNED_IN` y `SIGNED_OUT`, vuelve a bajar el carrito después del login y libera correctamente la suscripción Auth y el canal Realtime. El checkout autenticado y la suite local pasan 18/18.
+- `CartSync` reacciona a `INITIAL_SESSION`, `SIGNED_IN` y `SIGNED_OUT`, vuelve a bajar el carrito después del login y libera correctamente la suscripción Auth y el canal Realtime. El checkout autenticado y la suite local pasan 21/21.
 - PIN cliente eliminado: el panel se abre directamente sólo después de superar sesión admin, proxy, Server Actions y RLS; el E2E demuestra acceso admin y denegación del usuario estándar.
 - Registro, solicitud de recuperación, callback PKCE server-side y actualización real de contraseña pasan E2E con usuarios sintéticos locales y limpieza completa.
 - Google OAuth está diseñado/documentado en `docs/runbooks/crimson-google-oauth.md`, pero permanece deshabilitado hasta recibir client ID/secret y redirect URIs exclusivos de Crimson para local/staging/producción.
-- Completar la auditoría responsive mobile-first del panel administrativo y corregir navegación, tablas y formularios que desborden en móvil/tablet.
+- Responsive administrativo completado: navegación móvil colapsable, layout sin overflow global, tablas anchas con scroll local verificado, modal de inventarios contenido y matriz E2E en 390/768 px sobre diez rutas operativas.
 - Completar los filtros de Magic con rango de precio y formato; conservar los filtros existentes de orden, color, set, finish, rareza y condición.
 - Implementar accesos rápidos administrables bajo el banner: cantidad, orden, imagen/icono, etiqueta, URL y estado activo.
 - Portar el Deckbuilder de Magic desde El Perchero únicamente mediante lectura y reimplementación dentro de Crimson, sin compartir credenciales, datos, procesos ni escritura de archivos.
@@ -100,12 +100,11 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 
 ## Siguiente backlog recomendado
 
-1. **Responsive administrativo.** Corregir primero navegación/layout compartido y luego tablas/formularios por dominio, con pruebas en móvil y tablet.
-2. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
-3. **Catálogo Magic.** Añadir precio y formato sin degradar los filtros/URL existentes.
-4. **Accesos rápidos.** Diseñar el modelo aditivo y la administración de cantidad, orden, imagen/icono, etiqueta, URL y estado.
-5. **Deckbuilder.** Reimplementar en Crimson a partir de una inspección estrictamente de solo lectura de El Perchero, sin código compartido en runtime ni acceso a sus datos.
-6. **Operación y calidad.** Automatizar snapshots de esquema/row-counts, documentar backup/restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
+1. **Catálogo Magic.** Añadir precio y formato sin degradar los filtros/URL existentes.
+2. **Accesos rápidos.** Diseñar el modelo aditivo y la administración de cantidad, orden, imagen/icono, etiqueta, URL y estado.
+3. **Deckbuilder.** Reimplementar en Crimson a partir de una inspección estrictamente de solo lectura de El Perchero, sin código compartido en runtime ni acceso a sus datos.
+4. **Operación y calidad.** Automatizar snapshots de esquema/row-counts, documentar backup/restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
+5. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
 
 ## SaaS — después de todo lo anterior
 
