@@ -32,6 +32,7 @@
     "test:local-admin-products": "node scripts/local-db/admin-product-mutations-matrix.mjs",
     "test:checkout-contract": "node --test scripts/local-db/checkout-action-contract.test.mjs",
     "test:local-storage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/local-db/storage-matrix.mjs",
+    "test:storage-migration-contract": "node --test scripts/local-db/storage-hardening-migration-contract.test.mjs",
     "test:payment-proof-paths": "node --test scripts/local-db/payment-proof-paths-contract.test.mjs",
     "test:atomic-import-proof": "node --test scripts/local-db/import-proof-finalization-contract.test.mjs",
     "test:import-item-freeze": "node --test scripts/local-db/import-item-freeze-contract.test.mjs",
