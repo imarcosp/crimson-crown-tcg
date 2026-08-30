@@ -26,6 +26,9 @@ const expectedMigrations = [
   ['20260830003113', 'fix_import_item_guard_rls', '6461df90e0745dbbd6f11e6777d2437aabba3f2248fb13a592b4b1f39c7c4220'],
   ['20260830004907', 'harden_storage_buckets_and_policies', '30ed7942c176e0d6e781d7f73f33be714014d312023dd47764466a34fc0ca811'],
   ['20260830012837', 'scope_staging_commission_operator', '4a9d1475cf9375ae02d009ddbddf4b9f290617c262e12e234a53ab59130fac9f'],
+  ['20260830030639', 'report_commission_payment_atomically', '90797543348a079d528561ff1f8ad55902ee6ddc02e1d3dd8942fb13c2bb827b'],
+  ['20260830031656', 'confirm_commission_payment_atomically', '5cb3aa5a8d2efd28a4d47e467653feb00993d02d27e20ea6d5a4a089813e611b'],
+  ['20260830033321', 'fix_commission_payment_proof_path_regex', '114647ad0d1b465c7a4a654080873e33061495085caf2867073b95b3ef6dd7f6'],
 ]
 
 function fakeSnapshot(migrations = expectedMigrations) {
@@ -139,7 +142,7 @@ test('verify-only valida guard, hashes y tres snapshots sin comando remoto mutan
     assert.deepEqual(JSON.parse(result.stdout), {
       mode: 'verify-only',
       projectRef: stagingRef,
-      migrations: { baseline: 1, production: 5, forward: 6, storage: 1, stagingOnly: 1, total: 14 },
+      migrations: { baseline: 1, production: 5, forward: 9, storage: 1, stagingOnly: 1, total: 17 },
       snapshots: ['snapshot-before.json', 'snapshot-after.json', 'snapshot-rollback.json'],
       remoteMutations: 0,
     })

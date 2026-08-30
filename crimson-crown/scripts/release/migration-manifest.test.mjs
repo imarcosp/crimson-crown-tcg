@@ -24,6 +24,9 @@ const productionForwardEntries = [
   { class: 'forward_pending', version: '20260829224424', file: '20260829224424_finalize_import_quotes_atomically.sql', sha256: '2eced781fe279001938980a3bbeb63c8e3dd3fd079301637f971614095aa7cd9' },
   { class: 'forward_pending', version: '20260829231011', file: '20260829231011_freeze_approved_import_quote_items.sql', sha256: '96925b88a1b1935fe24aacc6ef7263dd2404f000568eb795be86727e20f19216' },
   { class: 'forward_pending', version: '20260829232257', file: '20260829232257_fix_import_item_guard_rls.sql', sha256: 'cda5780cdcc37be43898fc771d9f9e56dbbd6d84176db094e3a469a52f69a415' },
+  { class: 'forward_pending', version: '20260829235000', file: '20260829235000_report_commission_payment_atomically.sql', sha256: '639fc667dd1b802096189268b978f29e9746c90671d758f991233a50d78672c1' },
+  { class: 'forward_pending', version: '20260829235500', file: '20260829235500_confirm_commission_payment_atomically.sql', sha256: 'd2dc149d1b35ebf7edda299a7db59c6381c78c0876c450df8856616606aabbcc' },
+  { class: 'forward_pending', version: '20260829235700', file: '20260829235700_fix_commission_payment_proof_path_regex.sql', sha256: 'c0a41ec56d31e85e5f3c7017eb7a4d9e2a7a1aea8bc08e3eaa614fb66241f9f8' },
   { class: 'forward_pending', version: '20260829235900', file: '20260829235900_harden_storage_buckets_and_policies.sql', sha256: '6bb0c423b230c3eb6bfb27de3d57e73a784676d76f3e070d7106d2ae0fe0189a' },
 ]
 const bootstrapScript = resolve('scripts/release/bootstrap-migration-manifest.mjs')
@@ -212,7 +215,7 @@ test('every migration is classified exactly once and hashes match', async () => 
   assert.deepEqual(classified, actual)
 })
 
-test('the real manifest contains exactly seven production forwards and excludes branch-only staging SQL', async () => {
+test('the real manifest contains exactly ten production forwards and excludes branch-only staging SQL', async () => {
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: true })
   const forwards = manifest.entries.filter((entry) => entry.class === 'forward_pending')
   assert.deepEqual(forwards, productionForwardEntries)
@@ -1025,7 +1028,7 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
     const manifest = await loadAndValidateManifest({ rootDir, allowCandidates: true })
 
     assert.equal(manifest.schemaVersion, 2)
-    assert.equal(manifest.entries.length, 28)
+    assert.equal(manifest.entries.length, 31)
     assert.deepEqual(manifest.entries.slice(0, 2), [
       {
         class: 'remote_applied',

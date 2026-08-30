@@ -38,6 +38,9 @@ const forwardPending = [
   '20260829224424_finalize_import_quotes_atomically.sql',
   '20260829231011_freeze_approved_import_quote_items.sql',
   '20260829232257_fix_import_item_guard_rls.sql',
+  '20260829235000_report_commission_payment_atomically.sql',
+  '20260829235500_confirm_commission_payment_atomically.sql',
+  '20260829235700_fix_commission_payment_proof_path_regex.sql',
   '20260829235900_harden_storage_buckets_and_policies.sql',
 ]
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, FileText, Landmark, Loader2, Lock, Plane, Receipt, RefreshCw, ShoppingBag, Upload, Wallet } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -24,6 +24,21 @@ type CommissionPeriod = {
   status: 'open' | 'issued' | 'partially_paid' | 'paid'
   locked_at: string | null
   last_refreshed_at: string | null
+}
+
+type CommissionProofUpload = Readonly<{
+  bucket: string
+  path: string
+  name: string
+  size: number
+  mimeType: string
+}>
+
+type CommissionPaymentAttempt = {
+  fingerprint: string
+  operationKey: string
+  proofFile: File | null
+  proof: CommissionProofUpload | null
 }
 
 type CommissionAdjustment = {
@@ -128,6 +143,7 @@ export default function AdminCommissionsPage() {
   const [submittingAdjustment, setSubmittingAdjustment] = useState(false)
   const [error, setError] = useState('')
   const [proofFile, setProofFile] = useState<File | null>(null)
+  const paymentAttemptRef = useRef<CommissionPaymentAttempt | null>(null)
   const [viewMode, setViewMode] = useState<'perche' | 'epi'>('perche')
 
   const [paymentForm, setPaymentForm] = useState({
@@ -352,9 +368,10 @@ export default function AdminCommissionsPage() {
     await loadPeriod(selectedMonth, true)
   }
 
-  const uploadProofIfNeeded = async () => {
+  const uploadProofIfNeeded = async (attempt: CommissionPaymentAttempt) => {
     if (!proofFile) return null
     if (!period) throw new Error('No se pudo autorizar la carga.')
+    if (attempt.proof) return attempt.proof
 
     setUploadingProof(true)
     try {
@@ -373,13 +390,15 @@ export default function AdminCommissionsPage() {
         mimeType: proofFile.type,
       })
       const uploaded = await uploadWithTicket(proofFile, ticket)
-      return Object.freeze({
+      const proof = Object.freeze({
         bucket: uploaded.bucket,
         path: uploaded.path,
         name: uploadName,
         size: proofFile.size,
         mimeType: proofFile.type,
       })
+      attempt.proof = proof
+      return proof
     } finally {
       setUploadingProof(false)
     }
@@ -393,8 +412,32 @@ export default function AdminCommissionsPage() {
     setError('')
 
     try {
-      const proof = await uploadProofIfNeeded()
+      const fingerprint = JSON.stringify({
+        periodId: period.id,
+        paymentForm,
+        proofFile: proofFile
+          ? [proofFile.name, proofFile.size, proofFile.type, proofFile.lastModified]
+          : null,
+      })
+      if (!paymentAttemptRef.current || paymentAttemptRef.current.fingerprint !== fingerprint) {
+        paymentAttemptRef.current = {
+          fingerprint,
+          operationKey: crypto.randomUUID(),
+          proofFile,
+          proof: null,
+        }
+      } else if (paymentAttemptRef.current.proofFile !== proofFile) {
+        paymentAttemptRef.current = {
+          fingerprint,
+          operationKey: crypto.randomUUID(),
+          proofFile,
+          proof: null,
+        }
+      }
+      const attempt = paymentAttemptRef.current
+      const proof = await uploadProofIfNeeded(attempt)
       const result = await reportCommissionPaymentAction({
+        operationKey: attempt.operationKey,
         periodId: period.id,
         currency: paymentForm.currency,
         amount: Number(paymentForm.amount),
@@ -420,6 +463,7 @@ export default function AdminCommissionsPage() {
         paidAt: getLocalDateTimeInputValue(),
       })
       setProofFile(null)
+      paymentAttemptRef.current = null
       await loadPeriod(selectedMonth, false)
     } catch (e: any) {
       setError(e.message || 'No se pudo registrar el pago.')

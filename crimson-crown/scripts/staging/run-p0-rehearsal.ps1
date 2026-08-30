@@ -29,6 +29,9 @@ $SourceLedger = @(
   [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829224424_finalize_import_quotes_atomically.sql'); Sha256 = '2eced781fe279001938980a3bbeb63c8e3dd3fd079301637f971614095aa7cd9' },
   [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829231011_freeze_approved_import_quote_items.sql'); Sha256 = '96925b88a1b1935fe24aacc6ef7263dd2404f000568eb795be86727e20f19216' },
   [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829232257_fix_import_item_guard_rls.sql'); Sha256 = 'cda5780cdcc37be43898fc771d9f9e56dbbd6d84176db094e3a469a52f69a415' },
+  [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235000_report_commission_payment_atomically.sql'); Sha256 = '639fc667dd1b802096189268b978f29e9746c90671d758f991233a50d78672c1' },
+  [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235500_confirm_commission_payment_atomically.sql'); Sha256 = 'd2dc149d1b35ebf7edda299a7db59c6381c78c0876c450df8856616606aabbcc' },
+  [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235700_fix_commission_payment_proof_path_regex.sql'); Sha256 = 'c0a41ec56d31e85e5f3c7017eb7a4d9e2a7a1aea8bc08e3eaa614fb66241f9f8' },
   [pscustomobject]@{ Class = 'storage'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235900_harden_storage_buckets_and_policies.sql'); Sha256 = '6bb0c423b230c3eb6bfb27de3d57e73a784676d76f3e070d7106d2ae0fe0189a' },
   [pscustomobject]@{ Class = 'staging-only'; Path = (Join-Path $AppRoot 'scripts\staging\sql\scope-staging-commission-operator.sql'); Sha256 = '28ca719e8ba88c48f399ff9f9b0534bff27928df922cd2b6e77e6fc861de73ff' }
 )
@@ -47,7 +50,10 @@ $RemoteLedger = @(
   [pscustomobject]@{ Version = '20260830003106'; Name = 'freeze_approved_import_quote_items'; Sha256 = '1d2c4ff3c6a5079f37309ab34b3ac415b47bb6a82c6277505ae6cfe6905b14fb' },
   [pscustomobject]@{ Version = '20260830003113'; Name = 'fix_import_item_guard_rls'; Sha256 = '6461df90e0745dbbd6f11e6777d2437aabba3f2248fb13a592b4b1f39c7c4220' },
   [pscustomobject]@{ Version = '20260830004907'; Name = 'harden_storage_buckets_and_policies'; Sha256 = '30ed7942c176e0d6e781d7f73f33be714014d312023dd47764466a34fc0ca811' },
-  [pscustomobject]@{ Version = '20260830012837'; Name = 'scope_staging_commission_operator'; Sha256 = '4a9d1475cf9375ae02d009ddbddf4b9f290617c262e12e234a53ab59130fac9f' }
+  [pscustomobject]@{ Version = '20260830012837'; Name = 'scope_staging_commission_operator'; Sha256 = '4a9d1475cf9375ae02d009ddbddf4b9f290617c262e12e234a53ab59130fac9f' },
+  [pscustomobject]@{ Version = '20260830030639'; Name = 'report_commission_payment_atomically'; Sha256 = '90797543348a079d528561ff1f8ad55902ee6ddc02e1d3dd8942fb13c2bb827b' },
+  [pscustomobject]@{ Version = '20260830031656'; Name = 'confirm_commission_payment_atomically'; Sha256 = '5cb3aa5a8d2efd28a4d47e467653feb00993d02d27e20ea6d5a4a089813e611b' },
+  [pscustomobject]@{ Version = '20260830033321'; Name = 'fix_commission_payment_proof_path_regex'; Sha256 = '114647ad0d1b465c7a4a654080873e33061495085caf2867073b95b3ef6dd7f6' }
 )
 
 function Stop-UnsafeStaging {
@@ -119,7 +125,7 @@ function Assert-SourceLedger {
   if (
     @($SourceLedger | Where-Object Class -eq 'baseline').Count -ne 1 -or
     @($SourceLedger | Where-Object Class -eq 'production').Count -ne 5 -or
-    @($SourceLedger | Where-Object Class -eq 'forward').Count -ne 6 -or
+    @($SourceLedger | Where-Object Class -eq 'forward').Count -ne 9 -or
     @($SourceLedger | Where-Object Class -eq 'storage').Count -ne 1 -or
     @($SourceLedger | Where-Object Class -eq 'staging-only').Count -ne 1
   ) {
@@ -288,7 +294,7 @@ try {
   [ordered]@{
     mode = $resultMode
     projectRef = $ExpectedStagingRef
-    migrations = [ordered]@{ baseline = 1; production = 5; forward = 6; storage = 1; stagingOnly = 1; total = 14 }
+    migrations = [ordered]@{ baseline = 1; production = 5; forward = 9; storage = 1; stagingOnly = 1; total = 17 }
     snapshots = @('snapshot-before.json', 'snapshot-after.json', 'snapshot-rollback.json')
     remoteMutations = 0
   } | ConvertTo-Json -Depth 5 -Compress

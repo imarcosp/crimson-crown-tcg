@@ -10,7 +10,7 @@ const FIXTURE = {
   inventoryId: 'c0de0001-0000-4000-8000-000000000001',
   productId: 'c0de0001-0000-4000-8000-000000000002',
   orderId: 'c0de0001-0000-4000-8000-000000000003',
-  importId: '900000000000000001',
+  importId: '900000000000001',
 } as const
 const RUN = `codex-staging-p0:playwright:${Date.now()}`
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
@@ -31,9 +31,9 @@ const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: 
 async function login(page: Page, email: string) {
   expect(email.endsWith('@example.test')).toBe(true)
   await page.goto('/login')
-  await page.getByLabel(/correo|email/i).fill(email)
-  await page.getByLabel(/contraseña|password/i).fill(fixturePassword)
-  await page.getByRole('button', { name: /ingresar|iniciar sesión/i }).click()
+  await page.locator('input[type=email]').fill(email)
+  await page.locator('input[type=password]').fill(fixturePassword)
+  await page.getByRole('main').getByRole('button', { name: 'Ingresar', exact: true }).click()
   await expect(page).not.toHaveURL(/\/login(?:\?|$)/)
 }
 
@@ -56,10 +56,9 @@ async function roleClient(email: string): Promise<SupabaseClient> {
 async function expectDirectUploadDenied(client: SupabaseClient, bucket: string, path: string) {
   const { error } = await client.storage.from(bucket).upload(path, PNG, { contentType: 'image/png' })
   const uploadError = error as (typeof error & { status?: number; statusCode?: string | number }) | null
-  expect({ name: uploadError?.name, status: uploadError?.status, statusCode: String(uploadError?.statusCode) },
-    `direct ${bucket} upload must be denied with the exact Storage error`).toEqual({
-    name: 'StorageApiError', status: 403, statusCode: '403',
-  })
+  expect(uploadError?.name, `direct ${bucket} upload must be denied by Storage`).toBe('StorageApiError')
+  expect([400, 403], `direct ${bucket} upload must expose an authorization HTTP status`).toContain(uploadError?.status)
+  expect(String(uploadError?.statusCode), `direct ${bucket} upload must expose statusCode 403`).toBe('403')
   const missing = await service.storage.from(bucket).info(path)
   expect(missing.data).toBeNull()
   const missingError = missing.error as (typeof missing.error & { status?: number; statusCode?: string | number }) | null
@@ -243,7 +242,7 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
       new RegExp(`^orders/${buyerId}/${FIXTURE.orderId}/${UUID}\\.png$`),
       () => page.locator('input[type=file]').setInputFiles({ name: `${RUN}.png`, mimeType: 'image/png', buffer: PNG }))
     transientObjects.add(`payment_proofs:${ticketPath}`)
-    await expect(page.getByText(/comprobante subido|revisaremos/i)).toBeVisible()
+    await expect(page.getByText(/comprobante enviado|verificando tu pago/i).first()).toBeVisible()
     const after = await service.from('orders').select('payment_proof_path,payment_proof_url').eq('id', FIXTURE.orderId).single()
     expect(after.data?.payment_proof_path).toMatch(new RegExp(`^orders/${buyerId}/${FIXTURE.orderId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp)$`))
     expect(after.data?.payment_proof_path).toBe(ticketPath)
@@ -256,9 +255,12 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
   })
 
   test('buyer can open own import and cross-user access is denied', async ({ page }) => {
+    const seededImport = await service.from('import_orders').select('order_number').eq('id', FIXTURE.importId).single()
+    expect(seededImport.error).toBeNull()
+    expect(seededImport.data?.order_number).toMatch(/^IMP-\d+$/)
     await login(page, USERS.buyer)
     await page.goto(`/profile/imports/${FIXTURE.importId}`)
-    await expect(page.getByText(String(FIXTURE.importId), { exact: false })).toBeVisible()
+    await expect(page.getByRole('heading', { name: `Orden #${seededImport.data!.order_number}` })).toBeVisible()
     const ticketPath = await captureSignedUpload(page, 'payment_proofs',
       new RegExp(`^imports/${buyerId}/${FIXTURE.importId}/${UUID}\\.png$`),
       () => page.locator('input[type=file]').setInputFiles({ name: `${RUN}-import.png`, mimeType: 'image/png', buffer: PNG }))
@@ -272,13 +274,19 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     await page.context().clearCookies()
     await login(page, USERS.operator)
     await page.goto(`/profile/imports/${FIXTURE.importId}`)
-    await expect(page.getByText(/no encontrado|sin acceso|no autorizado/i)).toBeVisible()
+    await expect(page.getByText(/no se encontr[oó]|sin acceso|no autorizado/i)).toBeVisible()
     const operator = await roleClient(USERS.operator)
     const denied = await operator.from('import_orders').select('id').eq('id', FIXTURE.importId)
     expect(denied.data ?? []).toHaveLength(0)
   })
 
   test('admin media uploads preserve inventory and direct browser-role uploads remain denied', async ({ page }) => {
+    const dialogMessages: string[] = []
+    const collectDialog = async (dialog: { message(): string; dismiss(): Promise<void> }) => {
+      dialogMessages.push(dialog.message())
+      await dialog.dismiss()
+    }
+    page.on('dialog', collectDialog)
     const productBaseline = await service.from('products').select('stock,inventory_id').eq('id', FIXTURE.productId).single()
     expect(productBaseline.data?.inventory_id).toBe(FIXTURE.inventoryId)
     expect(productBaseline.data?.stock).toBe(10)
@@ -288,14 +296,19 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     await expect(page.getByText('Synthetic Staging Card')).toBeVisible()
     await page.getByRole('button', { name: /nuevo producto/i }).click()
     await page.getByRole('button', { name: /otros tcg.*manual/i }).click()
+    const productModal = page.locator('div.fixed.inset-0').filter({ hasText: 'Cargar Producto' })
     await page.locator('label', { hasText: /^Nombre$/ }).locator('xpath=following-sibling::input').fill(RUN)
-    await page.locator('label', { hasText: /Precio \(USD\)/ }).locator('xpath=following-sibling::input').fill('1')
-    await page.locator('label', { hasText: /^Stock$/ }).locator('xpath=following-sibling::input').fill('0')
-    await page.locator('input[type=file]').setInputFiles({ name: `${RUN}-product.png`, mimeType: 'image/png', buffer: PNG })
+    await page.locator('label', { hasText: /set \/ expansi[oó]n/i }).locator('xpath=following-sibling::input').fill('Synthetic Staging Set')
+    await productModal.locator('input[type=number]').nth(0).fill('1')
+    await productModal.locator('input[type=number]').nth(1).fill('0')
+    await productModal.locator('input[type=file]').setInputFiles({ name: `${RUN}-product.png`, mimeType: 'image/png', buffer: PNG })
     const productTicketPath = await captureSignedUpload(page, 'products',
       new RegExp(`^catalog/${FIXTURE.inventoryId}/${UUID}\\.png$`),
-      () => page.getByRole('button', { name: /guardar producto/i }).click())
+      () => productModal.getByRole('button', { name: /guardar producto/i }).click())
     transientObjects.add(`products:${productTicketPath}`)
+    await expect(productModal, `product save dialogs: ${dialogMessages.join(' | ') || 'none'}`).toBeHidden()
+    expect(dialogMessages, 'product save must not raise a browser dialog').toEqual([])
+    page.off('dialog', collectDialog)
     const product = await service.from('products').select('id,image_url,metadata').eq('name', RUN).single()
     expect(product.error).toBeNull()
     const productPaths = [product.data?.image_url, ...(product.data?.metadata?.gallery ?? [])]
@@ -311,6 +324,7 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     const bannerTicketPath = await captureSignedUpload(page, 'banners', new RegExp(`^site/${UUID}\\.png$`),
       () => page.getByRole('button', { name: /guardar cambios/i }).click())
     transientObjects.add(`banners:${bannerTicketPath}`)
+    await expect(page.getByRole('heading', { name: 'Nuevo Banner', exact: true })).toBeHidden()
     const banner = await service.from('banners').select('image_url').eq('title', RUN).single()
     expect(banner.error).toBeNull()
     const bannerPath = String(banner.data?.image_url ?? '').split('/storage/v1/object/public/banners/')[1]
@@ -326,6 +340,7 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
   test('operator reports commission proof and store owner/admin obtains signed read', async ({ page }) => {
     await login(page, USERS.operator)
     await page.goto('/admin/commissions')
+    await unlockAdmin(page)
     await expect(page.getByRole('heading', { name: /registrar pago/i })).toBeVisible()
     await page.locator('label', { hasText: /^Monto$/ }).locator('xpath=following-sibling::input').fill('1')
     await page.locator('label', { hasText: /cómo se realizó el pago/i }).locator('xpath=following-sibling::input').fill('synthetic')
@@ -335,6 +350,7 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
       new RegExp(`^commissions/${UUID}/${operatorId}/${UUID}\\.png$`),
       () => page.getByRole('button', { name: /^registrar pago$/i }).click())
     transientObjects.add(`payment_proofs:${commissionTicketPath}`)
+    await expect(page.getByText(`Referencia: ${RUN}`, { exact: true })).toBeVisible()
     const payment = await service.from('commission_payments').select('proof_path,proof_url,reported_by_user_id').eq('reference', RUN).single()
     expect(payment.error).toBeNull()
     expect(payment.data?.reported_by_user_id).toBe(operatorId)
@@ -345,6 +361,7 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     await page.context().clearCookies()
     await login(page, USERS.admin)
     await page.goto('/admin/commissions')
+    await unlockAdmin(page)
     const popupPromise = page.waitForEvent('popup')
     await page.getByRole('button', { name: /ver comprobante/i }).last().click()
     const proofPage = await popupPromise

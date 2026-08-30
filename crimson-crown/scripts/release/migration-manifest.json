@@ -276,6 +276,24 @@
     },
     {
       "class": "forward_pending",
+      "version": "20260829235000",
+      "file": "20260829235000_report_commission_payment_atomically.sql",
+      "sha256": "639fc667dd1b802096189268b978f29e9746c90671d758f991233a50d78672c1"
+    },
+    {
+      "class": "forward_pending",
+      "version": "20260829235500",
+      "file": "20260829235500_confirm_commission_payment_atomically.sql",
+      "sha256": "d2dc149d1b35ebf7edda299a7db59c6381c78c0876c450df8856616606aabbcc"
+    },
+    {
+      "class": "forward_pending",
+      "version": "20260829235700",
+      "file": "20260829235700_fix_commission_payment_proof_path_regex.sql",
+      "sha256": "c0a41ec56d31e85e5f3c7017eb7a4d9e2a7a1aea8bc08e3eaa614fb66241f9f8"
+    },
+    {
+      "class": "forward_pending",
       "version": "20260829235900",
       "file": "20260829235900_harden_storage_buckets_and_policies.sql",
       "sha256": "6bb0c423b230c3eb6bfb27de3d57e73a784676d76f3e070d7106d2ae0fe0189a"

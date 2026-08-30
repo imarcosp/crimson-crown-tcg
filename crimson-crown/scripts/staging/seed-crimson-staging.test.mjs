@@ -25,17 +25,22 @@ test('construye usuarios sintéticos e IDs deterministas sin correo productivo',
   assert.ok(plan.users.every((user) => user.email.endsWith('@example.test')))
   assert.ok(plan.rows.every((row) => row.fixture_key.startsWith('codex-staging-p0:')))
   assert.match(importOrder.payload.id, /^[1-9][0-9]{0,18}$/u)
-  assert.equal(importOrder.payload.id, '900000000000000001')
+  assert.equal(importOrder.payload.id, '900000000000001')
+  assert.ok(BigInt(importOrder.payload.id) <= BigInt(Number.MAX_SAFE_INTEGER))
   assert.equal(importOrder.payload.status, 'Cotizada')
   assert.equal(importItem.payload.order_id, importOrder.payload.id)
   assert.equal(importItem.payload.platform, 'Otro')
   assert.equal(importItem.payload.unit_price, 1)
+  assert.doesNotThrow(() => validateExistingFixtureRow(importItem, {
+    ...importItem.payload,
+    order_id: Number(importItem.payload.order_id),
+  }))
   assert.equal(commissionPeriod.payload.period_key, '2099-12')
   assert.deepEqual(buildSeedPlan(), plan)
   assert.equal(JSON.stringify(plan).includes('mjperchezabala@gmail.com'), false)
 })
 
-function createFakeService({ foreignProduct = false, missingProof = false } = {}) {
+function createFakeService({ foreignProduct = false, missingProof = false, deleteUserWithoutEcho = false } = {}) {
   const plan = buildSeedPlan()
   const tables = new Map(plan.rows.map(({ table }) => [table, new Map()]))
   tables.set('profiles', new Map())
@@ -130,7 +135,11 @@ function createFakeService({ foreignProduct = false, missingProof = false } = {}
         return { data: { user }, error: null }
       },
       async updateUserById(id, attributes) { passwordUpdates.push({ id, password: attributes.password }); return { data: { user: users.get(id) }, error: null } },
-      async deleteUser(id) { const user = users.get(id); users.delete(id); return { data: { user }, error: null } },
+      async deleteUser(id) {
+        const user = users.get(id)
+        users.delete(id)
+        return deleteUserWithoutEcho ? { data: {}, error: null } : { data: { user }, error: null }
+      },
     } },
   }
   if (foreignProduct) {
@@ -161,7 +170,7 @@ test('import idempotente usa bigint id y no supone unicidad de order_number', as
   await seedCrimsonStaging(fake.service, 'first-safe-password')
   await seedCrimsonStaging(fake.service, 'second-safe-password')
   assert.equal(fake.tables.get('import_orders').size, 2)
-  assert.ok(fake.tables.get('import_orders').has('900000000000000001'))
+  assert.ok(fake.tables.get('import_orders').has('900000000000001'))
   assert.equal(fake.tables.get('import_orders').get('42').user_notes, 'foreign')
 })
 
@@ -188,6 +197,15 @@ test('cleanup hace preflight completo, borra exactamente y no deja crecimiento',
   await cleanupCrimsonStaging(fake.service)
   assert.equal([...fake.tables.values()].reduce((sum, rows) => sum + rows.size, 0), 0)
   assert.equal(fake.users.size, 0)
+  assert.equal(fake.objects.size, 0)
+})
+
+test('cleanup acepta deleteUser exitoso sin eco del usuario y sigue borrando identidades exactas', async () => {
+  const fake = createFakeService({ deleteUserWithoutEcho: true })
+  await seedCrimsonStaging(fake.service, 'first-safe-password')
+  await cleanupCrimsonStaging(fake.service)
+  assert.equal(fake.users.size, 0)
+  assert.equal([...fake.tables.values()].reduce((sum, rows) => sum + rows.size, 0), 0)
   assert.equal(fake.objects.size, 0)
 })
 

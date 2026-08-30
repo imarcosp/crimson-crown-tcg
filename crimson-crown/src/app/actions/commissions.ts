@@ -12,8 +12,13 @@ import {
   parseProofUploadReference,
 } from '@/lib/storage/proof-finalization-core'
 import { verifyTrustedUploadedObject } from '@/lib/storage/upload-server'
+import {
+  assertNotificationProviderResult,
+  deliverCommissionPaymentNotification,
+} from '@/lib/commissions/payment-notification'
 
 type PaymentInput = {
+  operationKey: string
   periodId: string
   currency: 'USD' | 'ARS'
   amount: number
@@ -82,138 +87,6 @@ function assertCommissionPeriodAllowed(periodKey: string) {
   }
 }
 
-async function getPeriodBalances(admin: ReturnType<typeof createServiceRoleClient>, maxPeriodKey?: string) {
-  if (maxPeriodKey && maxPeriodKey < COMMISSION_START_PERIOD_KEY) {
-    return []
-  }
-
-  let periodsQuery = admin
-    .from('commission_periods')
-    .select('id, period_key, total_due_usd, status, locked_at')
-    .gte('period_key', COMMISSION_START_PERIOD_KEY)
-    .order('period_key', { ascending: true })
-
-  if (maxPeriodKey) {
-    periodsQuery = periodsQuery.lte('period_key', maxPeriodKey)
-  }
-
-  const { data: periods, error: periodsError } = await periodsQuery
-  if (periodsError) throw periodsError
-
-  if (!periods?.length) return []
-
-  const periodIds = periods.map((period) => period.id)
-
-  const [{ data: adjustments, error: adjustmentsError }, { data: allocations, error: allocationsError }] = await Promise.all([
-    admin
-      .from('commission_adjustments')
-      .select('period_id, direction, amount_usd')
-      .in('period_id', periodIds),
-    admin
-      .from('commission_payment_allocations')
-      .select('period_id, amount_usd')
-      .in('period_id', periodIds),
-  ])
-
-  if (adjustmentsError) throw adjustmentsError
-  if (allocationsError) throw allocationsError
-
-  const adjustmentsByPeriod = new Map<string, number>()
-  for (const adjustment of adjustments || []) {
-    const current = adjustmentsByPeriod.get(adjustment.period_id) || 0
-    const signed = adjustment.direction === 'debit'
-      ? Number(adjustment.amount_usd || 0)
-      : -Number(adjustment.amount_usd || 0)
-    adjustmentsByPeriod.set(adjustment.period_id, roundCurrency(current + signed))
-  }
-
-  const allocationsByPeriod = new Map<string, number>()
-  for (const allocation of allocations || []) {
-    const current = allocationsByPeriod.get(allocation.period_id) || 0
-    allocationsByPeriod.set(
-      allocation.period_id,
-      roundCurrency(current + Number(allocation.amount_usd || 0))
-    )
-  }
-
-  return periods.map((period) => {
-    const baseDue = Number(period.total_due_usd || 0)
-    const adjustmentsTotal = adjustmentsByPeriod.get(period.id) || 0
-    const allocatedTotal = allocationsByPeriod.get(period.id) || 0
-    const effectiveDue = roundCurrency(baseDue + adjustmentsTotal)
-    const outstandingUsd = roundCurrency(effectiveDue - allocatedTotal)
-
-    return {
-      ...period,
-      baseDue,
-      adjustmentsTotal,
-      allocatedTotal,
-      effectiveDue,
-      outstandingUsd,
-    }
-  })
-}
-
-async function allocateConfirmedPayment(
-  admin: ReturnType<typeof createServiceRoleClient>,
-  paymentId: string
-) {
-  const { data: payment, error: paymentError } = await admin
-    .from('commission_payments')
-    .select('id, period_id, amount_usd')
-    .eq('id', paymentId)
-    .single()
-
-  if (paymentError) throw paymentError
-
-  const maxPeriodKey = await getPeriodKey(admin, payment.period_id)
-  const balances = await getPeriodBalances(admin, maxPeriodKey)
-
-  const { error: deleteError } = await admin
-    .from('commission_payment_allocations')
-    .delete()
-    .eq('payment_id', paymentId)
-
-  if (deleteError) throw deleteError
-
-  let remaining = Number(payment.amount_usd || 0)
-  const allocationsToInsert: Array<{ payment_id: string; period_id: string; amount_usd: number }> = []
-
-  for (const period of balances) {
-    if (remaining <= 0) break
-    if (period.outstandingUsd <= 0) continue
-
-    const applied = Math.min(period.outstandingUsd, remaining)
-    if (applied <= 0) continue
-
-    allocationsToInsert.push({
-      payment_id: paymentId,
-      period_id: period.id,
-      amount_usd: roundCurrency(applied),
-    })
-
-    remaining = roundCurrency(remaining - applied)
-  }
-
-  if (allocationsToInsert.length > 0) {
-    const { error: insertError } = await admin
-      .from('commission_payment_allocations')
-      .insert(allocationsToInsert)
-
-    if (insertError) throw insertError
-  }
-
-  const { error: updateError } = await admin
-    .from('commission_payments')
-    .update({
-      unapplied_usd: roundCurrency(remaining),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', paymentId)
-
-  if (updateError) throw updateError
-}
-
 async function sendCommissionPaymentReportedEmail(params: {
   amount: number
   amountUsd: number
@@ -226,7 +99,7 @@ async function sendCommissionPaymentReportedEmail(params: {
 }) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || siteConfig.url
 
-  await getResendClient().emails.send({
+  const delivery = await getResendClient().emails.send({
     from: `${siteConfig.shortName} <ventas@crimsoncrown.com>`,
     to: OWNER_ADMIN_EMAIL,
     subject: `💸 Pago de comisión reportado por Epi (${params.periodKey})`,
@@ -249,6 +122,7 @@ async function sendCommissionPaymentReportedEmail(params: {
       </div>
     `,
   })
+  assertNotificationProviderResult(delivery)
 }
 
 export async function refreshCommissionPeriodAction(periodKey: string) {
@@ -321,6 +195,7 @@ export async function lockCommissionPeriodAction(periodKey: string) {
 }
 
 type CommissionPaymentContext = Readonly<{
+  operationKey: string
   periodId: string
   periodKey: string
   userId: string
@@ -346,6 +221,8 @@ export async function reportCommissionPaymentAction(input: PaymentInput) {
       ? input.paymentMethod.trim()
       : ''
     if (
+      typeof input.operationKey !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(input.operationKey) ||
       typeof input.periodId !== 'string' ||
       typeof amount !== 'number' ||
       (fxRateArs !== null && typeof fxRateArs !== 'number') ||
@@ -389,6 +266,7 @@ export async function reportCommissionPaymentAction(input: PaymentInput) {
             actorUserId: user.id,
             proofRequired: false,
             context: Object.freeze({
+              operationKey: input.operationKey.toLowerCase(),
               periodId: normalizedPeriodId,
               periodKey,
               userId: user.id,
@@ -407,45 +285,43 @@ export async function reportCommissionPaymentAction(input: PaymentInput) {
         verify: verifyTrustedUploadedObject,
         persist: async (context, proofPath) => {
           const admin = createServiceRoleClient()
-          const reviewTimestamp = context.isOwner ? new Date().toISOString() : null
-          const { data: insertedPayment, error } = await admin
-            .from('commission_payments')
-            .insert({
-              period_id: context.periodId,
-              reported_by_user_id: context.userId,
-              reviewed_by_user_id: context.isOwner ? context.userId : null,
-              status: context.isOwner ? 'confirmed' : 'reported',
-              currency: context.currency,
-              amount: Number(context.amount.toFixed(2)),
-              fx_rate_ars: context.normalizedFxRate
-                ? Number(context.normalizedFxRate.toFixed(2))
-                : null,
-              amount_usd: Number(context.amountUsd.toFixed(2)),
-              payment_method: context.paymentMethod,
-              reference: context.reference,
-              notes: context.notes,
-              proof_path: proofPath,
-              paid_at: context.paidAt,
-              unapplied_usd: context.isOwner ? Number(context.amountUsd.toFixed(2)) : 0,
-              reviewed_at: reviewTimestamp,
-              updated_at: new Date().toISOString(),
-            })
-            .select('id, period_id')
-            .single()
+          const { data, error } = await admin.rpc('report_commission_payment_atomic', {
+            operation_key_input: context.operationKey,
+            period_id_input: context.periodId,
+            reported_by_user_id_input: context.userId,
+            is_owner_input: context.isOwner,
+            currency_input: context.currency,
+            amount_input: Number(context.amount.toFixed(2)),
+            fx_rate_ars_input: context.normalizedFxRate
+              ? Number(context.normalizedFxRate.toFixed(2))
+              : null,
+            amount_usd_input: Number(context.amountUsd.toFixed(2)),
+            payment_method_input: context.paymentMethod,
+            reference_input: context.reference,
+            notes_input: context.notes,
+            proof_path_input: proofPath,
+            paid_at_input: context.paidAt,
+          })
           if (error) throw new Error(errorMessage)
+          const row = Array.isArray(data) ? data[0] : data
+          if (!row || typeof row !== 'object' || typeof row.created !== 'boolean') {
+            throw new Error(errorMessage)
+          }
 
-          if (context.isOwner) {
-            await allocateConfirmedPayment(admin, insertedPayment.id)
-          } else {
-            await sendCommissionPaymentReportedEmail({
-              amount: context.amount,
-              amountUsd: context.amountUsd,
-              currency: context.currency,
-              paymentMethod: context.paymentMethod,
-              reference: context.reference || undefined,
-              notes: context.notes || undefined,
-              paidAt: context.paidAt,
-              periodKey: context.periodKey,
+          if (!context.isOwner && row.created) {
+            await deliverCommissionPaymentNotification({
+              disabled: process.env.DISABLE_EXTERNAL_SIDE_EFFECTS === 'true',
+              send: () => sendCommissionPaymentReportedEmail({
+                amount: context.amount,
+                amountUsd: context.amountUsd,
+                currency: context.currency,
+                paymentMethod: context.paymentMethod,
+                reference: context.reference || undefined,
+                notes: context.notes || undefined,
+                paidAt: context.paidAt,
+                periodKey: context.periodKey,
+              }),
+              onFailure: () => console.error('No se pudo enviar la notificación del pago de comisión.'),
             })
           }
         },
@@ -461,23 +337,22 @@ export async function reportCommissionPaymentAction(input: PaymentInput) {
 
 export async function confirmCommissionPaymentAction(paymentId: string) {
   try {
+    if (typeof paymentId !== 'string' || !/^[0-9a-f-]{36}$/iu.test(paymentId)) {
+      throw new Error('Pago inválido.')
+    }
     const user = await requireCommissionAdmin(true)
     const admin = createServiceRoleClient()
 
-    const { error } = await admin
-      .from('commission_payments')
-      .update({
-        status: 'confirmed',
-        reviewed_by_user_id: user.id,
-        reviewed_at: new Date().toISOString(),
-        rejection_reason: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', paymentId)
+    const { data, error } = await admin.rpc('confirm_commission_payment_atomic', {
+      payment_id_input: paymentId,
+      reviewer_id_input: user.id,
+    })
 
     if (error) throw error
-
-    await allocateConfirmedPayment(admin, paymentId)
+    const row = Array.isArray(data) ? data[0] : data
+    if (!row || typeof row !== 'object' || typeof row.changed !== 'boolean') {
+      throw new Error('No se pudo confirmar el pago.')
+    }
 
     revalidatePath('/admin/commissions')
     return { success: true }
@@ -494,7 +369,7 @@ export async function rejectCommissionPaymentAction(paymentId: string, reason: s
 
     if (!trimmedReason) throw new Error('Debes indicar el motivo del rechazo.')
 
-    const { error } = await admin
+    const { data, error } = await admin
       .from('commission_payments')
       .update({
         status: 'rejected',
@@ -505,8 +380,11 @@ export async function rejectCommissionPaymentAction(paymentId: string, reason: s
         updated_at: new Date().toISOString(),
       })
       .eq('id', paymentId)
+      .eq('status', 'reported')
+      .select('id')
+      .single()
 
-    if (error) throw error
+    if (error || !data?.id) throw error || new Error('El pago no está pendiente de rechazo.')
 
     revalidatePath('/admin/commissions')
     return { success: true }

@@ -28,6 +28,7 @@
     "test:local-authenticated-definers": "node scripts/local-db/authenticated-definer-matrix.mjs",
     "test:local-security": "node scripts/local-db/security-matrix.mjs",
     "test:local-financial": "node scripts/local-db/financial-matrix.mjs",
+    "test:local-commission-atomic": "node scripts/local-db/commission-payment-concurrency-matrix.mjs",
     "test:local-atomic-checkout": "node scripts/local-db/checkout-atomic-matrix.mjs",
     "test:local-release-stock": "node scripts/local-db/release-stock-atomic-matrix.mjs",
     "test:local-multi-inventory": "node scripts/local-db/multi-inventory-runtime-matrix.mjs",

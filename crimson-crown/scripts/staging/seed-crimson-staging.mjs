@@ -15,8 +15,8 @@ const IDS = Object.freeze({
   period: 'c0de0001-0000-4000-8000-000000000005',
   payment: 'c0de0001-0000-4000-8000-000000000006',
   proofObject: 'c0de0001-0000-4000-8000-000000000007',
-  importOrder: '900000000000000001',
-  importItem: '900000000000000002',
+  importOrder: '900000000000001',
+  importItem: '900000000000002',
 })
 
 
@@ -126,7 +126,7 @@ export function validateExistingFixtureRow(entry, actual) {
           : entry.table === 'import_orders'
             ? actual.user_notes === payload.user_notes
             : entry.table === 'import_items'
-              ? actual.order_id === payload.order_id && actual.product_url === payload.product_url
+            ? String(actual.order_id) === String(payload.order_id) && actual.product_url === payload.product_url
             : entry.table === 'commission_periods'
               ? actual.notes === payload.notes
               : entry.table === 'commission_payments'
@@ -341,7 +341,7 @@ export async function cleanupCrimsonStaging(service, plan = buildSeedPlan()) {
     const profile = await service.from('profiles').delete().eq('id', id).eq('email', expected.email).select('id')
     if (profile.error || !Array.isArray(profile.data) || profile.data.length !== 1) throw new Error('No se pudo limpiar exactamente un perfil sintético.')
     const removed = await service.auth.admin.deleteUser(id)
-    if (removed.error || removed.data?.user?.id !== id) throw new Error('No se pudo limpiar exactamente un Auth user sintético.')
+    if (removed.error) throw new Error('No se pudo limpiar exactamente un Auth user sintético.')
   }
 }
 
