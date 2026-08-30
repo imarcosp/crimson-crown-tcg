@@ -29,6 +29,8 @@ const expectedMigrations = [
   ['20260830030639', 'report_commission_payment_atomically', '90797543348a079d528561ff1f8ad55902ee6ddc02e1d3dd8942fb13c2bb827b'],
   ['20260830031656', 'confirm_commission_payment_atomically', '5cb3aa5a8d2efd28a4d47e467653feb00993d02d27e20ea6d5a4a089813e611b'],
   ['20260830033321', 'fix_commission_payment_proof_path_regex', '114647ad0d1b465c7a4a654080873e33061495085caf2867073b95b3ef6dd7f6'],
+  ['20260830041919', 'reconcile_legacy_schema_safely', '616bc1907f3901cd6f37e88d9dfe3f5dc11ec09644f9094fd168cf31394adf5a'],
+  ['20260830043020', 'reconcile_legacy_schema_safely_transactional', 'ba28412950740ca5ae53020f46fd2d4310d9db4857e1ce35a13ff90077aa3f4a'],
 ]
 
 function fakeSnapshot(migrations = expectedMigrations) {
@@ -135,6 +137,16 @@ test('ancla la entrada 14 a una fuente staging-only fuera de migraciones product
   assert.doesNotMatch(wrapper, /supabase\\migrations\\scope_staging_commission_operator/iu)
 })
 
+test('incluye la reconciliación productiva antes de Storage en el ledger fuente', async () => {
+  const wrapper = await readFile(wrapperPath, 'utf8')
+  const reconciliation = wrapper.indexOf('20260829235800_reconcile_legacy_schema_safely.sql')
+  const storage = wrapper.indexOf('20260829235900_harden_storage_buckets_and_policies.sql')
+
+  assert.ok(reconciliation >= 0, 'falta la reconciliación en el ledger fuente')
+  assert.ok(storage > reconciliation, 'Storage debe permanecer último en el orden lógico de producción')
+  assert.match(wrapper, /feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de/u)
+})
+
 test('verify-only valida guard, hashes y tres snapshots sin comando remoto mutante', async () => {
   await withFakes(async ({ cliLog, nodeLog, fakeCli, fakeNode, evidence }) => {
     const result = invokeWrapper({ fakeCli, fakeNode, evidence })
@@ -142,7 +154,7 @@ test('verify-only valida guard, hashes y tres snapshots sin comando remoto mutan
     assert.deepEqual(JSON.parse(result.stdout), {
       mode: 'verify-only',
       projectRef: stagingRef,
-      migrations: { baseline: 1, production: 5, forward: 9, storage: 1, stagingOnly: 1, total: 17 },
+      migrations: { baseline: 1, production: 5, forward: 10, storage: 1, stagingOnly: 1, transactionalRehearsal: 1, total: 19 },
       snapshots: ['snapshot-before.json', 'snapshot-after.json', 'snapshot-rollback.json'],
       remoteMutations: 0,
     })

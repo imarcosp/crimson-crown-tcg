@@ -41,6 +41,7 @@ const forwardPending = [
   '20260829235000_report_commission_payment_atomically.sql',
   '20260829235500_confirm_commission_payment_atomically.sql',
   '20260829235700_fix_commission_payment_proof_path_regex.sql',
+  '20260829235800_reconcile_legacy_schema_safely.sql',
   '20260829235900_harden_storage_buckets_and_policies.sql',
 ]
 

@@ -28,14 +28,16 @@ El `2026-08-30` se aplicó mediante el conector Supabase y contra el `project_id
 
 1. un baseline DDL sin datos, tomado de `schema.sql`, con SHA-256 `B794231BAD902ACAE1AE8220A54E56C85F00422EE14E7898ECA0DA8664FB6EB3`;
 2. las cinco migraciones compatibles que ya estaban en producción;
-3. las nueve migraciones forward P0 revisadas;
+3. las diez migraciones forward P0 revisadas;
 4. el hardening de los tres buckets y sus políticas, aplicado después como una migración separada y revisada.
 5. la autorización sintética de comisiones exclusiva de staging, desde `scripts/staging/sql/scope-staging-commission-operator.sql` (SHA-256 `28CA719E8BA88C48F399FF9F9B0534BFF27928DF922CD2B6E77E6FC861DE73FF`).
 6. el registro atómico e idempotente de pagos de comisiones, aplicado luego de su matriz transaccional local.
 7. la confirmación y asignación FIFO transaccional, con el mismo lock que el registro del propietario.
 8. el hotfix de validación del sufijo del comprobante, detectado por E2E y reproducido con un `proof_path` real en la matriz local.
+9. la reconciliación forward-only del legado, sin DML de negocio, preservando `color_identity` como JSONB y dejando el guard histórico de comisiones `NOT VALID`.
+10. la fuente final con `BEGIN/COMMIT` explícitos, aplicada idempotentemente después de demostrar con una migración fallida que el mismo endpoint revierte tanto el DDL de prueba como su entrada de ledger.
 
-El ledger remoto resultante contiene exactamente 17 entradas ordenadas: 1 baseline, 5 productivas, 9 forward, 1 de Storage y 1 `staging-only`. La entrada 14 es `20260830012837 / scope_staging_commission_operator / 4a9d1475cf9375ae02d009ddbddf4b9f290617c262e12e234a53ab59130fac9f`; ese SQL permanece deliberadamente fuera de `supabase/migrations` y no pertenece al manifest ni a la cadena de producción. Las tres últimas entradas son `20260830030639 / report_commission_payment_atomically / 90797543348a079d528561ff1f8ad55902ee6ddc02e1d3dd8942fb13c2bb827b`, `20260830031656 / confirm_commission_payment_atomically / 5cb3aa5a8d2efd28a4d47e467653feb00993d02d27e20ea6d5a4a089813e611b` y `20260830033321 / fix_commission_payment_proof_path_regex / 114647ad0d1b465c7a4a654080873e33061495085caf2867073b95b3ef6dd7f6`. No se copiaron filas ni objetos desde producción y no se reescribió el historial legacy.
+El ledger remoto resultante contiene exactamente 19 entradas ordenadas: 1 baseline, 5 productivas, las 10 forward productivas, 1 de Storage, 1 `staging-only` y 1 repetición transaccional idempotente de la reconciliación final. La entrada 14 es `20260830012837 / scope_staging_commission_operator / 4a9d1475cf9375ae02d009ddbddf4b9f290617c262e12e234a53ab59130fac9f`; ese SQL permanece deliberadamente fuera de `supabase/migrations` y no pertenece al manifest ni a la cadena de producción. La entrada más reciente es `20260830043020 / reconcile_legacy_schema_safely_transactional / ba28412950740ca5ae53020f46fd2d4310d9db4857e1ce35a13ff90077aa3f4a`. Staging ya tenía aplicado Storage cuando se incorporó esta reconciliación; esa secuencia física histórica no se replica en producción. En el ledger fuente y en el release productivo, reconciliación precede a Storage y Storage permanece último. No se copiaron filas ni objetos desde producción y no se reescribió el historial legacy.
 
 ### Excepción a `supabase db push`
 
@@ -44,7 +46,7 @@ No se usa `supabase db push` para esta transición. La CLI compara timestamps lo
 - `supabase db push`;
 - `supabase migration repair`;
 - `supabase db reset`;
-- DML remoto destructivo o una reaplicación de las 17 entradas existentes.
+- DML remoto destructivo o una reaplicación de las 19 entradas existentes.
 
 Si una revisión futura detecta un gap real, su aplicación será una operación separada y expresamente aprobada mediante el conector Supabase: `project_id` exacto `ssyeqgtdohwkcucedpwx`, SQL ya revisado y hash de fuente confirmado antes de la llamada. Después se vuelve a ejecutar la verificación read-only. El wrapper de ensayo nunca aplica ese SQL por sí mismo.
 
@@ -54,7 +56,7 @@ Si una revisión futura detecta un gap real, su aplicación será una operación
 
 - enlaza sólo una proyección temporal al branch ref exacto;
 - captura tres snapshots count-only (`before`, `after`, `rollback`);
-- valida el orden y SHA-256 de las 17 entradas remotas, incluida la entrada `staging-only` separada;
+- valida el orden y SHA-256 de las 19 entradas remotas, incluida la entrada `staging-only` y la repetición transaccional separadas;
 - ejecuta los contratos privilegiados y la matriz de Storage exclusivamente contra el stack local;
 - exige que los tres snapshots remotos sean idénticos y reporta `remoteMutations: 0`.
 

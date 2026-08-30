@@ -507,15 +507,16 @@ test('rejects a release-evidence junction that expands the internal exception', 
   })
 })
 
-test('keeps the real candidate manifest fail-closed by default', async () => {
+test('materializes the approved real manifest without a candidate bypass', async () => {
   const outputParent = await mkdtemp(join(tmpdir(), 'crimson-release-projection-real-output-'))
   const outputDir = join(outputParent, 'projection')
 
   try {
-    await assert.rejects(
-      () => buildProjection({ rootDir: sourceRoot, outputDir }),
-      /prueba de release candidata/,
-    )
+    const summary = await buildProjection({ rootDir: sourceRoot, outputDir })
+    assert.equal(summary.forwardPendingCount, 11)
+    assert.equal(summary.projectedRemoteVersions.length, 5)
+    assert.equal(summary.forwardPendingFilenames.at(-2), '20260829235800_reconcile_legacy_schema_safely.sql')
+    assert.equal(summary.forwardPendingFilenames.at(-1), '20260829235900_harden_storage_buckets_and_policies.sql')
   } finally {
     await rm(outputParent, { recursive: true, force: true })
   }

@@ -32,6 +32,7 @@ $SourceLedger = @(
   [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235000_report_commission_payment_atomically.sql'); Sha256 = '639fc667dd1b802096189268b978f29e9746c90671d758f991233a50d78672c1' },
   [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235500_confirm_commission_payment_atomically.sql'); Sha256 = 'd2dc149d1b35ebf7edda299a7db59c6381c78c0876c450df8856616606aabbcc' },
   [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235700_fix_commission_payment_proof_path_regex.sql'); Sha256 = 'c0a41ec56d31e85e5f3c7017eb7a4d9e2a7a1aea8bc08e3eaa614fb66241f9f8' },
+  [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235800_reconcile_legacy_schema_safely.sql'); Sha256 = 'feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de' },
   [pscustomobject]@{ Class = 'storage'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235900_harden_storage_buckets_and_policies.sql'); Sha256 = '6bb0c423b230c3eb6bfb27de3d57e73a784676d76f3e070d7106d2ae0fe0189a' },
   [pscustomobject]@{ Class = 'staging-only'; Path = (Join-Path $AppRoot 'scripts\staging\sql\scope-staging-commission-operator.sql'); Sha256 = '28ca719e8ba88c48f399ff9f9b0534bff27928df922cd2b6e77e6fc861de73ff' }
 )
@@ -53,7 +54,9 @@ $RemoteLedger = @(
   [pscustomobject]@{ Version = '20260830012837'; Name = 'scope_staging_commission_operator'; Sha256 = '4a9d1475cf9375ae02d009ddbddf4b9f290617c262e12e234a53ab59130fac9f' },
   [pscustomobject]@{ Version = '20260830030639'; Name = 'report_commission_payment_atomically'; Sha256 = '90797543348a079d528561ff1f8ad55902ee6ddc02e1d3dd8942fb13c2bb827b' },
   [pscustomobject]@{ Version = '20260830031656'; Name = 'confirm_commission_payment_atomically'; Sha256 = '5cb3aa5a8d2efd28a4d47e467653feb00993d02d27e20ea6d5a4a089813e611b' },
-  [pscustomobject]@{ Version = '20260830033321'; Name = 'fix_commission_payment_proof_path_regex'; Sha256 = '114647ad0d1b465c7a4a654080873e33061495085caf2867073b95b3ef6dd7f6' }
+  [pscustomobject]@{ Version = '20260830033321'; Name = 'fix_commission_payment_proof_path_regex'; Sha256 = '114647ad0d1b465c7a4a654080873e33061495085caf2867073b95b3ef6dd7f6' },
+  [pscustomobject]@{ Version = '20260830041919'; Name = 'reconcile_legacy_schema_safely'; Sha256 = '616bc1907f3901cd6f37e88d9dfe3f5dc11ec09644f9094fd168cf31394adf5a' },
+  [pscustomobject]@{ Version = '20260830043020'; Name = 'reconcile_legacy_schema_safely_transactional'; Sha256 = 'ba28412950740ca5ae53020f46fd2d4310d9db4857e1ce35a13ff90077aa3f4a' }
 )
 
 function Stop-UnsafeStaging {
@@ -125,7 +128,7 @@ function Assert-SourceLedger {
   if (
     @($SourceLedger | Where-Object Class -eq 'baseline').Count -ne 1 -or
     @($SourceLedger | Where-Object Class -eq 'production').Count -ne 5 -or
-    @($SourceLedger | Where-Object Class -eq 'forward').Count -ne 9 -or
+    @($SourceLedger | Where-Object Class -eq 'forward').Count -ne 10 -or
     @($SourceLedger | Where-Object Class -eq 'storage').Count -ne 1 -or
     @($SourceLedger | Where-Object Class -eq 'staging-only').Count -ne 1
   ) {
@@ -294,7 +297,7 @@ try {
   [ordered]@{
     mode = $resultMode
     projectRef = $ExpectedStagingRef
-    migrations = [ordered]@{ baseline = 1; production = 5; forward = 9; storage = 1; stagingOnly = 1; total = 17 }
+    migrations = [ordered]@{ baseline = 1; production = 5; forward = 10; storage = 1; stagingOnly = 1; transactionalRehearsal = 1; total = 19 }
     snapshots = @('snapshot-before.json', 'snapshot-after.json', 'snapshot-rollback.json')
     remoteMutations = 0
   } | ConvertTo-Json -Depth 5 -Compress

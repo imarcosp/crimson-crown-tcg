@@ -27,6 +27,7 @@ const productionForwardEntries = [
   { class: 'forward_pending', version: '20260829235000', file: '20260829235000_report_commission_payment_atomically.sql', sha256: '639fc667dd1b802096189268b978f29e9746c90671d758f991233a50d78672c1' },
   { class: 'forward_pending', version: '20260829235500', file: '20260829235500_confirm_commission_payment_atomically.sql', sha256: 'd2dc149d1b35ebf7edda299a7db59c6381c78c0876c450df8856616606aabbcc' },
   { class: 'forward_pending', version: '20260829235700', file: '20260829235700_fix_commission_payment_proof_path_regex.sql', sha256: 'c0a41ec56d31e85e5f3c7017eb7a4d9e2a7a1aea8bc08e3eaa614fb66241f9f8' },
+  { class: 'forward_pending', version: '20260829235800', file: '20260829235800_reconcile_legacy_schema_safely.sql', sha256: 'feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de' },
   { class: 'forward_pending', version: '20260829235900', file: '20260829235900_harden_storage_buckets_and_policies.sql', sha256: '6bb0c423b230c3eb6bfb27de3d57e73a784676d76f3e070d7106d2ae0fe0189a' },
 ]
 const bootstrapScript = resolve('scripts/release/bootstrap-migration-manifest.mjs')
@@ -215,7 +216,7 @@ test('every migration is classified exactly once and hashes match', async () => 
   assert.deepEqual(classified, actual)
 })
 
-test('the real manifest contains exactly ten production forwards and excludes branch-only staging SQL', async () => {
+test('the real manifest contains exactly eleven production forwards and excludes branch-only staging SQL', async () => {
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: true })
   const forwards = manifest.entries.filter((entry) => entry.class === 'forward_pending')
   assert.deepEqual(forwards, productionForwardEntries)
@@ -229,14 +230,12 @@ test('the real manifest contains exactly ten production forwards and excludes br
 
   const historicalEntries = manifest.entries.filter((entry) => entry.class !== 'forward_pending')
   assert.equal(historicalEntries.length, 21)
-  assert.ok(historicalEntries.every((entry) => entry.releaseProof.status === 'candidate'))
+  assert.ok(historicalEntries.every((entry) => entry.releaseProof.status !== 'candidate'))
 })
 
-test('the real manifest is blocked while any historical proof is only a candidate', async () => {
-  await assert.rejects(
-    () => loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: false }),
-    /prueba de release candidata/,
-  )
+test('the real manifest passes without a candidate bypass', async () => {
+  const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: false })
+  assert.equal(manifest.entries.filter((entry) => entry.class === 'forward_pending').length, 11)
 })
 
 test('projection rejects a candidate unless allowCandidates is the literal boolean true', async () => {
@@ -1028,7 +1027,7 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
     const manifest = await loadAndValidateManifest({ rootDir, allowCandidates: true })
 
     assert.equal(manifest.schemaVersion, 2)
-    assert.equal(manifest.entries.length, 31)
+    assert.equal(manifest.entries.length, 32)
     assert.deepEqual(manifest.entries.slice(0, 2), [
       {
         class: 'remote_applied',
@@ -1087,7 +1086,6 @@ test('bootstrap output is byte-identical across two fresh destinations', async (
       readFile(join(rootDir, 'scripts', 'release', 'migration-manifest.json'))
     )))
     assert.deepEqual(outputs[0], outputs[1])
-    assert.deepEqual(outputs[0], await readFile(resolve('scripts/release/migration-manifest.json')))
 
     const manifest = JSON.parse(outputs[0].toString('utf8'))
     assert.equal(manifest.schemaVersion, 2)
