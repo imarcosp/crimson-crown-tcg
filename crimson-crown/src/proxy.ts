@@ -1,6 +1,7 @@
 import { createGuardedServerClient as createServerClient } from '@/lib/supabase/guarded-constructors'
 import { NextResponse, type NextRequest } from 'next/server'
 import { ADMIN_EMAILS } from '@/lib/constants'
+import { isCommissionAdminEmail } from '@/lib/auth/admin-access'
 import {
   assertSafeRuntimeSupabaseUrl,
   UnsafeEnvironmentError,
@@ -81,7 +82,11 @@ export async function proxy(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/admin')) {
     if (error) console.error("❌ [Middleware] Error Auth:", error.message)
     if (!user) return NextResponse.redirect(new URL('/login', request.url))
-    if (!user.email || !ADMIN_EMAILS.includes(user.email)) return NextResponse.redirect(new URL('/', request.url))
+    const canAccessCommissionStagingRoute = request.nextUrl.pathname.startsWith('/admin/commissions') &&
+      isCommissionAdminEmail(user.email)
+    if (!user.email || (!ADMIN_EMAILS.includes(user.email) && !canAccessCommissionStagingRoute)) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
   }
 
   return response

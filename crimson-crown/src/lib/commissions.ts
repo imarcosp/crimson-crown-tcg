@@ -67,10 +67,19 @@ export function getPreviousCommissionMonthKey(now = new Date()) {
   return shiftCommissionMonthKey(getCurrentCommissionMonthKey(now), -1)
 }
 
-export function getClientPayableCommissionMonthKey(now = new Date()) {
+export function getClientPayableCommissionMonthKey(
+  now = new Date(),
+  env = {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_CRIMSON_STAGING_SUPABASE_PROJECT_REF: process.env.NEXT_PUBLIC_CRIMSON_STAGING_SUPABASE_PROJECT_REF,
+    NEXT_PUBLIC_CRIMSON_DEPLOYMENT_TARGET: process.env.NEXT_PUBLIC_CRIMSON_DEPLOYMENT_TARGET,
+  },
+) {
+  if (isExactStagingEnvironment(env)) return '2099-12'
   return clampCommissionMonthKey(getPreviousCommissionMonthKey(now))
 }
 
 export function isPastCommissionMonth(periodKey: string) {
   return periodKey < getCurrentCommissionMonthKey()
 }
+import { isExactStagingEnvironment } from './auth/admin-access.ts'

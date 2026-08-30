@@ -15,6 +15,8 @@ import {
 test('construye usuarios sintéticos e IDs deterministas sin correo productivo', () => {
   const plan = buildSeedPlan()
   const importOrder = plan.rows.find((row) => row.table === 'import_orders')
+  const importItem = plan.rows.find((row) => row.table === 'import_items')
+  const commissionPeriod = plan.rows.find((row) => row.table === 'commission_periods')
   assert.deepEqual(plan.users.map((user) => user.email), [
     'admin.crimson.staging@example.test',
     'buyer.crimson.staging@example.test',
@@ -24,6 +26,10 @@ test('construye usuarios sintéticos e IDs deterministas sin correo productivo',
   assert.ok(plan.rows.every((row) => row.fixture_key.startsWith('codex-staging-p0:')))
   assert.match(importOrder.payload.id, /^[1-9][0-9]{0,18}$/u)
   assert.equal(importOrder.payload.id, '900000000000000001')
+  assert.equal(importOrder.payload.status, 'Cotizada')
+  assert.equal(importItem.payload.order_id, importOrder.payload.id)
+  assert.equal(importItem.payload.unit_price, 1)
+  assert.equal(commissionPeriod.payload.period_key, '2099-12')
   assert.deepEqual(buildSeedPlan(), plan)
   assert.equal(JSON.stringify(plan).includes('mjperchezabala@gmail.com'), false)
 })
@@ -210,6 +216,7 @@ test('el plan público imprime sólo tipos y conteos, nunca emails, payloads o c
     rows: {
       commission_payments: 1,
       commission_periods: 1,
+      import_items: 1,
       import_orders: 1,
       inventories: 1,
       order_items: 1,
@@ -228,6 +235,7 @@ test('cleanup usa sólo identidades exactas y respeta el orden inverso de FKs', 
     'storage.objects',
     'commission_payments',
     'commission_periods',
+    'import_items',
     'import_orders',
     'order_items',
     'orders',

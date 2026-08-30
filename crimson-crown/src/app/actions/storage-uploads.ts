@@ -1,6 +1,6 @@
 'use server'
 
-import { isAdminEmail } from '@/lib/auth/admin-access'
+import { isAdminEmail, isCommissionAdminEmail } from '@/lib/auth/admin-access'
 import { COMMISSION_START_PERIOD_KEY } from '@/lib/commissions'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient as createServerClient } from '@/lib/supabase/server'
@@ -64,7 +64,7 @@ async function getUploadActor(): Promise<UploadActor | null> {
     userId: user.id,
     email,
     isAdmin,
-    isCommissionAdmin: isAdmin,
+    isCommissionAdmin: isCommissionAdminEmail(email),
   })
 }
 

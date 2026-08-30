@@ -16,7 +16,9 @@ const IDS = Object.freeze({
   payment: 'c0de0001-0000-4000-8000-000000000006',
   proofObject: 'c0de0001-0000-4000-8000-000000000007',
   importOrder: '900000000000000001',
+  importItem: '900000000000000002',
 })
+
 
 const USERS = Object.freeze([
   Object.freeze({ role: 'admin', email: 'admin.crimson.staging@example.test', fixture_key: `${FIXTURE_PREFIX}:user:admin` }),
@@ -51,8 +53,14 @@ export function buildSeedPlan() {
       variant_key: `${FIXTURE_PREFIX}:variant`, source_inventory_name: 'Crimson Staging P0 Inventory',
     }),
     row('import_orders', 'import-order', {
-      id: IDS.importOrder, user_id: '$buyer', order_number: 'CC-STAGING-P0-IMPORT', status: 'Iniciada',
+      id: IDS.importOrder, user_id: '$buyer', order_number: 'CC-STAGING-P0-IMPORT', status: 'Cotizada',
       user_notes: `${FIXTURE_PREFIX}:import-order`, payment_status: 'pending', credits_used: 0,
+    }),
+    row('import_items', 'import-item', {
+      id: IDS.importItem, order_id: IDS.importOrder, product_name: 'Synthetic Import Card',
+      image_url: '', quantity: 1, platform: 'Synthetic', unit_price: 1,
+      tax_percent: 0, shipping_cost: 0, set_name: 'Synthetic Set', collector_number: 'P0',
+      product_url: `${FIXTURE_PREFIX}:import-item`,
     }),
     row('commission_periods', 'commission-period', {
       id: IDS.period, period_key: '2099-12', period_start: '2099-12-01T00:00:00.000Z',
@@ -77,7 +85,7 @@ export function buildCleanupPlan(plan = buildSeedPlan()) {
   const byTable = new Map(plan.rows.map((entry) => [entry.table, entry]))
   const cleanup = [
     { resource: 'storage.objects', match: { fixture_key: `${FIXTURE_PREFIX}:storage`, objects: plan.storage.map(({ bucket, path }) => ({ bucket, path })) } },
-    ...['commission_payments', 'commission_periods', 'import_orders', 'order_items', 'orders', 'products', 'inventories']
+    ...['commission_payments', 'commission_periods', 'import_items', 'import_orders', 'order_items', 'orders', 'products', 'inventories']
       .map((resource) => ({ resource, match: { fixture_key: byTable.get(resource).fixture_key, payload: byTable.get(resource).payload } })),
     { resource: 'profiles', match: { fixture_key: `${FIXTURE_PREFIX}:profiles`, emails: plan.users.map(({ email }) => email) } },
     { resource: 'auth.users', match: { fixture_key: `${FIXTURE_PREFIX}:auth`, emails: plan.users.map(({ email }) => email) } },
@@ -117,6 +125,8 @@ export function validateExistingFixtureRow(entry, actual) {
           ? actual.order_id === payload.order_id && actual.product_id === payload.product_id && actual.variant_key === payload.variant_key
           : entry.table === 'import_orders'
             ? actual.user_notes === payload.user_notes
+            : entry.table === 'import_items'
+              ? actual.order_id === payload.order_id && actual.product_url === payload.product_url
             : entry.table === 'commission_periods'
               ? actual.notes === payload.notes
               : entry.table === 'commission_payments'
@@ -180,6 +190,7 @@ function withOwnership(query, entry, payload) {
   if (entry.table === 'orders') return query.eq('payment_method', payload.payment_method)
   if (entry.table === 'order_items') return query.eq('order_id', payload.order_id).eq('product_id', payload.product_id).eq('variant_key', payload.variant_key)
   if (entry.table === 'import_orders') return query.eq('user_notes', payload.user_notes)
+  if (entry.table === 'import_items') return query.eq('order_id', payload.order_id).eq('product_url', payload.product_url)
   if (entry.table === 'commission_periods') return query.eq('notes', payload.notes)
   if (entry.table === 'commission_payments') return query.eq('reference', payload.reference)
   throw new Error('Tipo de fixture sintético no soportado.')
@@ -242,7 +253,7 @@ export async function seedCrimsonStaging(service, password, plan = buildSeedPlan
       first_name: 'Synthetic', last_name: user.role, full_name: `Synthetic ${user.role}`,
     })
   }
-  const orderedTables = ['inventories', 'products', 'orders', 'order_items', 'import_orders', 'commission_periods', 'commission_payments']
+  const orderedTables = ['inventories', 'products', 'orders', 'order_items', 'import_orders', 'import_items', 'commission_periods', 'commission_payments']
   let importId = null
   for (const table of orderedTables) {
     const entry = plan.rows.find((candidate) => candidate.table === table)
@@ -259,6 +270,7 @@ async function deleteExact(service, table, payload) {
   let query = service.from(table).delete()
   query = query.eq('id', payload.id)
   if (table === 'import_orders') query = query.eq('user_notes', payload.user_notes)
+  if (table === 'import_items') query = query.eq('order_id', payload.order_id).eq('product_url', payload.product_url)
   if (table === 'orders') query = query.eq('payment_method', payload.payment_method)
   if (table === 'commission_periods') query = query.eq('notes', payload.notes)
   if (table === 'commission_payments') query = query.eq('reference', payload.reference)
@@ -319,7 +331,7 @@ export async function cleanupCrimsonStaging(service, plan = buildSeedPlan()) {
       throw new Error('No se limpiaron exactamente los objetos sintéticos de staging.')
     }
   }
-  for (const table of ['commission_payments', 'commission_periods', 'import_orders', 'order_items', 'orders', 'products', 'inventories']) {
+  for (const table of ['commission_payments', 'commission_periods', 'import_items', 'import_orders', 'order_items', 'orders', 'products', 'inventories']) {
     const entry = plan.rows.find((candidate) => candidate.table === table)
     await deleteExact(service, table, resolvePayload(entry.payload, userIds))
   }

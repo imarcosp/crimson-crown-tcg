@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server'
-import { ADMIN_EMAILS, OWNER_ADMIN_EMAIL } from '@/lib/constants'
+import { OWNER_ADMIN_EMAIL, STAFF_ADMIN_EMAIL } from '@/lib/constants'
 import { COMMISSION_START_PERIOD_KEY, getCurrentCommissionMonthKey } from '@/lib/commissions'
 import { siteConfig } from '@/config/site'
 import { getResendClient } from '@/lib/email/resend-client'
@@ -45,7 +45,7 @@ async function requireCommissionAdmin(ownerOnly = false) {
     error,
   } = await supabase.auth.getUser()
 
-  if (error || !user?.email || !ADMIN_EMAILS.includes(user.email)) {
+  if (error || !user?.email || ![OWNER_ADMIN_EMAIL, STAFF_ADMIN_EMAIL].includes(user.email)) {
     throw new Error('No autorizado para operar con comisiones.')
   }
 

@@ -10,7 +10,7 @@ const FIXTURE = {
   inventoryId: 'c0de0001-0000-4000-8000-000000000001',
   productId: 'c0de0001-0000-4000-8000-000000000002',
   orderId: 'c0de0001-0000-4000-8000-000000000003',
-  importId: 900000000000000001,
+  importId: '900000000000000001',
 } as const
 const RUN = `codex-staging-p0:playwright:${Date.now()}`
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
@@ -54,8 +54,17 @@ async function roleClient(email: string): Promise<SupabaseClient> {
 
 async function expectDirectUploadDenied(client: SupabaseClient, bucket: string, path: string) {
   const { error } = await client.storage.from(bucket).upload(path, PNG, { contentType: 'image/png' })
-  expect(error, `direct ${bucket} upload must be denied`).not.toBeNull()
-  await service.storage.from(bucket).remove([path])
+  const uploadError = error as (typeof error & { status?: number; statusCode?: string | number }) | null
+  expect({ name: uploadError?.name, status: uploadError?.status, statusCode: String(uploadError?.statusCode) },
+    `direct ${bucket} upload must be denied with the exact Storage error`).toEqual({
+    name: 'StorageApiError', status: 403, statusCode: '403',
+  })
+  const missing = await service.storage.from(bucket).info(path)
+  expect(missing.data).toBeNull()
+  const missingError = missing.error as (typeof missing.error & { status?: number; statusCode?: string | number }) | null
+  expect(missingError?.name).toBe('StorageApiError')
+  expect([400, 404]).toContain(missingError?.status)
+  expect(String(missingError?.statusCode)).toBe('404')
 }
 
 function assertSignedUrl(url: string, bucket: string, expectedPath: string) {
@@ -69,24 +78,104 @@ function assertSignedUrl(url: string, bucket: string, expectedPath: string) {
 
 test.describe.serial('Crimson Crown P0 staging smoke', () => {
   const transientObjects = new Set<string>()
+  let buyerId = ''
+  let operatorId = ''
+  let baseline: {
+    order: Record<string, unknown>
+    importOrder: Record<string, unknown>
+    profile: Record<string, unknown>
+  } | null = null
+
+  test.beforeAll(async () => {
+    const users = await service.auth.admin.listUsers({ page: 1, perPage: 1000 })
+    expect(users.error).toBeNull()
+    const buyer = users.data.users.find(user => user.email === USERS.buyer)
+    expect(buyer?.id).toBeTruthy()
+    buyerId = buyer!.id
+    const operator = users.data.users.find(user => user.email === USERS.operator)
+    expect(operator?.id).toBeTruthy()
+    operatorId = operator!.id
+    const [order, importOrder, profile] = await Promise.all([
+      service.from('orders').select('status,payment_proof_path,payment_proof_url').eq('id', FIXTURE.orderId).eq('user_id', buyerId).single(),
+      service.from('import_orders').select('status,payment_status,payment_proof_path,payment_proof_url,credits_used').eq('id', FIXTURE.importId).eq('user_id', buyerId).single(),
+      service.from('profiles').select('credits').eq('id', buyerId).eq('email', USERS.buyer).single(),
+    ])
+    expect(order.error).toBeNull()
+    expect(importOrder.error).toBeNull()
+    expect(profile.error).toBeNull()
+    baseline = { order: order.data!, importOrder: importOrder.data!, profile: profile.data! }
+  })
 
   test.afterAll(async () => {
+    const [currentOrder, currentImport, paymentRows, bannerRows, productRows] = await Promise.all([
+      service.from('orders').select('payment_proof_path').eq('id', FIXTURE.orderId).eq('user_id', buyerId).single(),
+      service.from('import_orders').select('payment_proof_path').eq('id', FIXTURE.importId).eq('user_id', buyerId).single(),
+      service.from('commission_payments').select('id,proof_path,reported_by_user_id').eq('reference', RUN),
+      service.from('banners').select('id,image_url').eq('title', RUN),
+      service.from('products').select('id,image_url,metadata').eq('name', RUN).eq('inventory_id', FIXTURE.inventoryId),
+    ])
+    for (const result of [currentOrder, currentImport, paymentRows, bannerRows, productRows]) expect(result.error).toBeNull()
+    expect((paymentRows.data ?? []).length).toBeLessThanOrEqual(1)
+    expect((bannerRows.data ?? []).length).toBeLessThanOrEqual(1)
+    expect((productRows.data ?? []).length).toBeLessThanOrEqual(1)
+    const addChangedProof = (path: unknown, original: unknown, pattern: RegExp) => {
+      if (!path || path === original) return
+      expect(String(path)).toMatch(pattern)
+      transientObjects.add(`payment_proofs:${String(path)}`)
+    }
+    addChangedProof(currentOrder.data?.payment_proof_path, baseline?.order.payment_proof_path,
+      new RegExp(`^orders/${buyerId}/${FIXTURE.orderId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp)$`))
+    addChangedProof(currentImport.data?.payment_proof_path, baseline?.importOrder.payment_proof_path,
+      new RegExp(`^imports/${buyerId}/${FIXTURE.importId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp|pdf)$`))
+    for (const payment of paymentRows.data ?? []) {
+      expect(payment.reported_by_user_id).toBe(operatorId)
+      addChangedProof(payment.proof_path, null,
+        new RegExp(`^commissions/[0-9a-f-]{36}/${operatorId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp|pdf)$`))
+    }
+    for (const banner of bannerRows.data ?? []) {
+      const path = String(banner.image_url ?? '').split('/storage/v1/object/public/banners/')[1]
+      expect(path).toBeTruthy(); transientObjects.add(`banners:${path}`)
+    }
+    for (const product of productRows.data ?? []) {
+      const paths = [product.image_url, ...(product.metadata?.gallery ?? [])]
+        .filter((value): value is string => typeof value === 'string' && value.includes('/'))
+        .map(value => value.includes('/storage/v1/object/public/products/') ? value.split('/storage/v1/object/public/products/')[1] : value)
+      paths.forEach(path => transientObjects.add(`products:${path}`))
+    }
+    if (baseline) {
+      const restoredOrder = await service.from('orders').update(baseline.order).eq('id', FIXTURE.orderId).eq('user_id', buyerId).select('id')
+      const restoredImport = await service.from('import_orders').update(baseline.importOrder).eq('id', FIXTURE.importId).eq('user_id', buyerId).select('id')
+      const restoredProfile = await service.from('profiles').update(baseline.profile).eq('id', buyerId).eq('email', USERS.buyer).select('id')
+      expect(restoredOrder.error).toBeNull(); expect(restoredOrder.data).toHaveLength(1)
+      expect(restoredImport.error).toBeNull(); expect(restoredImport.data).toHaveLength(1)
+      expect(restoredProfile.error).toBeNull(); expect(restoredProfile.data).toHaveLength(1)
+    }
     for (const item of transientObjects) {
       const separator = item.indexOf(':')
       const bucket = item.slice(0, separator)
       const path = item.slice(separator + 1)
-      await service.storage.from(bucket).remove([path])
+      const removed = await service.storage.from(bucket).remove([path])
+      expect(removed.error).toBeNull()
+      expect(removed.data).toHaveLength(1)
     }
     // Only rows bearing this run's exact marker are eligible for cleanup.
-    await service.from('commission_payments').delete().eq('reference', RUN)
-    await service.from('banners').delete().eq('title', RUN)
-    await service.from('products').delete().eq('name', RUN)
+    const payments = await service.from('commission_payments').delete().eq('reference', RUN).select('id')
+    const banners = await service.from('banners').delete().eq('title', RUN).select('id')
+    const products = await service.from('products').delete().eq('name', RUN).eq('inventory_id', FIXTURE.inventoryId).select('id')
+    expect(payments.error).toBeNull(); expect(payments.data).toHaveLength(paymentRows.data?.length ?? 0)
+    expect(banners.error).toBeNull(); expect(banners.data).toHaveLength(bannerRows.data?.length ?? 0)
+    expect(products.error).toBeNull(); expect(products.data).toHaveLength(productRows.data?.length ?? 0)
   })
 
   test('anonymous catalog and banners are public while admin is denied', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByText('Synthetic Staging Card')).toBeVisible()
-    await expect(page.locator('img').first()).toBeVisible()
+    const bannerPath = 'codex-staging-p0/banner.png'
+    const banner = await service.storage.from('banners').info(bannerPath)
+    expect(banner.error).toBeNull()
+    const publicBanner = service.storage.from('banners').getPublicUrl(bannerPath).data.publicUrl
+    const response = await page.request.get(publicBanner)
+    expect(response.status()).toBe(200)
     await page.goto('/admin')
     await expect(page).toHaveURL(/\/login|\/admin\/pin/)
   })
@@ -111,26 +200,23 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     await page.locator('input[type=file]').setInputFiles({ name: `${RUN}.png`, mimeType: 'image/png', buffer: PNG })
     await expect(page.getByText(/comprobante subido|revisaremos/i)).toBeVisible()
     const after = await service.from('orders').select('payment_proof_path,payment_proof_url').eq('id', FIXTURE.orderId).single()
-    expect(after.data?.payment_proof_path).toMatch(new RegExp(`^orders/${FIXTURE.orderId}/`))
+    expect(after.data?.payment_proof_path).toMatch(new RegExp(`^orders/${buyerId}/${FIXTURE.orderId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp)$`))
     expect(after.data?.payment_proof_url ?? null).toBeNull()
     transientObjects.add(`payment_proofs:${after.data!.payment_proof_path}`)
     await page.getByRole('button', { name: /ver comprobante/i }).click()
     const frame = page.locator('iframe[title="Comprobante"]')
     assertSignedUrl(await frame.getAttribute('src') ?? '', 'payment_proofs', after.data!.payment_proof_path)
-    await service.from('orders').update(before.data!).eq('id', FIXTURE.orderId)
+    expect(before.data).toEqual(expect.objectContaining({ payment_proof_path: baseline!.order.payment_proof_path }))
   })
 
   test('buyer can open own import and cross-user access is denied', async ({ page }) => {
-    const before = await service.from('import_orders').select('payment_proof_path,payment_proof_url,payment_status,status,credits_used,user_id').eq('id', FIXTURE.importId).single()
-    expect(before.error).toBeNull()
-    const profileBefore = await service.from('profiles').select('credits').eq('id', before.data!.user_id).single()
     await login(page, USERS.buyer)
     await page.goto(`/profile/imports/${FIXTURE.importId}`)
     await expect(page.getByText(String(FIXTURE.importId), { exact: false })).toBeVisible()
     await page.locator('input[type=file]').setInputFiles({ name: `${RUN}-import.png`, mimeType: 'image/png', buffer: PNG })
     await expect(page.getByText(/verificando pago/i)).toBeVisible()
     const after = await service.from('import_orders').select('payment_proof_path,payment_proof_url').eq('id', FIXTURE.importId).single()
-    expect(after.data?.payment_proof_path).toMatch(new RegExp(`^imports/${FIXTURE.importId}/`))
+    expect(after.data?.payment_proof_path).toMatch(new RegExp(`^imports/${buyerId}/${FIXTURE.importId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp|pdf)$`))
     expect(after.data?.payment_proof_url ?? null).toBeNull()
     transientObjects.add(`payment_proofs:${after.data!.payment_proof_path}`)
     await page.context().clearCookies()
@@ -140,13 +226,12 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     const operator = await roleClient(USERS.operator)
     const denied = await operator.from('import_orders').select('id').eq('id', FIXTURE.importId)
     expect(denied.data ?? []).toHaveLength(0)
-    const { user_id: buyerId, ...importRestore } = before.data!
-    await service.from('import_orders').update(importRestore).eq('id', FIXTURE.importId)
-    await service.from('profiles').update(profileBefore.data!).eq('id', buyerId)
   })
 
   test('admin media uploads preserve inventory and direct browser-role uploads remain denied', async ({ page }) => {
-    const baseline = await service.from('products').select('stock').eq('id', FIXTURE.productId).single()
+    const productBaseline = await service.from('products').select('stock,inventory_id').eq('id', FIXTURE.productId).single()
+    expect(productBaseline.data?.inventory_id).toBe(FIXTURE.inventoryId)
+    expect(productBaseline.data?.stock).toBe(10)
     await login(page, USERS.admin)
     await page.goto(`/admin/inventory?inventory=${FIXTURE.inventoryId}`)
     await unlockAdmin(page)
@@ -176,40 +261,45 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     expect(bannerPath).toBeTruthy()
     transientObjects.add(`banners:${bannerPath}`)
 
-    const current = await service.from('products').select('stock').eq('id', FIXTURE.productId).single()
-    expect(current.data?.stock).toBe(baseline.data?.stock)
-    const admin = await roleClient(USERS.admin)
-    await expectDirectUploadDenied(admin, 'products', `products/${RUN}.png`)
-    await expectDirectUploadDenied(admin, 'banners', `banners/${RUN}.png`)
+    const current = await service.from('products').select('stock,inventory_id').eq('id', FIXTURE.productId).single()
+    expect(current.data?.stock).toBe(productBaseline.data?.stock)
+    expect(current.data?.inventory_id).toBe(FIXTURE.inventoryId)
   })
 
   test('operator reports commission proof and store owner/admin obtains signed read', async ({ page }) => {
     await login(page, USERS.operator)
     await page.goto('/admin/commissions')
     await expect(page.getByRole('heading', { name: /registrar pago/i })).toBeVisible()
-    await page.getByLabel(/referencia/i).fill(RUN)
+    await page.locator('label', { hasText: /^Monto$/ }).locator('xpath=following-sibling::input').fill('1')
+    await page.locator('label', { hasText: /cómo se realizó el pago/i }).locator('xpath=following-sibling::input').fill('synthetic')
+    await page.locator('label', { hasText: /^Referencia$/ }).locator('xpath=following-sibling::input').fill(RUN)
     await page.locator('input[type=file]').setInputFiles({ name: `${RUN}.png`, mimeType: 'image/png', buffer: PNG })
     await page.getByRole('button', { name: /^registrar pago$/i }).click()
-    const payment = await service.from('commission_payments').select('proof_path,proof_url').eq('reference', RUN).single()
+    const payment = await service.from('commission_payments').select('proof_path,proof_url,reported_by_user_id').eq('reference', RUN).single()
     expect(payment.error).toBeNull()
-    expect(payment.data?.proof_path).toMatch(/^commissions\//)
+    expect(payment.data?.reported_by_user_id).toBe(operatorId)
+    expect(payment.data?.proof_path).toMatch(new RegExp(`^commissions/[0-9a-f-]{36}/${operatorId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp|pdf)$`))
     expect(payment.data?.proof_url ?? null).toBeNull()
     transientObjects.add(`payment_proofs:${payment.data!.proof_path}`)
     await page.context().clearCookies()
     await login(page, USERS.admin)
     await page.goto('/admin/commissions')
-    const responsePromise = page.waitForResponse(response => response.url().includes('/storage/v1/object/sign/'))
+    const popupPromise = page.waitForEvent('popup')
     await page.getByRole('button', { name: /ver comprobante/i }).last().click()
-    const signed = await responsePromise
-    assertSignedUrl(signed.url(), 'payment_proofs', payment.data!.proof_path)
+    const proofPage = await popupPromise
+    await proofPage.waitForURL(url => url.toString().includes('/storage/v1/object/sign/'))
+    assertSignedUrl(proofPage.url(), 'payment_proofs', payment.data!.proof_path)
   })
 
   test('anon, buyer, operator and admin cannot bypass signed uploads', async () => {
-    const anon = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } })
-    await expectDirectUploadDenied(anon, 'payment_proofs', `orders/${FIXTURE.orderId}/${RUN}-anon.png`)
-    for (const email of Object.values(USERS)) {
-      const client = await roleClient(email)
-      await expectDirectUploadDenied(client, 'payment_proofs', `orders/${FIXTURE.orderId}/${RUN}-${email}.png`)
+    const roles: Array<[string, SupabaseClient]> = [
+      ['anon', createClient(supabaseUrl, anonKey, { auth: { persistSession: false } })],
+    ]
+    for (const email of Object.values(USERS)) roles.push([email, await roleClient(email)])
+    for (const [role, client] of roles) {
+      for (const bucket of ['products', 'banners', 'payment_proofs']) {
+        await expectDirectUploadDenied(client, bucket, `${RUN}/${role}/${bucket}.png`)
+      }
     }
   })
 })

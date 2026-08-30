@@ -111,9 +111,9 @@ export default function AdminCommissionsPage() {
   const supabase = useMemo(() => createClient(), [])
   const { user } = useAuth()
   const currentMonthKey = useMemo(() => getCurrentCommissionMonthKey(), [])
-  const payableMonthKey = useMemo(() => getClientPayableCommissionMonthKey(), [currentMonthKey])
+  const payableMonthKey = useMemo(() => getClientPayableCommissionMonthKey(), [])
 
-  const [selectedMonth, setSelectedMonth] = useState(() => clampCommissionMonthKey(getCurrentCommissionMonthKey()))
+  const [selectedMonth, setSelectedMonth] = useState(() => getClientPayableCommissionMonthKey())
   const [period, setPeriod] = useState<CommissionPeriod | null>(null)
   const [periods, setPeriods] = useState<CommissionPeriod[]>([])
   const [lines, setLines] = useState<CommissionLine[]>([])
@@ -267,6 +267,10 @@ export default function AdminCommissionsPage() {
   }, [loadPeriod, selectedMonth, user?.email])
 
   useEffect(() => {
+    if (payableMonthKey > currentMonthKey) {
+      setSelectedMonth(payableMonthKey)
+      return
+    }
     if (isStaff || isPreviewingClientView) {
       setSelectedMonth(payableMonthKey)
       return
