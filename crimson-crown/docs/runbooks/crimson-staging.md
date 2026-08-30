@@ -20,16 +20,43 @@ La referencia de rama se registra aquí sólo como identidad no secreta. Las her
 
 El costo vigente consultado para una rama fue **USD 0.01344 por hora**. El usuario confirmó ese costo antes de la creación de esta rama. No se infiere ni documenta ninguna proyección mensual o cargo adicional.
 
-## Estado inicial
+## Estado de migración controlada
 
-La vista previa está `ACTIVE_HEALTHY`, pero el estado de migraciones inicial es `MIGRATIONS_FAILED`. Esto no autoriza a ejecutar `db reset`, `migration repair` ni a copiar datos productivos. El desfase se resolverá mediante un baseline controlado y una proyección revisada antes de aplicar migraciones.
+La rama nació `ACTIVE_HEALTHY` y con estado de migraciones `MIGRATIONS_FAILED`: la historia legacy del repositorio no se podía reproducir de forma segura sobre una rama vacía. Ese estado **no** autorizó `db reset`, `migration repair`, una reproducción parcial de la historia ni la copia de datos productivos.
 
-Hasta completar ese baseline:
+El `2026-08-30` se aplicó mediante el conector Supabase y contra el `project_id` exacto de esta rama:
 
-- no enlazar Vercel Preview/Development;
-- no sembrar usuarios ni registros;
-- no ejecutar migraciones remotas;
-- no modificar Production, Auth, Storage o variables de producción.
+1. un baseline DDL sin datos, tomado de `schema.sql`, con SHA-256 `B794231BAD902ACAE1AE8220A54E56C85F00422EE14E7898ECA0DA8664FB6EB3`;
+2. las cinco migraciones compatibles que ya estaban en producción;
+3. las seis migraciones forward P0 revisadas;
+4. el hardening de los tres buckets y sus políticas, aplicado después como una migración separada y revisada.
+
+El ledger remoto resultante contiene exactamente 13 entradas ordenadas: 1 baseline, 5 productivas, 6 forward y 1 de Storage. No se copiaron filas ni objetos desde producción y no se reescribió el historial legacy.
+
+### Excepción a `supabase db push`
+
+No se usa `supabase db push` para esta transición. La CLI compara timestamps locales con el ledger remoto; debido al baseline y al historial legacy fallido, un `db push` intentaría reconciliar dos historias que no son equivalentes y podría sugerir replay o reparación inseguros. Quedan prohibidos para este flujo:
+
+- `supabase db push`;
+- `supabase migration repair`;
+- `supabase db reset`;
+- DML remoto destructivo o una reaplicación de las 13 entradas existentes.
+
+Si una revisión futura detecta un gap real, su aplicación será una operación separada y expresamente aprobada mediante el conector Supabase: `project_id` exacto `ssyeqgtdohwkcucedpwx`, SQL ya revisado y hash de fuente confirmado antes de la llamada. Después se vuelve a ejecutar la verificación read-only. El wrapper de ensayo nunca aplica ese SQL por sí mismo.
+
+## Ensayo P0 read-only
+
+`npm run staging:p0:verify` ejecuta `scripts/staging/run-p0-rehearsal.ps1` en modo `VerifyOnly`. Antes de crear cualquier proyección o cliente, valida la identidad exacta de staging, el guard de efectos externos y los hashes del baseline/migraciones. Después:
+
+- enlaza sólo una proyección temporal al branch ref exacto;
+- captura tres snapshots count-only (`before`, `after`, `rollback`);
+- valida el orden y SHA-256 de las 13 entradas remotas;
+- ejecuta los contratos privilegiados y la matriz de Storage exclusivamente contra el stack local;
+- exige que los tres snapshots remotos sean idénticos y reporta `remoteMutations: 0`.
+
+`-Mode Apply` está bloqueado salvo que también se indique `-ApplyToStaging`. Con el ledger completo actual, ese modo sólo devuelve `apply-authorized-noop` y sigue realizando cero mutaciones remotas. No existe un script npm de apply deliberadamente.
+
+La evidencia JSON se guarda en `local-artifacts/release-evidence/staging-p0/`; contiene firmas, configuración no secreta de buckets y conteos agregados. No incluye filas, correos, URLs de comprobantes, paths de objetos ni datos personales.
 
 ## Variables obligatorias para pruebas futuras
 

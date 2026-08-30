@@ -17,6 +17,8 @@
     "staging:seed:plan": "node scripts/staging/seed-crimson-staging.mjs --plan",
     "staging:seed": "node scripts/staging/seed-crimson-staging.mjs --apply",
     "staging:seed:cleanup": "node scripts/staging/seed-crimson-staging.mjs --cleanup",
+    "test:staging-rehearsal": "node --test scripts/staging/run-p0-rehearsal.test.mjs",
+    "staging:p0:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/staging/run-p0-rehearsal.ps1",
     "test:release-manifest": "node --test scripts/release/migration-manifest.test.mjs",
     "test:release": "node --test scripts/release/*.test.mjs scripts/dependency-compatibility.test.mjs",
     "test:dependencies": "node --test scripts/dependency-compatibility.test.mjs",
