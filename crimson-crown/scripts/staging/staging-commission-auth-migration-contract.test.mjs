@@ -5,7 +5,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const migration = path.join(root, 'supabase', 'migrations', '20260830001000_scope_staging_commission_operator.sql')
+const migration = path.join(root, 'scripts', 'staging', 'sql', 'scope-staging-commission-operator.sql')
 
 test('commission operator exception is exact and requires the synthetic staging fixture', async () => {
   const sql = await readFile(migration, 'utf8')
@@ -17,4 +17,5 @@ test('commission operator exception is exact and requires the synthetic staging 
   assert.doesNotMatch(sql, /\b(?:insert|update|delete|truncate|drop table)\b/iu)
   assert.match(sql, /revoke all on function public\.is_commission_admin\(\) from public, anon/iu)
   assert.match(sql, /grant execute on function public\.is_commission_admin\(\) to authenticated, service_role/iu)
+  assert.match(sql, /staging-only; never apply to production/iu)
 })

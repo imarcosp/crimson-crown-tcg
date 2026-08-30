@@ -63,9 +63,12 @@ export function getAdminEmails(
 export function isExactStagingEnvironment(env: PublicAdminEnvironment): boolean {
   const ref = env.NEXT_PUBLIC_CRIMSON_STAGING_SUPABASE_PROJECT_REF?.trim()
   if (!ref || env.NEXT_PUBLIC_CRIMSON_DEPLOYMENT_TARGET !== 'staging') return false
+  const rawUrl = env.NEXT_PUBLIC_SUPABASE_URL
+  if (rawUrl !== `https://${ref}.supabase.co`) return false
   try {
-    const url = new URL(env.NEXT_PUBLIC_SUPABASE_URL ?? '')
-    return url.protocol === 'https:' && url.hostname === `${ref}.supabase.co` && url.pathname === '/'
+    const url = new URL(rawUrl)
+    return url.protocol === 'https:' && url.hostname === `${ref}.supabase.co` &&
+      !url.username && !url.password && !url.port && url.pathname === '/' && !url.search && !url.hash
   } catch {
     return false
   }

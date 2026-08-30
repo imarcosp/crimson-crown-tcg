@@ -14,6 +14,7 @@ const FIXTURE = {
 } as const
 const RUN = `codex-staging-p0:playwright:${Date.now()}`
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
 
 function required(name: string) {
   const value = process.env[name]?.trim()
@@ -67,13 +68,37 @@ async function expectDirectUploadDenied(client: SupabaseClient, bucket: string, 
   expect(String(missingError?.statusCode)).toBe('404')
 }
 
-function assertSignedUrl(url: string, bucket: string, expectedPath: string) {
+async function captureSignedUpload(page: Page, bucket: string, expectedPath: RegExp, trigger: () => Promise<void>) {
+  let resolvePath!: (path: string) => void
+  let rejectPath!: (error: unknown) => void
+  const captured = new Promise<string>((resolve, reject) => { resolvePath = resolve; rejectPath = reject })
+  await page.route('**/storage/v1/object/upload/sign/**', async route => {
+    try {
+      const url = new URL(route.request().url())
+      const prefix = `/storage/v1/object/upload/sign/${bucket}/`
+      expect(url.pathname.startsWith(prefix)).toBe(true)
+      const path = decodeURIComponent(url.pathname.slice(prefix.length))
+      expect(path).toMatch(expectedPath)
+      expect(url.searchParams.get('token')).toBeTruthy()
+      resolvePath(path)
+      await route.continue()
+    } catch (error) {
+      rejectPath(error)
+      await route.abort()
+    }
+  }, { times: 1 })
+  await trigger()
+  return captured
+}
+
+function assertSignedUrl(url: string, bucket: string, expectedPath: string, nowMs = Date.now()) {
   const parsed = new URL(url)
-  expect(decodeURIComponent(parsed.pathname)).toContain(`/object/sign/${bucket}/${expectedPath}`)
+  expect(decodeURIComponent(parsed.pathname)).toBe(`/storage/v1/object/sign/${bucket}/${expectedPath}`)
   const token = parsed.searchParams.get('token')
   expect(token).toBeTruthy()
   const payload = JSON.parse(Buffer.from(token!.split('.')[1], 'base64url').toString('utf8')) as { exp: number; iat: number }
   expect(payload.exp - payload.iat).toBe(300)
+  expect(Math.abs(payload.iat - Math.floor(nowMs / 1000))).toBeLessThanOrEqual(30)
 }
 
 test.describe.serial('Crimson Crown P0 staging smoke', () => {
@@ -107,64 +132,81 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
   })
 
   test.afterAll(async () => {
-    const [currentOrder, currentImport, paymentRows, bannerRows, productRows] = await Promise.all([
-      service.from('orders').select('payment_proof_path').eq('id', FIXTURE.orderId).eq('user_id', buyerId).single(),
-      service.from('import_orders').select('payment_proof_path').eq('id', FIXTURE.importId).eq('user_id', buyerId).single(),
-      service.from('commission_payments').select('id,proof_path,reported_by_user_id').eq('reference', RUN),
-      service.from('banners').select('id,image_url').eq('title', RUN),
-      service.from('products').select('id,image_url,metadata').eq('name', RUN).eq('inventory_id', FIXTURE.inventoryId),
-    ])
-    for (const result of [currentOrder, currentImport, paymentRows, bannerRows, productRows]) expect(result.error).toBeNull()
-    expect((paymentRows.data ?? []).length).toBeLessThanOrEqual(1)
-    expect((bannerRows.data ?? []).length).toBeLessThanOrEqual(1)
-    expect((productRows.data ?? []).length).toBeLessThanOrEqual(1)
+    const failures: string[] = []
+    const attempt = async (label: string, operation: () => Promise<void>) => {
+      try { await operation() } catch (error) {
+        failures.push(`${label}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    const assertDeletedCount = (data: unknown[] | null, expected: number | null) => {
+      if (expected === null) expect((data ?? []).length).toBeLessThanOrEqual(1)
+      else expect(data).toHaveLength(expected)
+    }
+    let paymentCount: number | null = null
+    let bannerCount: number | null = null
+    let productCount: number | null = null
     const addChangedProof = (path: unknown, original: unknown, pattern: RegExp) => {
       if (!path || path === original) return
       expect(String(path)).toMatch(pattern)
       transientObjects.add(`payment_proofs:${String(path)}`)
     }
-    addChangedProof(currentOrder.data?.payment_proof_path, baseline?.order.payment_proof_path,
-      new RegExp(`^orders/${buyerId}/${FIXTURE.orderId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp)$`))
-    addChangedProof(currentImport.data?.payment_proof_path, baseline?.importOrder.payment_proof_path,
-      new RegExp(`^imports/${buyerId}/${FIXTURE.importId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp|pdf)$`))
-    for (const payment of paymentRows.data ?? []) {
-      expect(payment.reported_by_user_id).toBe(operatorId)
-      addChangedProof(payment.proof_path, null,
-        new RegExp(`^commissions/[0-9a-f-]{36}/${operatorId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp|pdf)$`))
-    }
-    for (const banner of bannerRows.data ?? []) {
-      const path = String(banner.image_url ?? '').split('/storage/v1/object/public/banners/')[1]
-      expect(path).toBeTruthy(); transientObjects.add(`banners:${path}`)
-    }
-    for (const product of productRows.data ?? []) {
-      const paths = [product.image_url, ...(product.metadata?.gallery ?? [])]
-        .filter((value): value is string => typeof value === 'string' && value.includes('/'))
-        .map(value => value.includes('/storage/v1/object/public/products/') ? value.split('/storage/v1/object/public/products/')[1] : value)
-      paths.forEach(path => transientObjects.add(`products:${path}`))
-    }
+    await attempt('discover transient resources', async () => {
+      const [currentOrder, currentImport, paymentRows, bannerRows, productRows] = await Promise.all([
+        service.from('orders').select('payment_proof_path').eq('id', FIXTURE.orderId).eq('user_id', buyerId).single(),
+        service.from('import_orders').select('payment_proof_path').eq('id', FIXTURE.importId).eq('user_id', buyerId).single(),
+        service.from('commission_payments').select('id,proof_path,reported_by_user_id').eq('reference', RUN),
+        service.from('banners').select('id,image_url').eq('title', RUN),
+        service.from('products').select('id,image_url,metadata').eq('name', RUN).eq('inventory_id', FIXTURE.inventoryId),
+      ])
+      for (const result of [currentOrder, currentImport, paymentRows, bannerRows, productRows]) expect(result.error).toBeNull()
+      paymentCount = (paymentRows.data ?? []).length; bannerCount = (bannerRows.data ?? []).length; productCount = (productRows.data ?? []).length
+      expect(paymentCount).toBeLessThanOrEqual(1); expect(bannerCount).toBeLessThanOrEqual(1); expect(productCount).toBeLessThanOrEqual(1)
+      addChangedProof(currentOrder.data?.payment_proof_path, baseline?.order.payment_proof_path,
+        new RegExp(`^orders/${buyerId}/${FIXTURE.orderId}/${UUID}\\.(?:jpe?g|png|webp)$`))
+      addChangedProof(currentImport.data?.payment_proof_path, baseline?.importOrder.payment_proof_path,
+        new RegExp(`^imports/${buyerId}/${FIXTURE.importId}/${UUID}\\.(?:jpe?g|png|webp|pdf)$`))
+      for (const payment of paymentRows.data ?? []) {
+        expect(payment.reported_by_user_id).toBe(operatorId)
+        addChangedProof(payment.proof_path, null, new RegExp(`^commissions/${UUID}/${operatorId}/${UUID}\\.(?:jpe?g|png|webp|pdf)$`))
+      }
+      for (const banner of bannerRows.data ?? []) {
+        const path = String(banner.image_url ?? '').split('/storage/v1/object/public/banners/')[1]
+        expect(path).toMatch(new RegExp(`^site/${UUID}\\.(?:jpe?g|png|webp)$`)); transientObjects.add(`banners:${path}`)
+      }
+      for (const product of productRows.data ?? []) {
+        const paths = [product.image_url, ...(product.metadata?.gallery ?? [])]
+          .filter((value): value is string => typeof value === 'string' && value.includes('/'))
+          .map(value => value.includes('/storage/v1/object/public/products/') ? value.split('/storage/v1/object/public/products/')[1] : value)
+        for (const path of paths) {
+          expect(path).toMatch(new RegExp(`^catalog/${FIXTURE.inventoryId}/${UUID}\\.(?:jpe?g|png|webp)$`))
+          transientObjects.add(`products:${path}`)
+        }
+      }
+    })
     if (baseline) {
-      const restoredOrder = await service.from('orders').update(baseline.order).eq('id', FIXTURE.orderId).eq('user_id', buyerId).select('id')
-      const restoredImport = await service.from('import_orders').update(baseline.importOrder).eq('id', FIXTURE.importId).eq('user_id', buyerId).select('id')
-      const restoredProfile = await service.from('profiles').update(baseline.profile).eq('id', buyerId).eq('email', USERS.buyer).select('id')
-      expect(restoredOrder.error).toBeNull(); expect(restoredOrder.data).toHaveLength(1)
-      expect(restoredImport.error).toBeNull(); expect(restoredImport.data).toHaveLength(1)
-      expect(restoredProfile.error).toBeNull(); expect(restoredProfile.data).toHaveLength(1)
+      await attempt('restore order', async () => { const result = await service.from('orders').update(baseline!.order).eq('id', FIXTURE.orderId).eq('user_id', buyerId).select('id'); expect(result.error).toBeNull(); expect(result.data).toHaveLength(1) })
+      await attempt('restore import', async () => { const result = await service.from('import_orders').update(baseline!.importOrder).eq('id', FIXTURE.importId).eq('user_id', buyerId).select('id'); expect(result.error).toBeNull(); expect(result.data).toHaveLength(1) })
+      await attempt('restore profile', async () => { const result = await service.from('profiles').update(baseline!.profile).eq('id', buyerId).eq('email', USERS.buyer).select('id'); expect(result.error).toBeNull(); expect(result.data).toHaveLength(1) })
     }
     for (const item of transientObjects) {
       const separator = item.indexOf(':')
       const bucket = item.slice(0, separator)
       const path = item.slice(separator + 1)
-      const removed = await service.storage.from(bucket).remove([path])
-      expect(removed.error).toBeNull()
-      expect(removed.data).toHaveLength(1)
+      await attempt(`remove ${bucket}/${path}`, async () => {
+        const info = await service.storage.from(bucket).info(path)
+        if (info.error) {
+          const error = info.error as typeof info.error & { status?: number; statusCode?: string | number }
+          expect(error.name).toBe('StorageApiError'); expect([400, 404]).toContain(error.status); expect(String(error.statusCode)).toBe('404')
+          return
+        }
+        const removed = await service.storage.from(bucket).remove([path])
+        expect(removed.error).toBeNull(); expect(removed.data).toHaveLength(1)
+      })
     }
-    // Only rows bearing this run's exact marker are eligible for cleanup.
-    const payments = await service.from('commission_payments').delete().eq('reference', RUN).select('id')
-    const banners = await service.from('banners').delete().eq('title', RUN).select('id')
-    const products = await service.from('products').delete().eq('name', RUN).eq('inventory_id', FIXTURE.inventoryId).select('id')
-    expect(payments.error).toBeNull(); expect(payments.data).toHaveLength(paymentRows.data?.length ?? 0)
-    expect(banners.error).toBeNull(); expect(banners.data).toHaveLength(bannerRows.data?.length ?? 0)
-    expect(products.error).toBeNull(); expect(products.data).toHaveLength(productRows.data?.length ?? 0)
+    await attempt('delete commission row', async () => { const result = await service.from('commission_payments').delete().eq('reference', RUN).select('id'); expect(result.error).toBeNull(); assertDeletedCount(result.data, paymentCount) })
+    await attempt('delete banner row', async () => { const result = await service.from('banners').delete().eq('title', RUN).select('id'); expect(result.error).toBeNull(); assertDeletedCount(result.data, bannerCount) })
+    await attempt('delete product row', async () => { const result = await service.from('products').delete().eq('name', RUN).eq('inventory_id', FIXTURE.inventoryId).select('id'); expect(result.error).toBeNull(); assertDeletedCount(result.data, productCount) })
+    expect(failures, `best-effort cleanup failures:\n${failures.join('\n')}`).toEqual([])
   })
 
   test('anonymous catalog and banners are public while admin is denied', async ({ page }) => {
@@ -197,10 +239,14 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     expect(before.error).toBeNull()
     await login(page, USERS.buyer)
     await page.goto('/profile?tab=stock')
-    await page.locator('input[type=file]').setInputFiles({ name: `${RUN}.png`, mimeType: 'image/png', buffer: PNG })
+    const ticketPath = await captureSignedUpload(page, 'payment_proofs',
+      new RegExp(`^orders/${buyerId}/${FIXTURE.orderId}/${UUID}\\.png$`),
+      () => page.locator('input[type=file]').setInputFiles({ name: `${RUN}.png`, mimeType: 'image/png', buffer: PNG }))
+    transientObjects.add(`payment_proofs:${ticketPath}`)
     await expect(page.getByText(/comprobante subido|revisaremos/i)).toBeVisible()
     const after = await service.from('orders').select('payment_proof_path,payment_proof_url').eq('id', FIXTURE.orderId).single()
     expect(after.data?.payment_proof_path).toMatch(new RegExp(`^orders/${buyerId}/${FIXTURE.orderId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp)$`))
+    expect(after.data?.payment_proof_path).toBe(ticketPath)
     expect(after.data?.payment_proof_url ?? null).toBeNull()
     transientObjects.add(`payment_proofs:${after.data!.payment_proof_path}`)
     await page.getByRole('button', { name: /ver comprobante/i }).click()
@@ -213,10 +259,14 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     await login(page, USERS.buyer)
     await page.goto(`/profile/imports/${FIXTURE.importId}`)
     await expect(page.getByText(String(FIXTURE.importId), { exact: false })).toBeVisible()
-    await page.locator('input[type=file]').setInputFiles({ name: `${RUN}-import.png`, mimeType: 'image/png', buffer: PNG })
+    const ticketPath = await captureSignedUpload(page, 'payment_proofs',
+      new RegExp(`^imports/${buyerId}/${FIXTURE.importId}/${UUID}\\.png$`),
+      () => page.locator('input[type=file]').setInputFiles({ name: `${RUN}-import.png`, mimeType: 'image/png', buffer: PNG }))
+    transientObjects.add(`payment_proofs:${ticketPath}`)
     await expect(page.getByText(/verificando pago/i)).toBeVisible()
     const after = await service.from('import_orders').select('payment_proof_path,payment_proof_url').eq('id', FIXTURE.importId).single()
     expect(after.data?.payment_proof_path).toMatch(new RegExp(`^imports/${buyerId}/${FIXTURE.importId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp|pdf)$`))
+    expect(after.data?.payment_proof_path).toBe(ticketPath)
     expect(after.data?.payment_proof_url ?? null).toBeNull()
     transientObjects.add(`payment_proofs:${after.data!.payment_proof_path}`)
     await page.context().clearCookies()
@@ -242,23 +292,30 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     await page.locator('label', { hasText: /Precio \(USD\)/ }).locator('xpath=following-sibling::input').fill('1')
     await page.locator('label', { hasText: /^Stock$/ }).locator('xpath=following-sibling::input').fill('0')
     await page.locator('input[type=file]').setInputFiles({ name: `${RUN}-product.png`, mimeType: 'image/png', buffer: PNG })
-    await page.getByRole('button', { name: /guardar producto/i }).click()
+    const productTicketPath = await captureSignedUpload(page, 'products',
+      new RegExp(`^catalog/${FIXTURE.inventoryId}/${UUID}\\.png$`),
+      () => page.getByRole('button', { name: /guardar producto/i }).click())
+    transientObjects.add(`products:${productTicketPath}`)
     const product = await service.from('products').select('id,image_url,metadata').eq('name', RUN).single()
     expect(product.error).toBeNull()
     const productPaths = [product.data?.image_url, ...(product.data?.metadata?.gallery ?? [])]
       .filter((value): value is string => typeof value === 'string' && value.includes('/'))
       .map(value => value.includes('/storage/v1/object/public/products/') ? value.split('/storage/v1/object/public/products/')[1] : value)
     productPaths.forEach(path => transientObjects.add(`products:${path}`))
+    expect(productPaths).toContain(productTicketPath)
 
     await page.goto('/admin/banners')
     await page.getByRole('button', { name: /nuevo banner/i }).click()
     await page.locator('label', { hasText: /título principal/i }).locator('xpath=following-sibling::input').fill(RUN)
     await page.locator('input[type=file]').setInputFiles({ name: `${RUN}-banner.png`, mimeType: 'image/png', buffer: PNG })
-    await page.getByRole('button', { name: /guardar cambios/i }).click()
+    const bannerTicketPath = await captureSignedUpload(page, 'banners', new RegExp(`^site/${UUID}\\.png$`),
+      () => page.getByRole('button', { name: /guardar cambios/i }).click())
+    transientObjects.add(`banners:${bannerTicketPath}`)
     const banner = await service.from('banners').select('image_url').eq('title', RUN).single()
     expect(banner.error).toBeNull()
     const bannerPath = String(banner.data?.image_url ?? '').split('/storage/v1/object/public/banners/')[1]
     expect(bannerPath).toBeTruthy()
+    expect(bannerPath).toBe(bannerTicketPath)
     transientObjects.add(`banners:${bannerPath}`)
 
     const current = await service.from('products').select('stock,inventory_id').eq('id', FIXTURE.productId).single()
@@ -274,11 +331,15 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     await page.locator('label', { hasText: /cómo se realizó el pago/i }).locator('xpath=following-sibling::input').fill('synthetic')
     await page.locator('label', { hasText: /^Referencia$/ }).locator('xpath=following-sibling::input').fill(RUN)
     await page.locator('input[type=file]').setInputFiles({ name: `${RUN}.png`, mimeType: 'image/png', buffer: PNG })
-    await page.getByRole('button', { name: /^registrar pago$/i }).click()
+    const commissionTicketPath = await captureSignedUpload(page, 'payment_proofs',
+      new RegExp(`^commissions/${UUID}/${operatorId}/${UUID}\\.png$`),
+      () => page.getByRole('button', { name: /^registrar pago$/i }).click())
+    transientObjects.add(`payment_proofs:${commissionTicketPath}`)
     const payment = await service.from('commission_payments').select('proof_path,proof_url,reported_by_user_id').eq('reference', RUN).single()
     expect(payment.error).toBeNull()
     expect(payment.data?.reported_by_user_id).toBe(operatorId)
     expect(payment.data?.proof_path).toMatch(new RegExp(`^commissions/[0-9a-f-]{36}/${operatorId}/[0-9a-f-]{36}\\.(?:jpe?g|png|webp|pdf)$`))
+    expect(payment.data?.proof_path).toBe(commissionTicketPath)
     expect(payment.data?.proof_url ?? null).toBeNull()
     transientObjects.add(`payment_proofs:${payment.data!.proof_path}`)
     await page.context().clearCookies()

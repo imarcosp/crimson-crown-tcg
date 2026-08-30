@@ -33,6 +33,11 @@ test('allows exact synthetic roles only when URL, target, and staging ref are bo
     { ...staging, NEXT_PUBLIC_CRIMSON_DEPLOYMENT_TARGET: 'production' },
     { ...staging, NEXT_PUBLIC_SUPABASE_URL: 'https://other.supabase.co' },
     { ...staging, NEXT_PUBLIC_CRIMSON_STAGING_SUPABASE_PROJECT_REF: 'other' },
+    { ...staging, NEXT_PUBLIC_SUPABASE_URL: 'https://user:pass@crimsonstage12345678.supabase.co' },
+    { ...staging, NEXT_PUBLIC_SUPABASE_URL: 'https://crimsonstage12345678.supabase.co:443' },
+    { ...staging, NEXT_PUBLIC_SUPABASE_URL: 'https://crimsonstage12345678.supabase.co/path' },
+    { ...staging, NEXT_PUBLIC_SUPABASE_URL: 'https://crimsonstage12345678.supabase.co?query=1' },
+    { ...staging, NEXT_PUBLIC_SUPABASE_URL: 'https://crimsonstage12345678.supabase.co#fragment' },
   ]) {
     assert.equal(isAdminEmail('admin.crimson.staging@example.test', unsafe), false)
     assert.equal(getOwnerAdminEmail(unsafe), 'mjperchezabala@gmail.com')

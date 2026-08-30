@@ -1,9 +1,7 @@
 begin;
 
--- Production admins retain their existing access. The sole extra operator is
--- enabled only in a database carrying the exact synthetic staging fixture;
--- the application independently binds this identity to target=staging and the
--- configured staging project ref before issuing privileged requests.
+-- staging-only; never apply to production. This SQL is intentionally kept
+-- outside supabase/migrations and belongs only to the disposable staging branch.
 create or replace function public.is_commission_admin()
 returns boolean
 language sql
