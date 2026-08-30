@@ -82,7 +82,7 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 - Registro, solicitud de recuperación, callback PKCE server-side y actualización real de contraseña pasan E2E con usuarios sintéticos locales y limpieza completa.
 - Google OAuth está diseñado/documentado en `docs/runbooks/crimson-google-oauth.md`, pero permanece deshabilitado hasta recibir client ID/secret y redirect URIs exclusivos de Crimson para local/staging/producción.
 - Responsive administrativo completado: navegación móvil colapsable, layout sin overflow global, tablas anchas con scroll local verificado, modal de inventarios contenido y matriz E2E en 390/768 px sobre diez rutas operativas.
-- Completar los filtros de Magic con rango de precio y formato; conservar los filtros existentes de orden, color, set, finish, rareza y condición.
+- Filtros Magic completados: rango inclusivo sobre el precio final, formatos allowlisted con legalidades Scryfall, URL/paginación conservadas y validación responsive. La migración aditiva `20260830133000` y el backfill de metadata están aplicados únicamente en local y pendientes de promoción controlada.
 - Implementar accesos rápidos administrables bajo el banner: cantidad, orden, imagen/icono, etiqueta, URL y estado activo.
 - Portar el Deckbuilder de Magic desde El Perchero únicamente mediante lectura y reimplementación dentro de Crimson, sin compartir credenciales, datos, procesos ni escritura de archivos.
 
@@ -100,11 +100,10 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 
 ## Siguiente backlog recomendado
 
-1. **Catálogo Magic.** Añadir precio y formato sin degradar los filtros/URL existentes.
-2. **Accesos rápidos.** Diseñar el modelo aditivo y la administración de cantidad, orden, imagen/icono, etiqueta, URL y estado.
-3. **Deckbuilder.** Reimplementar en Crimson a partir de una inspección estrictamente de solo lectura de El Perchero, sin código compartido en runtime ni acceso a sus datos.
-4. **Operación y calidad.** Automatizar snapshots de esquema/row-counts, documentar backup/restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
-5. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
+1. **Accesos rápidos.** Diseñar el modelo aditivo y la administración de cantidad, orden, imagen/icono, etiqueta, URL y estado.
+2. **Deckbuilder.** Reimplementar en Crimson a partir de una inspección estrictamente de solo lectura de El Perchero, sin código compartido en runtime ni acceso a sus datos.
+3. **Operación y calidad.** Automatizar snapshots de esquema/row-counts, documentar backup/restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
+4. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
 
 ## SaaS — después de todo lo anterior
 

@@ -79,5 +79,10 @@ test('las 21 exclusiones históricas tienen prueba PASS sin candidatos ni bypass
     sha256: 'feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de',
   })
   const forwards = manifest.entries.filter((entry) => entry.class === 'forward_pending')
-  assert.deepEqual(forwards, [])
+  assert.deepEqual(forwards, [{
+    class: 'forward_pending',
+    version: '20260830133000',
+    file: '20260830133000_add_magic_legalities_to_external_prices.sql',
+    sha256: 'e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d',
+  }])
 })

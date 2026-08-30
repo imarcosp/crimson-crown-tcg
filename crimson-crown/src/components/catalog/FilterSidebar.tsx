@@ -1,7 +1,8 @@
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Filter as FilterIcon, ChevronDown, ChevronUp, X, Search, Loader2 } from 'lucide-react'
+import { MAGIC_FORMAT_OPTIONS, parsePriceRange } from '@/lib/catalog/magic-filters'
 
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Mythic']
 const CONDITIONS = ['NM', 'PL', 'HP', 'DMG']
@@ -35,6 +36,7 @@ export default function FilterSidebar({ activeCategory = '' }: FilterSidebarProp
   const [setSearch, setSetSearch] = useState('')
   const [loadingSets, setLoadingSets] = useState(false)
   const [showSetDropdown, setShowSetDropdown] = useState(false)
+  const [priceError, setPriceError] = useState('')
   const showMagicCardFilters = activeCategory === 'Magic'
 
   // Cargar Sets al iniciar (solo una vez)
@@ -65,10 +67,11 @@ export default function FilterSidebar({ activeCategory = '' }: FilterSidebarProp
   }, [showMagicCardFilters])
 
   const updateFilter = (key: string, value: string | null) => {
+    setPriceError('')
     const params = new URLSearchParams(searchParams.toString())
     if (value === null) params.delete(key)
     else {
-      if (key === 'finish' || key === 'set' || key === 'sort' || key === 'basicLand') {
+      if (key === 'finish' || key === 'set' || key === 'sort' || key === 'basicLand' || key === 'format') {
         params.set(key, value)
       } else {
         const current = params.get(key)?.split(',') || []
@@ -92,6 +95,28 @@ export default function FilterSidebar({ activeCategory = '' }: FilterSidebarProp
 
   // Filtrado local de sets
   const filteredSets = sets.filter(s => s.name.toLowerCase().includes(setSearch.toLowerCase())).slice(0, 10)
+
+  const applyPriceRange = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const rawMin = String(form.get('priceMin') || '').trim()
+    const rawMax = String(form.get('priceMax') || '').trim()
+    const range = parsePriceRange(rawMin, rawMax)
+
+    if (!range.isValid) {
+      setPriceError('Ingresa valores positivos y asegúrate de que el mínimo no supere al máximo.')
+      return
+    }
+
+    const params = new URLSearchParams(searchParams.toString())
+    if (range.min === null) params.delete('priceMin')
+    else params.set('priceMin', String(range.min))
+    if (range.max === null) params.delete('priceMax')
+    else params.set('priceMax', String(range.max))
+    params.delete('page')
+    setPriceError('')
+    router.push(`/catalog?${params.toString()}`, { scroll: false })
+  }
 
   return (
     <aside className="w-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6 md:mb-0 h-fit">
@@ -186,6 +211,71 @@ export default function FilterSidebar({ activeCategory = '' }: FilterSidebarProp
               >
                 Solo tierras básicas
               </button>
+            </div>
+
+            <hr className="border-slate-100"/>
+
+            <div>
+              <h4 className="font-bold text-slate-900 mb-3 text-sm">Precio (US$)</h4>
+              <form
+                key={`${searchParams.get('priceMin') || ''}:${searchParams.get('priceMax') || ''}`}
+                onSubmit={applyPriceRange}
+                className="space-y-2"
+              >
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs font-medium text-slate-600">
+                    Mínimo
+                    <input
+                      name="priceMin"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      defaultValue={searchParams.get('priceMin') || ''}
+                      placeholder="0"
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-[#E91E63]"
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-slate-600">
+                    Máximo
+                    <input
+                      name="priceMax"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      defaultValue={searchParams.get('priceMax') || ''}
+                      placeholder="Sin límite"
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-[#E91E63]"
+                    />
+                  </label>
+                </div>
+                {priceError && <p role="alert" className="text-xs text-red-600">{priceError}</p>}
+                <button
+                  type="submit"
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 text-xs font-bold text-slate-700 transition-colors hover:border-[#9D1B1B] hover:text-[#9D1B1B]"
+                >
+                  Aplicar precio
+                </button>
+              </form>
+            </div>
+
+            <div>
+              <h4 className="font-bold text-slate-900 mb-3 text-sm">Formato</h4>
+              <div className="relative">
+                <select
+                  value={searchParams.get('format') || ''}
+                  onChange={(event) => updateFilter('format', event.target.value || null)}
+                  className="w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-700 outline-none focus:border-transparent focus:ring-2 focus:ring-[#E91E63]"
+                  aria-label="Formato de Magic"
+                >
+                  <option value="">Todos los formatos</option>
+                  {MAGIC_FORMAT_OPTIONS.map((format) => (
+                    <option key={format.value} value={format.value}>{format.label}</option>
+                  ))}
+                </select>
+                <ChevronDown size={16} className="pointer-events-none absolute right-3 top-3 text-slate-400" />
+              </div>
             </div>
 
             <hr className="border-slate-100"/>

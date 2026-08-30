@@ -30,12 +30,20 @@ const productionReleaseEntries = [
   { version: '20260830051537', remoteName: 'reconcile_legacy_schema_safely', file: '20260829235800_reconcile_legacy_schema_safely.sql', sha256: 'feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de' },
   { version: '20260830052613', remoteName: 'harden_storage_buckets_and_policies', file: '20260829235900_harden_storage_buckets_and_policies.sql', sha256: 'b2749b0a319f2f3ef058354d52c3961a3196837d757c6f37a6841c9da644579c' },
 ]
-const productionSourceForwardEntries = productionReleaseEntries.map(({ file, sha256 }) => ({
-  class: 'forward_pending',
-  version: file.slice(0, file.indexOf('_')),
-  file,
-  sha256,
-}))
+const productionSourceForwardEntries = [
+  ...productionReleaseEntries.map(({ file, sha256 }) => ({
+    class: 'forward_pending',
+    version: file.slice(0, file.indexOf('_')),
+    file,
+    sha256,
+  })),
+  {
+    class: 'forward_pending',
+    version: '20260830133000',
+    file: '20260830133000_add_magic_legalities_to_external_prices.sql',
+    sha256: 'e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d',
+  },
+]
 const bootstrapScript = resolve('scripts/release/bootstrap-migration-manifest.mjs')
 const windowsReparseGuardScript = resolve('scripts/release/query-windows-reparse-points.ps1')
 const genericReparsePointScript = String.raw`
@@ -222,10 +230,15 @@ test('every migration is classified exactly once and hashes match', async () => 
   assert.deepEqual(classified, actual)
 })
 
-test('the real manifest records the eleven production release migrations and excludes branch-only staging SQL', async () => {
+test('the real manifest records the production release and the reviewed Magic legalities forward migration', async () => {
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: true })
   const forwards = manifest.entries.filter((entry) => entry.class === 'forward_pending')
-  assert.deepEqual(forwards, [])
+  assert.deepEqual(forwards, [{
+    class: 'forward_pending',
+    version: '20260830133000',
+    file: '20260830133000_add_magic_legalities_to_external_prices.sql',
+    sha256: 'e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d',
+  }])
   const appliedRelease = manifest.entries
     .filter((entry) => entry.class === 'remote_applied')
     .slice(-productionReleaseEntries.length)
@@ -244,9 +257,12 @@ test('the real manifest records the eleven production release migrations and exc
   assert.ok(historicalEntries.every((entry) => entry.releaseProof.status !== 'candidate'))
 })
 
-test('the real manifest passes without a candidate bypass', async () => {
+test('the real manifest passes without a candidate bypass while retaining the approved forward', async () => {
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: false })
-  assert.equal(manifest.entries.filter((entry) => entry.class === 'forward_pending').length, 0)
+  assert.deepEqual(
+    manifest.entries.filter((entry) => entry.class === 'forward_pending').map((entry) => entry.version),
+    ['20260830133000'],
+  )
 })
 
 test('projection rejects a candidate unless allowCandidates is the literal boolean true', async () => {
@@ -1038,7 +1054,7 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
     const manifest = await loadAndValidateManifest({ rootDir, allowCandidates: true })
 
     assert.equal(manifest.schemaVersion, 2)
-    assert.equal(manifest.entries.length, 32)
+    assert.equal(manifest.entries.length, 33)
     assert.deepEqual(manifest.entries.slice(0, 2), [
       {
         class: 'remote_applied',

@@ -369,6 +369,12 @@
         "remediationVersions": []
       },
       "sha256": "b2749b0a319f2f3ef058354d52c3961a3196837d757c6f37a6841c9da644579c"
+    },
+    {
+      "class": "forward_pending",
+      "version": "20260830133000",
+      "file": "20260830133000_add_magic_legalities_to_external_prices.sql",
+      "sha256": "e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d"
     }
   ]
 }

@@ -14,6 +14,7 @@ import ParserPkg from 'stream-json/Parser.js'
 const { parser } = ParserPkg
 import { fileURLToPath } from 'url'
 import { applyConditionMultiplier, MIN_STORE_PRICE } from './lib/pricing-rules.mjs'
+import { normalizeScryfallLegalities } from './lib/magic-legalities.mjs'
 
 // --- CONFIGURACIÓN ---
 const __filename = fileURLToPath(import.meta.url)
@@ -160,6 +161,7 @@ async function main() {
             color_identity: card.color_identity || [],
             cmc: card.cmc !== undefined ? card.cmc : null,
             rarity: card.rarity || null,
+            legalities: normalizeScryfallLegalities(card.legalities),
             finishes: card.finishes || [], // ['foil', 'nonfoil', 'etched']
             promo_types: card.promo_types || [],
             tcg_id: card.tcgplayer_id,
@@ -307,6 +309,7 @@ async function main() {
                     color_identity: match.color_identity,
                     cmc: match.cmc,
                     rarity: match.rarity,
+                    legalities: match.legalities,
                     foil_variant: detectFoilVariantFromScryfall(match),
                     updated_at: new Date().toISOString(),
                     tcgplayer_id: match.tcg_id ? String(match.tcg_id) : null,
@@ -400,6 +403,7 @@ async function main() {
                     color_identity: match.color_identity,
                     cmc: match.cmc,
                     rarity: match.rarity,
+                    legalities: match.legalities,
                     foil_variant: detectFoilVariantFromScryfall(match),
                     updated_at: new Date().toISOString(),
                     tcgplayer_id: match.tcg_id ? String(match.tcg_id) : null,
@@ -480,6 +484,7 @@ async function main() {
                             color_identity: c.color_identity,
                             cmc: c.cmc,
                             rarity: c.rarity,
+                            legalities: normalizeScryfallLegalities(c.legalities),
                             foil_variant: detectFoilVariantFromScryfall(c),
                             updated_at: new Date().toISOString(),
                             tcgplayer_id: String(c.tcgplayer_id || ''),

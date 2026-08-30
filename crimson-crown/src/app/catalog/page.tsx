@@ -7,6 +7,12 @@ import { ChevronLeft, ChevronRight, SearchX, Lightbulb, Sparkles } from 'lucide-
 import { redirect } from 'next/navigation'
 import { siteConfig } from '@/config/site'
 import { buildHybridCatalogProducts } from '@/lib/inventory/catalog'
+import {
+  matchesMagicFormat,
+  matchesPriceRange,
+  normalizeMagicFormat,
+  parsePriceRange,
+} from '@/lib/catalog/magic-filters'
 
 export const revalidate = 0
 
@@ -55,6 +61,31 @@ function shouldUseSpecialFoilLabel(currentFinish: string | undefined, foilVarian
   return !current || current === 'foil' || current === 'etched' || current === 'etched foil'
 }
 
+function getCatalogDisplayPrice(
+  product: Record<string, unknown>,
+  externalPrice?: Record<string, unknown>,
+) {
+  const externalFoilVariant = typeof externalPrice?.foil_variant === 'string'
+    ? externalPrice.foil_variant
+    : undefined
+  const currentFinish = typeof product.finish === 'string' ? product.finish : undefined
+  const effectiveFinish = shouldUseSpecialFoilLabel(currentFinish, externalFoilVariant)
+    ? externalFoilVariant
+    : product.finish
+  const finish = String(effectiveFinish || '').toLowerCase()
+  const isFoil = (finish.includes('foil') && !finish.includes('non')) || finish.includes('etched')
+  const basePrice = isFoil
+    ? Number(product.price_usd_foil || product.price_usd || 0)
+    : Number(product.price_usd || 0)
+
+  if (product.isImport && externalPrice) {
+    const suggested = Number(isFoil ? externalPrice.f : externalPrice.n)
+    if (suggested > 0) return suggested
+  }
+
+  return basePrice
+}
+
 // DICCIONARIO INTELIGENTE (Alias -> Categoría/TCG)
 const SMART_ALIASES: Record<string, string> = {
     'mtg': 'Magic',
@@ -91,7 +122,7 @@ async function getExternalPrices(supabase: any, products: any[]) {
       const batch = uniqueIds.slice(index, index + chunkSize)
       const { data: externalPrices } = await supabase
         .from('external_prices')
-        .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, tcgplayer_market_normal, tcgplayer_market_foil, active_price_normal, active_price_foil, foil_variant, type_line, color_identity')
+        .select('scryfall_id, cardkingdom_retail_normal, cardkingdom_retail_foil, cardkingdom_retail_etched, tcgplayer_market_normal, tcgplayer_market_foil, active_price_normal, active_price_foil, foil_variant, type_line, color_identity, legalities')
         .in('scryfall_id', batch)
 
       externalPrices?.forEach((row: any) => {
@@ -108,6 +139,7 @@ async function getExternalPrices(supabase: any, products: any[]) {
         foil_variant: row.foil_variant || null,
         type_line: row.type_line || null,
         color_identity: normalizeColorIdentity(row.color_identity),
+        legalities: row.legalities || {},
       })
       })
     }
@@ -135,6 +167,9 @@ export default async function CatalogPage({
     rarity?: string
     finish?: string
     sort?: string
+    priceMin?: string
+    priceMax?: string
+    format?: string
   }>
 }) {
   const supabase = await createClient()
@@ -161,6 +196,8 @@ export default async function CatalogPage({
     .map((value) => value.trim().toUpperCase())
     .filter(Boolean)
   const basicLandOnly = params.basicLand === 'true'
+  const priceRange = parsePriceRange(params.priceMin, params.priceMax)
+  const selectedFormat = normalizeMagicFormat(params.format)
   const hasAdvancedSearchFilters = !!(advName || advSet || advCollector || advTcg)
 
   // 1. DETECCIÓN DE BÚSQUEDA INTELIGENTE
@@ -186,6 +223,8 @@ export default async function CatalogPage({
   const isMagicCategory = activeCategory === 'Magic'
   const effectiveColors = isMagicCategory ? selectedColors : []
   const effectiveBasicLandOnly = isMagicCategory ? basicLandOnly : false
+  const effectivePriceRange = isMagicCategory ? priceRange : parsePriceRange(undefined, undefined)
+  const effectiveFormat = isMagicCategory ? selectedFormat : null
 
   // Guard de acceso: oculta categorías deshabilitadas
   // Para revertir, basta con poner los flags en true en siteConfig.features
@@ -235,7 +274,6 @@ export default async function CatalogPage({
       }
       const sortConfig = sortMap[params.sort || 'price_desc']
       
-      const needsIdentityFilter = effectiveColors.length > 0 || effectiveBasicLandOnly
       q = q.order(sortConfig.col, { ascending: sortConfig.asc, nullsFirst: false })
       const fetchedProductsRaw: any[] = []
       const rawPageSize = 1000
@@ -257,18 +295,17 @@ export default async function CatalogPage({
       const externalMap = await getExternalPrices(supabase, fetchedProducts)
       const hybridProducts = buildHybridCatalogProducts(fetchedProducts, externalMap, { activeInventoryIds })
 
-      if (needsIdentityFilter) {
-        const filtered = hybridProducts.filter((product: any) => {
-          const ext = externalMap.get(String(product.scryfall_id || product.id))
-          return (
-            matchesColorFilters(ext?.color_identity, effectiveColors) &&
-            matchesBasicLandFilter(ext?.type_line, effectiveBasicLandOnly)
-          )
-        })
-        count = filtered.length
-        products = filtered.slice(from, to + 1)
-      } else {
-        const sorted = hybridProducts.sort((a: any, b: any) => {
+      const filtered = hybridProducts.filter((product: any) => {
+        if (!isMagicCategory) return true
+        const ext = externalMap.get(String(product.scryfall_id || product.id))
+        return (
+          matchesColorFilters(ext?.color_identity, effectiveColors) &&
+          matchesBasicLandFilter(ext?.type_line, effectiveBasicLandOnly) &&
+          matchesPriceRange(getCatalogDisplayPrice(product, ext), effectivePriceRange) &&
+          matchesMagicFormat(ext?.legalities, effectiveFormat)
+        )
+      })
+      const sorted = filtered.sort((a: any, b: any) => {
           const left = a[sortConfig.col]
           const right = b[sortConfig.col]
           if (left === right) return 0
@@ -278,10 +315,9 @@ export default async function CatalogPage({
             ? left - right
             : String(left).localeCompare(String(right))
           return sortConfig.asc ? result : -result
-        })
-        products = sorted.slice(from, to + 1)
-        count = sorted.length
-      }
+      })
+      products = sorted.slice(from, to + 1)
+      count = sorted.length
   } 
   // ---------------------------------------------------------
   // LÓGICA 2: BÚSQUEDA REAL (Buscador Global)
@@ -305,7 +341,15 @@ export default async function CatalogPage({
           const data = await res.json()
           const arr = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : [])
           if (arr.length > 0 && arr[0].didYouMean) suggestion = arr[0].didYouMean
-          products = arr
+          const externalMap = await getExternalPrices(supabase, arr)
+          products = arr.filter((product: Record<string, unknown>) => {
+            if (!isMagicCategory) return true
+            const ext = externalMap.get(String(product.scryfall_id || product.id))
+            return (
+              matchesPriceRange(getCatalogDisplayPrice(product, ext), effectivePriceRange) &&
+              matchesMagicFormat(ext?.legalities, effectiveFormat)
+            )
+          })
           count = products.length
           products = products.slice(from, to + 1)
         } else {
@@ -327,15 +371,7 @@ export default async function CatalogPage({
     const finish = String(effectiveFinish || '').toLowerCase()
     const isFoil = (finish.includes('foil') && !finish.includes('non')) || finish.includes('etched')
     
-    const basePrice = isFoil ? Number(p.price_usd_foil || p.price_usd || 0) : Number(p.price_usd || 0)
-    let finalPrice = basePrice
-    
-    if (p.isImport) {
-        if (extPrice) {
-            const suggested = isFoil ? extPrice.f : extPrice.n
-            if (suggested > 0) finalPrice = suggested
-        }
-    }
+    const finalPrice = getCatalogDisplayPrice(p, extPrice)
 
     // Mostrar siempre el precio del inventario sin imponer mínimo
 

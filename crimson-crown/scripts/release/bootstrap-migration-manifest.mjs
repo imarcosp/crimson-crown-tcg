@@ -43,6 +43,7 @@ const forwardPending = [
   '20260829235700_fix_commission_payment_proof_path_regex.sql',
   '20260829235800_reconcile_legacy_schema_safely.sql',
   '20260829235900_harden_storage_buckets_and_policies.sql',
+  '20260830133000_add_magic_legalities_to_external_prices.sql',
 ]
 
 function sha256(bytes) {
