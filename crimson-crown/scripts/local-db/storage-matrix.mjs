@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { win32 as windowsPath } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import { createOperationalSupabaseClient as createClient } from '../lib/guarded-supabase-client.mjs'
 import { getPaymentProofAccessCore } from '../../src/lib/storage/payment-proof-access.ts'
@@ -50,7 +51,11 @@ const bucketConfig = Object.freeze({
 })
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024
-const EXPECTED_STACK_WORKDIR = 'D:\\crimson-crown-tcg\\crimson-crown'
+const EXPECTED_STACK_WORKDIR = windowsPath.resolve(
+  windowsPath.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+)
 const pngBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4])
 const replacementBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 9, 8, 7, 6])
 const png = new Blob([pngBytes], { type: 'image/png' })

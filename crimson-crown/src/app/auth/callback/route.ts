@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { resolveAuthCallbackPath } from '@/lib/auth/callback'
+import { createClient } from '@/lib/supabase/server'
 
 // Evitamos que Next.js guarde caché de esta ruta
 export const dynamic = 'force-dynamic'
@@ -6,14 +8,18 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
-  const origin = requestUrl.origin
+  const next = resolveAuthCallbackPath(requestUrl.searchParams.get('next'))
 
   if (code) {
-    const targetUrl = new URL('/auth/update-password', origin)
-    targetUrl.searchParams.set('code', code)
-    return NextResponse.redirect(targetUrl)
+    const supabase = await createClient()
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (!error) {
+      return NextResponse.redirect(new URL(next, requestUrl.origin))
+    }
   }
 
-  // Si no hay código, algo anda mal
-  return NextResponse.redirect(`${origin}/login?error=no-code-provided`)
+  const failureUrl = new URL('/login', requestUrl.origin)
+  failureUrl.searchParams.set('error', 'auth-callback')
+  return NextResponse.redirect(failureUrl)
 }

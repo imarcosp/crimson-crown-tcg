@@ -157,7 +157,7 @@ $verificationSql
 rollback;
 "@
 
-$payload | & docker exec -i $expectedContainer psql -U supabase_admin -d postgres -X -v ON_ERROR_STOP=1
+$payload | & docker exec -i -e PGPASSWORD=postgres $expectedContainer psql -U supabase_admin -d postgres -X -v ON_ERROR_STOP=1
 if ($LASTEXITCODE -ne 0) {
     throw 'Fallo la verificacion del catalogo PostgreSQL local.'
 }

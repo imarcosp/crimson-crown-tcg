@@ -134,7 +134,7 @@ rollback;
 `
 
   const inheritedResult = spawnSync('docker', [
-    'exec', '-i', 'supabase_db_crimson-crown',
+    'exec', '-i', '-e', 'PGPASSWORD=postgres', 'supabase_db_crimson-crown',
     'psql', '-U', 'supabase_admin', '-d', 'postgres', '-X', '-v', 'ON_ERROR_STOP=1',
   ], {
     cwd: appRoot,
@@ -148,7 +148,7 @@ rollback;
   assert.match(outputOf(inheritedResult), /unexpected anon SECURITY DEFINER privilege/i)
 
   const residue = run('docker', [
-    'exec', 'supabase_db_crimson-crown',
+    'exec', '-e', 'PGPASSWORD=postgres', 'supabase_db_crimson-crown',
     'psql', '-U', 'supabase_admin', '-d', 'postgres', '-X', '-Atc',
     "select rolname from pg_roles where rolname = 'privileged_surface_inherited_probe';",
   ])
@@ -189,7 +189,7 @@ rollback;
 `
 
   const inheritedResult = spawnSync('docker', [
-    'exec', '-i', 'supabase_db_crimson-crown',
+    'exec', '-i', '-e', 'PGPASSWORD=postgres', 'supabase_db_crimson-crown',
     'psql', '-U', 'supabase_admin', '-d', 'postgres', '-X', '-v', 'ON_ERROR_STOP=1',
   ], {
     cwd: appRoot,
@@ -203,7 +203,7 @@ rollback;
   assert.match(outputOf(inheritedResult), /unexpected authenticated SECURITY DEFINER set/i)
 
   const residue = run('docker', [
-    'exec', 'supabase_db_crimson-crown',
+    'exec', '-e', 'PGPASSWORD=postgres', 'supabase_db_crimson-crown',
     'psql', '-U', 'supabase_admin', '-d', 'postgres', '-X', '-Atc',
     "select coalesce(to_regprocedure('public.authenticated_definer_extra_probe()')::text, '') || '|' || coalesce((select rolname from pg_roles where rolname = 'authenticated_definer_inherited_probe'), '');",
   ])

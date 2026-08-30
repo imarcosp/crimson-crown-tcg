@@ -35,7 +35,7 @@ $headers = @{
     'Content-Type' = 'application/json'
 }
 
-$expectedStackWorkdir = [IO.Path]::GetFullPath('D:\crimson-crown-tcg\crimson-crown')
+$expectedStackWorkdir = [IO.Path]::GetFullPath($repoRoot)
 $containerStateJson = docker inspect supabase_kong_crimson-crown supabase_db_crimson-crown
 if ($LASTEXITCODE -ne 0) {
     throw 'No se pudo inspeccionar el stack local exacto de Crimson.'
@@ -143,6 +143,6 @@ foreach ($entry in $bucketConfig.GetEnumerator()) {
 }
 
 $sqlPath = Join-Path $PSScriptRoot 'storage-fixtures.sql'
-Get-Content -Raw -LiteralPath $sqlPath | docker exec -i supabase_db_crimson-crown psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1
+Get-Content -Raw -LiteralPath $sqlPath | docker exec -i -e PGPASSWORD=postgres supabase_db_crimson-crown psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1
 if ($LASTEXITCODE -ne 0) { throw 'No se pudieron aplicar las políticas locales de Storage.' }
 Write-Output 'Fixtures locales de Storage preparados.'

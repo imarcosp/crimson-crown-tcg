@@ -45,27 +45,36 @@ export default function LoginPage() {
         router.refresh()
         router.push('/')
       } else if (view === 'sign-up') {
-        const { error } = await supabase.auth.signUp({
+        const callbackUrl = new URL('/auth/callback', origin)
+        callbackUrl.searchParams.set('next', '/')
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: `${origin}/auth/callback`,
+            emailRedirectTo: callbackUrl.toString(),
             data: { first_name: firstName, last_name: lastName },
           },
         })
         if (error) throw error
-        setSuccessMsg('Registro exitoso. Revisa tu email para confirmar la cuenta.')
-        setView('sign-in')
+        if (data.session) {
+          router.refresh()
+          router.push('/')
+        } else {
+          setSuccessMsg('Registro exitoso. Revisa tu email para confirmar la cuenta.')
+          setView('sign-in')
+        }
       } else if (view === 'forgot-password') {
+        const callbackUrl = new URL('/auth/callback', origin)
+        callbackUrl.searchParams.set('next', '/auth/update-password')
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${origin}/auth/callback`,
+          redirectTo: callbackUrl.toString(),
         })
         if (error) throw error
         setSuccessMsg('Te enviamos un correo con el link de recuperación.')
         setView('sign-in')
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Ocurrió un error')
+    } catch (error: unknown) {
+      setErrorMsg(error instanceof Error ? error.message : 'Ocurrió un error')
     } finally {
       setLoading(false)
     }
@@ -96,32 +105,32 @@ export default function LoginPage() {
           {view === 'sign-up' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nombre</label>
-                <input type="text" required className="input-auth" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                <label htmlFor="auth-first-name" className="block text-sm font-medium text-slate-700 mb-1">Nombre</label>
+                <input id="auth-first-name" type="text" required className="input-auth" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Apellido</label>
-                <input type="text" required className="input-auth" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                <label htmlFor="auth-last-name" className="block text-sm font-medium text-slate-700 mb-1">Apellido</label>
+                <input id="auth-last-name" type="text" required className="input-auth" value={lastName} onChange={(e) => setLastName(e.target.value)} />
               </div>
             </div>
           )}
           
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-            <input type="email" required className="input-auth" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" />
+            <label htmlFor="auth-email" className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+            <input id="auth-email" type="email" required className="input-auth" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" />
           </div>
           
           {view !== 'forgot-password' && (
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-medium text-slate-700">Contraseña</label>
+                <label htmlFor="auth-password" className="block text-sm font-medium text-slate-700">Contraseña</label>
                 {view === 'sign-in' && (
                   <button type="button" onClick={() => { setView('forgot-password'); setErrorMsg(null); setSuccessMsg(null) }} className="text-xs text-[#9D1B1B] hover:underline cursor-pointer">
                     ¿Olvidaste tu contraseña?
                   </button>
                 )}
               </div>
-              <input type="password" required className="input-auth" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+              <input id="auth-password" type="password" required className="input-auth" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
             </div>
           )}
           

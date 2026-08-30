@@ -45,15 +45,9 @@ async function loginAsAdmin(page: Page) {
   await page.waitForURL(/\/$/)
 }
 
-async function unlockAdminPanel(page: Page) {
+async function openAdminPanel(page: Page) {
   await page.goto('/admin')
-  const restricted = page.getByRole('heading', { name: 'Acceso Restringido' })
   const panel = page.getByRole('heading', { name: 'Panel de Administración' })
-  await expect(restricted.or(panel)).toBeVisible()
-  if (await restricted.isVisible()) {
-    await page.locator('input[type="password"]').fill('1234')
-    await page.getByRole('button', { name: 'Desbloquear Panel' }).click()
-  }
   await expect(panel).toBeVisible()
 }
 
@@ -92,7 +86,11 @@ test.beforeAll(async () => {
     .single()
   if (inventoryError || !inventory) throw inventoryError || new Error('No se pudo crear el inventario fixture.')
 
-  const { id: _productId, created_at: _createdAt, inventory_id: _inventoryId, variant_key: _variantKey, ...productCopy } = sourceProduct as any
+  const { id: productId, created_at: createdAt, inventory_id: inventoryId, variant_key: variantKey, ...productCopy } = sourceProduct
+  void productId
+  void createdAt
+  void inventoryId
+  void variantKey
   const { data: clonedProduct, error: cloneError } = await localAdmin
     .from('products')
     .insert({
@@ -192,9 +190,10 @@ test.afterAll(async () => {
 test('admin puede crear, pausar, reactivar y eliminar un inventario secundario vacío', async ({ page }) => {
   const inventoryName = `Playwright Gestión ${Date.now()}`
   await loginAsAdmin(page)
-  await unlockAdminPanel(page)
+  await openAdminPanel(page)
   await page.goto('/admin/inventories')
 
+  await expect(page.getByText('Cargando inventarios…')).toHaveCount(0)
   await page.getByRole('button', { name: 'Nuevo inventario' }).click()
   await page.getByLabel('Nombre').fill(inventoryName)
   await page.getByLabel('Descripción').fill('Prueba de gestión del inventario')
@@ -225,7 +224,7 @@ test('admin puede crear, pausar, reactivar y eliminar un inventario secundario v
 test('la orden muestra el inventario de origen y la eliminación parcial lo conserva', async ({ page }) => {
   if (!fixture) throw new Error('Fixture E2E no inicializado.')
   await loginAsAdmin(page)
-  await unlockAdminPanel(page)
+  await openAdminPanel(page)
   await page.goto(`/admin/orders/${fixture.orderId}`)
 
   await expect(page.getByRole('heading', { name: new RegExp(`Orden #${fixture.orderId.slice(0, 8)}`) })).toBeVisible()
@@ -241,7 +240,7 @@ test('la orden muestra el inventario de origen y la eliminación parcial lo cons
 test('el buscador administrativo sugiere cartas de external_prices aunque no existan en products', async ({ page }) => {
   if (!fixture || !externalLibraryCard) throw new Error('Fixture E2E no inicializado.')
   await loginAsAdmin(page)
-  await unlockAdminPanel(page)
+  await openAdminPanel(page)
   await page.goto(`/admin/inventory?inventory=${fixture.inventoryId}`)
 
   await page.getByRole('button', { name: 'Nuevo Producto' }).click()
@@ -266,7 +265,7 @@ test('las mutaciones manuales conservan auditoría y reportan productos con hist
   const deletableName = `${manualProductMarker} Sin Historial`
 
   await loginAsAdmin(page)
-  await unlockAdminPanel(page)
+  await openAdminPanel(page)
   await page.goto(`/admin/inventory?inventory=${fixture.inventoryId}`)
 
   const createManualProduct = async (name: string, stock: number) => {
@@ -346,7 +345,7 @@ test('el CSV aplica filas válidas una vez y reporta cantidades negativas', asyn
   if (selectedBefore.error || primaryBefore.error) throw selectedBefore.error || primaryBefore.error
 
   await loginAsAdmin(page)
-  await unlockAdminPanel(page)
+  await openAdminPanel(page)
   await page.goto(`/admin/inventory?inventory=${fixture.inventoryId}`)
   await page.getByRole('button', { name: 'CSV' }).click()
   await page.locator('input[type="file"]').setInputFiles({

@@ -1,46 +1,34 @@
 "use client"
-import { useState, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Loader2, Lock, AlertCircle, CheckCircle } from 'lucide-react'
 
 function UpdatePasswordContent() {
   const router = useRouter()
   const supabase = createClient()
-  const searchParams = useSearchParams()
   
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [verifying, setVerifying] = useState(true)
   const [msg, setMsg] = useState<{ type: 'error' | 'success', text: string } | null>(null)
 
-  // 1. AL CARGAR: Verificar y canjear el código en el NAVEGADOR
+  // El callback server-side ya canjeó el código PKCE y escribió la sesión.
   useEffect(() => {
-    const handleCodeExchange = async () => {
-      const code = searchParams.get('code')
+    const verifyRecoverySession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
 
       if (session) {
-        if (code) window.history.replaceState({}, document.title, window.location.pathname)
         setVerifying(false)
         return
       }
 
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-        if (!error) {
-          window.history.replaceState({}, document.title, window.location.pathname)
-        } else {
-          setMsg({ type: 'error', text: 'El enlace ha expirado o ya fue utilizado.' })
-        }
-      } else {
-        setMsg({ type: 'error', text: 'No tienes permiso para ver esta página.' })
-      }
+      setMsg({ type: 'error', text: 'El enlace ha expirado o ya fue utilizado.' })
       setVerifying(false)
     }
 
-    handleCodeExchange()
-  }, [searchParams, supabase])
+    void verifyRecoverySession()
+  }, [supabase])
 
   // 2. ACTUALIZAR CONTRASEÑA
   const handleUpdate = async (e: React.FormEvent) => {
@@ -51,13 +39,15 @@ function UpdatePasswordContent() {
     try {
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
-      
-      setMsg({ type: 'success', text: '¡Contraseña actualizada! Redirigiendo...' })
-      setTimeout(() => {
-        router.push('/')
-      }, 2000)
-    } catch (error: any) {
-      setMsg({ type: 'error', text: error.message })
+
+      await supabase.auth.signOut()
+      setMsg({ type: 'success', text: '¡Contraseña actualizada! Ya puedes iniciar sesión.' })
+      router.replace('/login?password=updated')
+    } catch (error: unknown) {
+      setMsg({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'No se pudo actualizar la contraseña.',
+      })
     } finally {
       setLoading(false)
     }
@@ -89,8 +79,9 @@ function UpdatePasswordContent() {
       {(!msg || msg.type === 'success') && (
         <form onSubmit={handleUpdate} className="space-y-5">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Ingresa tu nueva contraseña</label>
+            <label htmlFor="new-password" className="block text-sm font-bold text-slate-700 mb-2">Ingresa tu nueva contraseña</label>
             <input 
+              id="new-password"
               type="password" 
               required 
               minLength={6}
@@ -118,9 +109,7 @@ function UpdatePasswordContent() {
 export default function UpdatePasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-      <Suspense fallback={<div className="text-slate-500"><Loader2 className="animate-spin"/></div>}>
-        <UpdatePasswordContent />
-      </Suspense>
+      <UpdatePasswordContent />
     </div>
   )
 }

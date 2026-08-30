@@ -37,12 +37,8 @@ async function login(page: Page, email: string) {
   await expect(page).not.toHaveURL(/\/login(?:\?|$)/)
 }
 
-async function unlockAdmin(page: Page) {
-  const unlock = page.getByRole('button', { name: /desbloquear panel/i })
-  if (await unlock.isVisible().catch(() => false)) {
-    await page.locator('input[type=password]').fill('1234')
-    await unlock.click()
-  }
+async function openAdminPanel(page: Page) {
+  await expect(page.getByRole('heading', { name: /panel de administración/i })).toBeVisible()
 }
 
 async function roleClient(email: string): Promise<SupabaseClient> {
@@ -292,7 +288,7 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     expect(productBaseline.data?.stock).toBe(10)
     await login(page, USERS.admin)
     await page.goto(`/admin/inventory?inventory=${FIXTURE.inventoryId}`)
-    await unlockAdmin(page)
+    await openAdminPanel(page)
     await expect(page.getByText('Synthetic Staging Card')).toBeVisible()
     await page.getByRole('button', { name: /nuevo producto/i }).click()
     await page.getByRole('button', { name: /otros tcg.*manual/i }).click()
@@ -340,7 +336,7 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
   test('operator reports commission proof and store owner/admin obtains signed read', async ({ page }) => {
     await login(page, USERS.operator)
     await page.goto('/admin/commissions')
-    await unlockAdmin(page)
+    await openAdminPanel(page)
     await expect(page.getByRole('heading', { name: /registrar pago/i })).toBeVisible()
     await page.locator('label', { hasText: /^Monto$/ }).locator('xpath=following-sibling::input').fill('1')
     await page.locator('label', { hasText: /cómo se realizó el pago/i }).locator('xpath=following-sibling::input').fill('synthetic')
@@ -361,7 +357,7 @@ test.describe.serial('Crimson Crown P0 staging smoke', () => {
     await page.context().clearCookies()
     await login(page, USERS.admin)
     await page.goto('/admin/commissions')
-    await unlockAdmin(page)
+    await openAdminPanel(page)
     const popupPromise = page.waitForEvent('popup')
     await page.getByRole('button', { name: /ver comprobante/i }).last().click()
     const proofPage = await popupPromise

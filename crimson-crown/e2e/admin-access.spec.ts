@@ -11,16 +11,12 @@ async function loginAsAdmin(page: Page) {
   await page.waitForURL(/\/$/)
 }
 
-async function unlockAdminPanel(page: Page) {
+async function openAdminPanel(page: Page) {
   await page.goto('/admin')
-  const restricted = page.getByRole('heading', { name: 'Acceso Restringido' })
   const panel = page.getByRole('heading', { name: 'Panel de Administración' })
-  await expect(restricted.or(panel)).toBeVisible()
-  if (await restricted.isVisible()) {
-    await page.locator('input[type="password"]').fill('1234')
-    await page.getByRole('button', { name: 'Desbloquear Panel' }).click()
-  }
   await expect(panel).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Acceso Restringido' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Desbloquear Panel' })).toHaveCount(0)
 }
 
 test('usuario estándar no puede abrir el panel administrativo', async ({ page }) => {
@@ -50,11 +46,11 @@ test('admin puede abrir los formularios operativos sin warnings GoTrue', async (
   const authWarnings: string[] = []
   page.on('console', (message) => {
     const text = message.text()
-    if (/GoTrueClient|Multiple GoTrue|Multiple instances/i.test(text)) authWarnings.push(text)
+    if (/Multiple GoTrueClient|Multiple GoTrue|Multiple instances/i.test(text)) authWarnings.push(text)
   })
 
   await loginAsAdmin(page)
-  await unlockAdminPanel(page)
+  await openAdminPanel(page)
 
   const routes = [
     { path: '/admin/inventory', heading: 'Inventario' },
