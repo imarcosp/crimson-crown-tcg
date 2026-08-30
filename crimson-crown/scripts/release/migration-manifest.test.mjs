@@ -17,6 +17,15 @@ const gammaFile = '20240103000000_gamma.sql'
 const alphaHash = 'b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060'
 const betaHash = 'f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad'
 const gammaHash = 'ae9a6306a205417afddd14316cc1d0d5e04a98f1be10865dce643925ee070ce2'
+const productionForwardEntries = [
+  { class: 'forward_pending', version: '20260829021742', file: '20260829021742_admin_product_mutations.sql', sha256: '52d24ebf8abe6727df7da45ca723d8226f7aa433e3ef527aef7b598376187112' },
+  { class: 'forward_pending', version: '20260829183155', file: '20260829183155_harden_privileged_surfaces.sql', sha256: 'c7c72ae2ef51ec9c6be0998d1782f29d55dd49b3295f776c49c08244e25615ce' },
+  { class: 'forward_pending', version: '20260829213332', file: '20260829213332_add_payment_proof_paths.sql', sha256: 'fe730e4ea18664a490ef6016f1e1584c503a1a25d890d425d11b4e066d635653' },
+  { class: 'forward_pending', version: '20260829224424', file: '20260829224424_finalize_import_quotes_atomically.sql', sha256: '2eced781fe279001938980a3bbeb63c8e3dd3fd079301637f971614095aa7cd9' },
+  { class: 'forward_pending', version: '20260829231011', file: '20260829231011_freeze_approved_import_quote_items.sql', sha256: '96925b88a1b1935fe24aacc6ef7263dd2404f000568eb795be86727e20f19216' },
+  { class: 'forward_pending', version: '20260829232257', file: '20260829232257_fix_import_item_guard_rls.sql', sha256: 'cda5780cdcc37be43898fc771d9f9e56dbbd6d84176db094e3a469a52f69a415' },
+  { class: 'forward_pending', version: '20260829235900', file: '20260829235900_harden_storage_buckets_and_policies.sql', sha256: '6bb0c423b230c3eb6bfb27de3d57e73a784676d76f3e070d7106d2ae0fe0189a' },
+]
 const bootstrapScript = resolve('scripts/release/bootstrap-migration-manifest.mjs')
 const windowsReparseGuardScript = resolve('scripts/release/query-windows-reparse-points.ps1')
 const genericReparsePointScript = String.raw`
@@ -201,6 +210,23 @@ test('every migration is classified exactly once and hashes match', async () => 
     .sort()
 
   assert.deepEqual(classified, actual)
+})
+
+test('the real manifest contains exactly seven production forwards and excludes branch-only staging SQL', async () => {
+  const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: true })
+  const forwards = manifest.entries.filter((entry) => entry.class === 'forward_pending')
+  assert.deepEqual(forwards, productionForwardEntries)
+
+  const stagingOnlyFiles = (await readdir('scripts/staging/sql')).filter((name) => name.endsWith('.sql'))
+  assert.ok(stagingOnlyFiles.length > 0)
+  const classifiedFiles = new Set(manifest.entries.map((entry) => entry.file))
+  for (const stagingOnlyFile of stagingOnlyFiles) {
+    assert.equal(classifiedFiles.has(stagingOnlyFile), false)
+  }
+
+  const historicalEntries = manifest.entries.filter((entry) => entry.class !== 'forward_pending')
+  assert.equal(historicalEntries.length, 21)
+  assert.ok(historicalEntries.every((entry) => entry.releaseProof.status === 'candidate'))
 })
 
 test('the real manifest is blocked while any historical proof is only a candidate', async () => {
@@ -999,7 +1025,7 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
     const manifest = await loadAndValidateManifest({ rootDir, allowCandidates: true })
 
     assert.equal(manifest.schemaVersion, 2)
-    assert.equal(manifest.entries.length, 22)
+    assert.equal(manifest.entries.length, 28)
     assert.deepEqual(manifest.entries.slice(0, 2), [
       {
         class: 'remote_applied',
@@ -1028,6 +1054,10 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
         )),
       true,
     )
+    assert.deepEqual(
+      manifest.entries.filter((entry) => entry.class === 'forward_pending'),
+      productionForwardEntries,
+    )
 
     await assert.rejects(
       () => execFileAsync(process.execPath, [bootstrapScript], { cwd: rootDir }),
@@ -1054,6 +1084,7 @@ test('bootstrap output is byte-identical across two fresh destinations', async (
       readFile(join(rootDir, 'scripts', 'release', 'migration-manifest.json'))
     )))
     assert.deepEqual(outputs[0], outputs[1])
+    assert.deepEqual(outputs[0], await readFile(resolve('scripts/release/migration-manifest.json')))
 
     const manifest = JSON.parse(outputs[0].toString('utf8'))
     assert.equal(manifest.schemaVersion, 2)

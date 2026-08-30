@@ -31,7 +31,15 @@ const baselinePresent = [
   '20260823183638_create_release_expired_orders_atomic.sql',
 ]
 
-const forwardPending = ['20260829021742_admin_product_mutations.sql']
+const forwardPending = [
+  '20260829021742_admin_product_mutations.sql',
+  '20260829183155_harden_privileged_surfaces.sql',
+  '20260829213332_add_payment_proof_paths.sql',
+  '20260829224424_finalize_import_quotes_atomically.sql',
+  '20260829231011_freeze_approved_import_quote_items.sql',
+  '20260829232257_fix_import_item_guard_rls.sql',
+  '20260829235900_harden_storage_buckets_and_policies.sql',
+]
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')

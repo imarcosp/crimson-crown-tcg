@@ -243,6 +243,42 @@
       "version": "20260829021742",
       "file": "20260829021742_admin_product_mutations.sql",
       "sha256": "52d24ebf8abe6727df7da45ca723d8226f7aa433e3ef527aef7b598376187112"
+    },
+    {
+      "class": "forward_pending",
+      "version": "20260829183155",
+      "file": "20260829183155_harden_privileged_surfaces.sql",
+      "sha256": "c7c72ae2ef51ec9c6be0998d1782f29d55dd49b3295f776c49c08244e25615ce"
+    },
+    {
+      "class": "forward_pending",
+      "version": "20260829213332",
+      "file": "20260829213332_add_payment_proof_paths.sql",
+      "sha256": "fe730e4ea18664a490ef6016f1e1584c503a1a25d890d425d11b4e066d635653"
+    },
+    {
+      "class": "forward_pending",
+      "version": "20260829224424",
+      "file": "20260829224424_finalize_import_quotes_atomically.sql",
+      "sha256": "2eced781fe279001938980a3bbeb63c8e3dd3fd079301637f971614095aa7cd9"
+    },
+    {
+      "class": "forward_pending",
+      "version": "20260829231011",
+      "file": "20260829231011_freeze_approved_import_quote_items.sql",
+      "sha256": "96925b88a1b1935fe24aacc6ef7263dd2404f000568eb795be86727e20f19216"
+    },
+    {
+      "class": "forward_pending",
+      "version": "20260829232257",
+      "file": "20260829232257_fix_import_item_guard_rls.sql",
+      "sha256": "cda5780cdcc37be43898fc771d9f9e56dbbd6d84176db094e3a469a52f69a415"
+    },
+    {
+      "class": "forward_pending",
+      "version": "20260829235900",
+      "file": "20260829235900_harden_storage_buckets_and_policies.sql",
+      "sha256": "6bb0c423b230c3eb6bfb27de3d57e73a784676d76f3e070d7106d2ae0fe0189a"
     }
   ]
 }
