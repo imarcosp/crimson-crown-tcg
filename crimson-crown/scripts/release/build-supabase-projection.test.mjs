@@ -513,10 +513,11 @@ test('materializes the approved real manifest without a candidate bypass', async
 
   try {
     const summary = await buildProjection({ rootDir: sourceRoot, outputDir })
-    assert.equal(summary.forwardPendingCount, 11)
-    assert.equal(summary.projectedRemoteVersions.length, 5)
-    assert.equal(summary.forwardPendingFilenames.at(-2), '20260829235800_reconcile_legacy_schema_safely.sql')
-    assert.equal(summary.forwardPendingFilenames.at(-1), '20260829235900_harden_storage_buckets_and_policies.sql')
+    assert.equal(summary.forwardPendingCount, 0)
+    assert.deepEqual(summary.forwardPendingFilenames, [])
+    assert.equal(summary.projectedRemoteVersions.length, 16)
+    assert.equal(summary.projectedRemoteFilenames.at(-2), '20260830051537_reconcile_legacy_schema_safely.sql')
+    assert.equal(summary.projectedRemoteFilenames.at(-1), '20260830052613_harden_storage_buckets_and_policies.sql')
   } finally {
     await rm(outputParent, { recursive: true, force: true })
   }

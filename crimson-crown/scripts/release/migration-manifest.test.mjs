@@ -17,19 +17,25 @@ const gammaFile = '20240103000000_gamma.sql'
 const alphaHash = 'b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060'
 const betaHash = 'f2c82decdd7181cf98945929a62598db7e6b477e11f6e0eb0ae97020eff151ad'
 const gammaHash = 'ae9a6306a205417afddd14316cc1d0d5e04a98f1be10865dce643925ee070ce2'
-const productionForwardEntries = [
-  { class: 'forward_pending', version: '20260829021742', file: '20260829021742_admin_product_mutations.sql', sha256: '52d24ebf8abe6727df7da45ca723d8226f7aa433e3ef527aef7b598376187112' },
-  { class: 'forward_pending', version: '20260829183155', file: '20260829183155_harden_privileged_surfaces.sql', sha256: 'c7c72ae2ef51ec9c6be0998d1782f29d55dd49b3295f776c49c08244e25615ce' },
-  { class: 'forward_pending', version: '20260829213332', file: '20260829213332_add_payment_proof_paths.sql', sha256: 'fe730e4ea18664a490ef6016f1e1584c503a1a25d890d425d11b4e066d635653' },
-  { class: 'forward_pending', version: '20260829224424', file: '20260829224424_finalize_import_quotes_atomically.sql', sha256: '2eced781fe279001938980a3bbeb63c8e3dd3fd079301637f971614095aa7cd9' },
-  { class: 'forward_pending', version: '20260829231011', file: '20260829231011_freeze_approved_import_quote_items.sql', sha256: '96925b88a1b1935fe24aacc6ef7263dd2404f000568eb795be86727e20f19216' },
-  { class: 'forward_pending', version: '20260829232257', file: '20260829232257_fix_import_item_guard_rls.sql', sha256: 'cda5780cdcc37be43898fc771d9f9e56dbbd6d84176db094e3a469a52f69a415' },
-  { class: 'forward_pending', version: '20260829235000', file: '20260829235000_report_commission_payment_atomically.sql', sha256: '639fc667dd1b802096189268b978f29e9746c90671d758f991233a50d78672c1' },
-  { class: 'forward_pending', version: '20260829235500', file: '20260829235500_confirm_commission_payment_atomically.sql', sha256: 'd2dc149d1b35ebf7edda299a7db59c6381c78c0876c450df8856616606aabbcc' },
-  { class: 'forward_pending', version: '20260829235700', file: '20260829235700_fix_commission_payment_proof_path_regex.sql', sha256: 'c0a41ec56d31e85e5f3c7017eb7a4d9e2a7a1aea8bc08e3eaa614fb66241f9f8' },
-  { class: 'forward_pending', version: '20260829235800', file: '20260829235800_reconcile_legacy_schema_safely.sql', sha256: 'feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de' },
-  { class: 'forward_pending', version: '20260829235900', file: '20260829235900_harden_storage_buckets_and_policies.sql', sha256: 'b2749b0a319f2f3ef058354d52c3961a3196837d757c6f37a6841c9da644579c' },
+const productionReleaseEntries = [
+  { version: '20260830051302', remoteName: 'admin_product_mutations', file: '20260829021742_admin_product_mutations.sql', sha256: '52d24ebf8abe6727df7da45ca723d8226f7aa433e3ef527aef7b598376187112' },
+  { version: '20260830051308', remoteName: 'harden_privileged_surfaces', file: '20260829183155_harden_privileged_surfaces.sql', sha256: 'c7c72ae2ef51ec9c6be0998d1782f29d55dd49b3295f776c49c08244e25615ce' },
+  { version: '20260830051315', remoteName: 'add_payment_proof_paths', file: '20260829213332_add_payment_proof_paths.sql', sha256: 'fe730e4ea18664a490ef6016f1e1584c503a1a25d890d425d11b4e066d635653' },
+  { version: '20260830051429', remoteName: 'finalize_import_quotes_atomically', file: '20260829224424_finalize_import_quotes_atomically.sql', sha256: '2eced781fe279001938980a3bbeb63c8e3dd3fd079301637f971614095aa7cd9' },
+  { version: '20260830051436', remoteName: 'freeze_approved_import_quote_items', file: '20260829231011_freeze_approved_import_quote_items.sql', sha256: '96925b88a1b1935fe24aacc6ef7263dd2404f000568eb795be86727e20f19216' },
+  { version: '20260830051442', remoteName: 'fix_import_item_guard_rls', file: '20260829232257_fix_import_item_guard_rls.sql', sha256: 'cda5780cdcc37be43898fc771d9f9e56dbbd6d84176db094e3a469a52f69a415' },
+  { version: '20260830051448', remoteName: 'report_commission_payment_atomically', file: '20260829235000_report_commission_payment_atomically.sql', sha256: '639fc667dd1b802096189268b978f29e9746c90671d758f991233a50d78672c1' },
+  { version: '20260830051455', remoteName: 'confirm_commission_payment_atomically', file: '20260829235500_confirm_commission_payment_atomically.sql', sha256: 'd2dc149d1b35ebf7edda299a7db59c6381c78c0876c450df8856616606aabbcc' },
+  { version: '20260830051501', remoteName: 'fix_commission_payment_proof_path_regex', file: '20260829235700_fix_commission_payment_proof_path_regex.sql', sha256: 'c0a41ec56d31e85e5f3c7017eb7a4d9e2a7a1aea8bc08e3eaa614fb66241f9f8' },
+  { version: '20260830051537', remoteName: 'reconcile_legacy_schema_safely', file: '20260829235800_reconcile_legacy_schema_safely.sql', sha256: 'feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de' },
+  { version: '20260830052613', remoteName: 'harden_storage_buckets_and_policies', file: '20260829235900_harden_storage_buckets_and_policies.sql', sha256: 'b2749b0a319f2f3ef058354d52c3961a3196837d757c6f37a6841c9da644579c' },
 ]
+const productionSourceForwardEntries = productionReleaseEntries.map(({ file, sha256 }) => ({
+  class: 'forward_pending',
+  version: file.slice(0, file.indexOf('_')),
+  file,
+  sha256,
+}))
 const bootstrapScript = resolve('scripts/release/bootstrap-migration-manifest.mjs')
 const windowsReparseGuardScript = resolve('scripts/release/query-windows-reparse-points.ps1')
 const genericReparsePointScript = String.raw`
@@ -216,10 +222,15 @@ test('every migration is classified exactly once and hashes match', async () => 
   assert.deepEqual(classified, actual)
 })
 
-test('the real manifest contains exactly eleven production forwards and excludes branch-only staging SQL', async () => {
+test('the real manifest records the eleven production release migrations and excludes branch-only staging SQL', async () => {
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: true })
   const forwards = manifest.entries.filter((entry) => entry.class === 'forward_pending')
-  assert.deepEqual(forwards, productionForwardEntries)
+  assert.deepEqual(forwards, [])
+  const appliedRelease = manifest.entries
+    .filter((entry) => entry.class === 'remote_applied')
+    .slice(-productionReleaseEntries.length)
+    .map(({ version, remoteName, file, sha256 }) => ({ version, remoteName, file, sha256 }))
+  assert.deepEqual(appliedRelease, productionReleaseEntries)
 
   const stagingOnlyFiles = (await readdir('scripts/staging/sql')).filter((name) => name.endsWith('.sql'))
   assert.ok(stagingOnlyFiles.length > 0)
@@ -229,13 +240,13 @@ test('the real manifest contains exactly eleven production forwards and excludes
   }
 
   const historicalEntries = manifest.entries.filter((entry) => entry.class !== 'forward_pending')
-  assert.equal(historicalEntries.length, 21)
+  assert.equal(historicalEntries.length, 32)
   assert.ok(historicalEntries.every((entry) => entry.releaseProof.status !== 'candidate'))
 })
 
 test('the real manifest passes without a candidate bypass', async () => {
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: false })
-  assert.equal(manifest.entries.filter((entry) => entry.class === 'forward_pending').length, 11)
+  assert.equal(manifest.entries.filter((entry) => entry.class === 'forward_pending').length, 0)
 })
 
 test('projection rejects a candidate unless allowCandidates is the literal boolean true', async () => {
@@ -1058,7 +1069,7 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
     )
     assert.deepEqual(
       manifest.entries.filter((entry) => entry.class === 'forward_pending'),
-      productionForwardEntries,
+      productionSourceForwardEntries,
     )
 
     await assert.rejects(

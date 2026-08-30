@@ -30,7 +30,7 @@ supabase --workdir <temporary-projection> migration list --linked
 supabase --workdir <temporary-projection> db push --linked --dry-run
 ```
 
-The version output must be exactly one normalized line containing `2.113.0`, before `link`. The migration-list table must prove every projected remote marker is present on both sides and every approved forward is local-only, with no additional, duplicate, malformed, missing or reordered row. The dry-run output must then list the exact approved forward filenames once each in the same order. With zero approved forwards, both commands must instead prove no pending migration and the dry-run must explicitly report that the remote database is up to date.
+The version output must be exactly one normalized line containing `2.113.0`, before `link`. Both linked checks pin Supabase CLI output to JSON: the migration-list payload must prove every projected remote marker is present on both sides and every approved forward is local-only, with no additional, duplicate, malformed, missing or reordered row. The dry-run payload must then list the exact approved forward filenames once each in the same order. The wrapper also validates the bounded human preamble and treats native stderr progress as data only when the CLI exit code is zero. With zero approved forwards, both payloads must instead prove no pending migration and the dry-run must explicitly report that the remote database is up to date.
 
 There is no live-push mode or switch. A real apply requires a separate, explicitly reviewed procedure outside this gate.
 

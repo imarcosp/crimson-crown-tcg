@@ -67,9 +67,9 @@
       "version": "20231218",
       "file": "20231218_add_tcg_columns.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20231218",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "e16166248daf1b0f72c31ae7a3b6b12530c064a73c919841a2468ed2617c2647"
     },
@@ -78,9 +78,9 @@
       "version": "20240701000000",
       "file": "20240701000000_search_functions.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20240701000000",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "799f98b45d9a870f36f93cf2fefdbc53580b83d707eeb46c85bf2779f97931a3"
     },
@@ -89,9 +89,9 @@
       "version": "202606100001",
       "file": "202606100001_commission_start_guard.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-202606100001",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "575625b8ecc97aa4341641be6b04ef2338533d73a0f87fabc1c9a306dd9a7d78"
     },
@@ -100,9 +100,9 @@
       "version": "202606100002",
       "file": "202606100002_add_external_prices_catalog_support.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-202606100002",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "145aa681403d1f2e39596ef5a357f32ac6dc8de4311556328d5568eaf22d278a"
     },
@@ -111,9 +111,9 @@
       "version": "20260615000300",
       "file": "20260615000300_add_admin_manual_buylist_quotes.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260615000300",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "75f371bc5d7ed25eb44e5076fbbffed152ba0e3792df1bb91f434c428fce4762"
     },
@@ -122,9 +122,9 @@
       "version": "20260823043500",
       "file": "20260823043500_production_compatibility_baseline.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260823043500",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "af5d734496bccfb005704750126a826f2a834455f08a804085447d393b5b4067"
     },
@@ -133,9 +133,9 @@
       "version": "20260823043637",
       "file": "20260823043637_local_security_baseline.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260823043637",
-        "remediationVersions": ["20260829183155", "20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "d5ad794f2e8fcc5d9e14abd3469f74a801787f8067e831add8e825c69affe9ad"
     },
@@ -144,9 +144,9 @@
       "version": "20260823044210",
       "file": "20260823044210_fix_merge_duplicate_products_lint.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260823044210",
-        "remediationVersions": ["20260829183155"]
+        "remediationVersions": []
       },
       "sha256": "e215b3e2ff99448b65a697f18b59b3e3117551b76fa188267bd6a286771d402d"
     },
@@ -155,9 +155,9 @@
       "version": "20260823044710",
       "file": "20260823044710_restrict_decrement_stock_rpc.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260823044710",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "47162146d7150c728f8602cd64e5c62967b120850777363a6bbcce4ecc6cb67a"
     },
@@ -166,9 +166,9 @@
       "version": "20260823044936",
       "file": "20260823044936_restrict_user_credit_adjustments.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260823044936",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "2866cf72d62cd535b14a2d8eafbdca38e829914a2ea5029bf5519a28d8607e6d"
     },
@@ -177,9 +177,9 @@
       "version": "20260823050711",
       "file": "20260823050711_local_write_surface_hardening.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260823050711",
-        "remediationVersions": ["20260829183155", "20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "48e67fb9df596622e3df6484b2b71b7396ab43b541ba29514254d03ec461f4a1"
     },
@@ -210,9 +210,9 @@
       "version": "20260823142117",
       "file": "20260823142117_normalize_import_admin_policies.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260823142117",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "6e60d1bebc0024d3769d32d38a2dc133fd928950282150b59f5a521e305844da"
     },
@@ -221,9 +221,9 @@
       "version": "20260823173257",
       "file": "20260823173257_create_place_order_atomic.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260823173257",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "c26999e06f1e5dfa3caa755cf3af37ed3da4ae71f560cccf9aacee8209d942fb"
     },
@@ -232,76 +232,142 @@
       "version": "20260823183638",
       "file": "20260823183638_create_release_expired_orders_atomic.sql",
       "releaseProof": {
-        "status": "forward_reconciled",
+        "status": "verified_present",
         "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#baseline-20260823183638",
-        "remediationVersions": ["20260829235800"]
+        "remediationVersions": []
       },
       "sha256": "59540c20f7029fc492bafa12aa9c5fc44a26fdcfa8a9bc752f6902252351874f"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829021742",
+      "class": "remote_applied",
+      "version": "20260830051302",
+      "remoteName": "admin_product_mutations",
       "file": "20260829021742_admin_product_mutations.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051302",
+        "remediationVersions": []
+      },
       "sha256": "52d24ebf8abe6727df7da45ca723d8226f7aa433e3ef527aef7b598376187112"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829183155",
+      "class": "remote_applied",
+      "version": "20260830051308",
+      "remoteName": "harden_privileged_surfaces",
       "file": "20260829183155_harden_privileged_surfaces.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051308",
+        "remediationVersions": []
+      },
       "sha256": "c7c72ae2ef51ec9c6be0998d1782f29d55dd49b3295f776c49c08244e25615ce"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829213332",
+      "class": "remote_applied",
+      "version": "20260830051315",
+      "remoteName": "add_payment_proof_paths",
       "file": "20260829213332_add_payment_proof_paths.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051315",
+        "remediationVersions": []
+      },
       "sha256": "fe730e4ea18664a490ef6016f1e1584c503a1a25d890d425d11b4e066d635653"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829224424",
+      "class": "remote_applied",
+      "version": "20260830051429",
+      "remoteName": "finalize_import_quotes_atomically",
       "file": "20260829224424_finalize_import_quotes_atomically.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051429",
+        "remediationVersions": []
+      },
       "sha256": "2eced781fe279001938980a3bbeb63c8e3dd3fd079301637f971614095aa7cd9"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829231011",
+      "class": "remote_applied",
+      "version": "20260830051436",
+      "remoteName": "freeze_approved_import_quote_items",
       "file": "20260829231011_freeze_approved_import_quote_items.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051436",
+        "remediationVersions": []
+      },
       "sha256": "96925b88a1b1935fe24aacc6ef7263dd2404f000568eb795be86727e20f19216"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829232257",
+      "class": "remote_applied",
+      "version": "20260830051442",
+      "remoteName": "fix_import_item_guard_rls",
       "file": "20260829232257_fix_import_item_guard_rls.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051442",
+        "remediationVersions": []
+      },
       "sha256": "cda5780cdcc37be43898fc771d9f9e56dbbd6d84176db094e3a469a52f69a415"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829235000",
+      "class": "remote_applied",
+      "version": "20260830051448",
+      "remoteName": "report_commission_payment_atomically",
       "file": "20260829235000_report_commission_payment_atomically.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051448",
+        "remediationVersions": []
+      },
       "sha256": "639fc667dd1b802096189268b978f29e9746c90671d758f991233a50d78672c1"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829235500",
+      "class": "remote_applied",
+      "version": "20260830051455",
+      "remoteName": "confirm_commission_payment_atomically",
       "file": "20260829235500_confirm_commission_payment_atomically.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051455",
+        "remediationVersions": []
+      },
       "sha256": "d2dc149d1b35ebf7edda299a7db59c6381c78c0876c450df8856616606aabbcc"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829235700",
+      "class": "remote_applied",
+      "version": "20260830051501",
+      "remoteName": "fix_commission_payment_proof_path_regex",
       "file": "20260829235700_fix_commission_payment_proof_path_regex.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051501",
+        "remediationVersions": []
+      },
       "sha256": "c0a41ec56d31e85e5f3c7017eb7a4d9e2a7a1aea8bc08e3eaa614fb66241f9f8"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829235800",
+      "class": "remote_applied",
+      "version": "20260830051537",
+      "remoteName": "reconcile_legacy_schema_safely",
       "file": "20260829235800_reconcile_legacy_schema_safely.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830051537",
+        "remediationVersions": []
+      },
       "sha256": "feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de"
     },
     {
-      "class": "forward_pending",
-      "version": "20260829235900",
+      "class": "remote_applied",
+      "version": "20260830052613",
+      "remoteName": "harden_storage_buckets_and_policies",
       "file": "20260829235900_harden_storage_buckets_and_policies.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-production-reconciliation-2026-08-30.md#remote-20260830052613",
+        "remediationVersions": []
+      },
       "sha256": "b2749b0a319f2f3ef058354d52c3961a3196837d757c6f37a6841c9da644579c"
     }
   ]

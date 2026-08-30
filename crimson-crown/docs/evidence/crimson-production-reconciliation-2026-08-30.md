@@ -163,6 +163,56 @@ The current multi-inventory `place_order_atomic` behavior passed rollback, credi
 
 The current `release_expired_orders_atomic` behavior passed idempotent cancellation, exact stock restoration, and anonymous-denial matrices. Forward `20260829235800` reasserts its fixed search path and authenticated/service-role grant without invoking the function.
 
+## Production release postflight
+
+Production release completed on 2026-08-30 against Supabase project `djfqozfaqkqdoqeoqbzt` and Vercel project `prj_wHaQDSKDKuTP4rPoS1SeCFulls8g`. Vercel deployment `dpl_HC75XyJ1MbY7xKF1ZFDwyK5ZzMiS` reached READY and was aliased to `https://www.crimsoncrownimports.com`. Public GET smoke checks returned HTTP 200 for home, catalog, login, FAQ, robots, and the dollar API.
+
+The final preflight recorded 16 remote ledger entries, 63 orders, 81 profiles, 1,954 products, two inventory movements, nine preserved pre-start commission periods, and zero invariant violations. Storage retained all 66 objects: 35 products, five banners, and 26 payment proofs. The `payment_proofs` bucket is private, all three target buckets have the approved 5 MiB/MIME configuration, and `storage.objects` has zero browser policies.
+
+## remote-20260830051302
+
+**PASS** — `admin_product_mutations` is present in the production ledger and its admin authorization/atomicity contracts passed before release.
+
+## remote-20260830051308
+
+**PASS** — `harden_privileged_surfaces` is present in the production ledger; the fixed-search-path and exact-grant postflight remained valid.
+
+## remote-20260830051315
+
+**PASS** — `add_payment_proof_paths` is present in the production ledger. The added columns were nullable; all 63 historical orders retained a null proof path immediately after application.
+
+## remote-20260830051429
+
+**PASS** — `finalize_import_quotes_atomically` is present in the production ledger and the rehearsed atomic quote workflow was deployed.
+
+## remote-20260830051436
+
+**PASS** — `freeze_approved_import_quote_items` is present in the production ledger and the approved-item mutation guard is active.
+
+## remote-20260830051442
+
+**PASS** — `fix_import_item_guard_rls` is present in the production ledger and retains the intended authenticated admin boundary.
+
+## remote-20260830051448
+
+**PASS** — `report_commission_payment_atomically` is present in the production ledger; no historical commission rows were rewritten.
+
+## remote-20260830051455
+
+**PASS** — `confirm_commission_payment_atomically` is present in the production ledger; the payment transition remains serialized and admin-scoped.
+
+## remote-20260830051501
+
+**PASS** — `fix_commission_payment_proof_path_regex` is present in the production ledger with the exact validated proof-path contract.
+
+## remote-20260830051537
+
+**PASS** — `reconcile_legacy_schema_safely` is present in the production ledger. Postflight counts, row hashes, constraints, indexes, policies, defaults, function definitions, search paths, and grants matched the approved reconciled state.
+
+## remote-20260830052613
+
+**PASS** — `harden_storage_buckets_and_policies` was applied last, after Vercel READY and public smoke checks. It preserved all 66 Storage objects and removed both observed legacy policy-name variants.
+
 ## Release order
 
 The approved production projection contains the existing nine pre-Storage forwards, then `20260829235800_reconcile_legacy_schema_safely.sql`, and finally `20260829235900_harden_storage_buckets_and_policies.sql`. Storage remains the last mutation and is applied only after the compatible Vercel deployment is READY.
