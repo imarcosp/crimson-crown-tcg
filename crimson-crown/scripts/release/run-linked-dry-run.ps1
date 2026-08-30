@@ -670,9 +670,7 @@ function Assert-ExactDryRun {
   }
   $Prefix.Add('DRY RUN: migrations will *not* be pushed to the database.')
   $Prefix.Add('Connecting to remote database...')
-  if ($ForwardFilenames.Count -eq 0) {
-    $Prefix.Add('Remote database is up to date.')
-  } else {
+  if ($ForwardFilenames.Count -ne 0) {
     $Prefix.Add('Would push these migrations:')
     foreach ($Filename in $ForwardFilenames) { $Prefix.Add(" $([char]0x2022) $Filename") }
   }

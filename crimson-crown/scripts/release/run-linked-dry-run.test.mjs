@@ -173,9 +173,7 @@ if ($command -eq 'db') {
   Write-Output 'DRY RUN: migrations will *not* be pushed to the database.'
   Write-Output 'Connecting to remote database...'
   $upToDate = $env:FAKE_SUPABASE_MODE -eq 'up-to-date' -or ($env:FAKE_ZERO_FORWARD -ceq '1' -and $env:FAKE_SUPABASE_MODE -ne 'zero-forward-pending')
-  if ($upToDate) {
-    Write-Output 'Remote database is up to date.'
-  } else {
+  if (-not $upToDate) {
     Write-Output 'Would push these migrations:'
     foreach ($file in $pending) {
       Write-Output (' {0} {1}' -f [char]0x2022, $file)
