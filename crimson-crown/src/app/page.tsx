@@ -4,6 +4,8 @@ import ProductCard from '@/components/catalog/ProductCard'
 import Link from 'next/link'
 import { ArrowRight, Sparkles, Package, Crown, Zap } from 'lucide-react'
 import { siteConfig } from '@/config/site'
+import HomeQuickLinks from '@/components/home/HomeQuickLinks'
+import type { HomeQuickLinkRecord } from '@/lib/home/quick-links'
 
 export const revalidate = 0
 
@@ -12,6 +14,13 @@ const CARD_TCGS = ['Magic', 'Riftbound', 'Pokémon', 'Lorcana', 'Yu-Gi-Oh!', 'On
 
 export default async function Home() {
   const supabase = await createClient()
+
+  const { data: quickLinks } = await supabase
+    .from('home_quick_links')
+    .select('id,label,url,image_url,icon_key,display_order,active,created_at,updated_at')
+    .eq('active', true)
+    .order('display_order', { ascending: true })
+    .order('created_at', { ascending: true })
 
   // --- 1. MAGIC: ÚLTIMOS INGRESOS ---
   const { data: magicLatest } = await supabase
@@ -88,6 +97,7 @@ export default async function Home() {
       <Hero />
       
       <div className="container mx-auto px-4 space-y-16">
+        <HomeQuickLinks quickLinks={(quickLinks || []) as HomeQuickLinkRecord[]} />
         
         {/* 1. MAGIC: ÚLTIMOS INGRESOS */}
         {magicLatest && magicLatest.length > 0 && (

@@ -190,17 +190,20 @@ async function createFixture(): Promise<Fixture> {
 
 async function cleanupFixture(fixture: Fixture) {
   const admin = serviceClient()
+  // Child rows must be removed before their parent. Running these in parallel can
+  // race the import-item guard while the parent order is being deleted.
   const operations = [
-    admin.from('buylist_items').delete().eq('id', fixture.buylistItemId),
-    admin.from('buylist_orders').delete().eq('id', fixture.buylistId),
-    admin.from('import_items').delete().eq('id', fixture.importItemId),
-    admin.from('import_orders').delete().eq('id', fixture.importOrderId),
-    admin.from('order_items').delete().eq('id', fixture.orderItemId),
-    admin.from('orders').delete().eq('id', fixture.orderId),
+    ['buylist item', () => admin.from('buylist_items').delete().eq('id', fixture.buylistItemId)] as const,
+    ['buylist', () => admin.from('buylist_orders').delete().eq('id', fixture.buylistId)] as const,
+    ['import item', () => admin.from('import_items').delete().eq('id', fixture.importItemId)] as const,
+    ['import order', () => admin.from('import_orders').delete().eq('id', fixture.importOrderId)] as const,
+    ['order item', () => admin.from('order_items').delete().eq('id', fixture.orderItemId)] as const,
+    ['order', () => admin.from('orders').delete().eq('id', fixture.orderId)] as const,
   ]
-  const results = await Promise.all(operations)
-  const failed = results.find((result) => result.error)
-  if (failed?.error) throw new Error(`No se pudo limpiar fixture E2E: ${failed.error.message}`)
+  for (const [label, operation] of operations) {
+    const { error } = await operation()
+    if (error) throw new Error(`No se pudo limpiar fixture E2E (${label}): ${error.message}`)
+  }
 }
 
 async function loginAsStandard(page: Page) {

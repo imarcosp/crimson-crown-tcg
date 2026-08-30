@@ -81,9 +81,10 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 - PIN cliente eliminado: el panel se abre directamente sólo después de superar sesión admin, proxy, Server Actions y RLS; el E2E demuestra acceso admin y denegación del usuario estándar.
 - Registro, solicitud de recuperación, callback PKCE server-side y actualización real de contraseña pasan E2E con usuarios sintéticos locales y limpieza completa.
 - Google OAuth está diseñado/documentado en `docs/runbooks/crimson-google-oauth.md`, pero permanece deshabilitado hasta recibir client ID/secret y redirect URIs exclusivos de Crimson para local/staging/producción.
-- Responsive administrativo completado: navegación móvil colapsable, layout sin overflow global, tablas anchas con scroll local verificado, modal de inventarios contenido y matriz E2E en 390/768 px sobre diez rutas operativas.
+- Responsive administrativo completado: navegación móvil colapsable, layout sin overflow global, tablas anchas con scroll local verificado, modal de inventarios contenido y matriz E2E en 390/768 px sobre once rutas operativas.
 - Filtros Magic completados: rango inclusivo sobre el precio final, formatos allowlisted con legalidades Scryfall, URL/paginación conservadas y validación responsive. La migración aditiva `20260830133000` y el backfill de metadata están aplicados únicamente en local y pendientes de promoción controlada.
-- Implementar accesos rápidos administrables bajo el banner: cantidad, orden, imagen/icono, etiqueta, URL y estado activo.
+- Accesos rápidos de Home completados: modelo dinámico, orden, imagen o icono allowlisted, etiqueta, URL segura y estado activo; administración protegida por Server Actions/RLS y CRUD E2E con limpieza. La migración aditiva `20260830170000` está aplicada únicamente en local y pendiente de promoción controlada.
+- Checkpoint local de este lote: entorno 72/72, release 136/136 con un skip de symlink esperado en Windows, `db lint` sin errores, build de 45 páginas y E2E integral 24/24; productos 1.840, stock 2.147, órdenes 58 y perfiles 77 permanecen en su baseline local, con cero fixtures de accesos rápidos residuales.
 - Portar el Deckbuilder de Magic desde El Perchero únicamente mediante lectura y reimplementación dentro de Crimson, sin compartir credenciales, datos, procesos ni escritura de archivos.
 
 ## P2 — calidad y operación
@@ -100,10 +101,9 @@ Este bloque conserva el diagnóstico que originó el P0. Sus bloqueos fueron rec
 
 ## Siguiente backlog recomendado
 
-1. **Accesos rápidos.** Diseñar el modelo aditivo y la administración de cantidad, orden, imagen/icono, etiqueta, URL y estado.
-2. **Deckbuilder.** Reimplementar en Crimson a partir de una inspección estrictamente de solo lectura de El Perchero, sin código compartido en runtime ni acceso a sus datos.
-3. **Operación y calidad.** Automatizar snapshots de esquema/row-counts, documentar backup/restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
-4. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
+1. **Deckbuilder.** Reimplementar en Crimson a partir de una inspección estrictamente de solo lectura de El Perchero, sin código compartido en runtime ni acceso a sus datos.
+2. **Operación y calidad.** Automatizar snapshots de esquema/row-counts, documentar backup/restauración local y abordar ESLint por grupos pequeños con pruebas de regresión.
+3. **Google OAuth (bloqueo externo).** El flujo y runbook están definidos; habilitarlo sólo cuando existan client ID/secret y redirects exclusivos de Crimson para cada entorno.
 
 ## SaaS — después de todo lo anterior
 

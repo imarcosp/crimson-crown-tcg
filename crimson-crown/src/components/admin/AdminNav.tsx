@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 const adminLinks = [
   { href: '/admin', label: 'Dashboard' },
   { href: '/admin/inventories', label: 'Inventarios' },
+  { href: '/admin/quick-links', label: 'Accesos Home' },
   { href: '/admin/commissions', label: 'Comisiones' },
 ] as const
 

@@ -58,6 +58,7 @@ test('admin puede abrir los formularios operativos sin warnings GoTrue', async (
     { path: '/admin/imports', heading: 'Importaciones' },
     { path: '/admin/buylists', heading: 'Solicitudes de Venta (Buylist)' },
     { path: '/admin/prices', heading: 'Configuración Maestra' },
+    { path: '/admin/quick-links', heading: 'Accesos rápidos de Home' },
   ]
 
   for (const route of routes) {

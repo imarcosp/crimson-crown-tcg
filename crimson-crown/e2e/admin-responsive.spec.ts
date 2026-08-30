@@ -72,6 +72,7 @@ test.describe.serial('panel administrativo responsive', () => {
       '/admin/searches',
       '/admin/wishlists',
       '/admin/credits',
+      '/admin/quick-links',
     ]
 
     for (const width of [390, 768]) {

@@ -243,6 +243,58 @@ async function main() {
   const profileWrite = await standard.from('profiles').update({ credits: profile.credits }).eq('id', profile.id).select('id')
   assert.equal(profileWrite.data?.length ?? 0, 0, 'standard no debe editar créditos directamente')
 
+  const quickLinkMarker = `local-security-quick-link-${Date.now()}`
+  const { data: quickLinkProbes, error: quickLinkProbeError } = await admin
+    .from('home_quick_links')
+    .insert([
+      { label: `${quickLinkMarker}-active`, url: '/catalog', icon_key: 'search', display_order: 9980, active: true },
+      { label: `${quickLinkMarker}-inactive`, url: '/catalog', icon_key: 'search', display_order: 9981, active: false },
+    ])
+    .select('id,label,active')
+  if (quickLinkProbeError || quickLinkProbes?.length !== 2) {
+    throw quickLinkProbeError || new Error('el admin local debe poder crear accesos rápidos')
+  }
+  try {
+    const { data: anonQuickLinks, error: anonQuickLinksError } = await anon
+      .from('home_quick_links')
+      .select('id,label,active')
+      .like('label', `${quickLinkMarker}%`)
+    assert.ifError(anonQuickLinksError)
+    assert.equal(anonQuickLinks?.length, 1, 'anon debe ver sólo el acceso rápido activo')
+    assert.equal(anonQuickLinks?.[0]?.active, true, 'anon no debe ver accesos rápidos inactivos')
+
+    const { data: standardQuickLinks, error: standardQuickLinksError } = await standard
+      .from('home_quick_links')
+      .select('id,label,active')
+      .like('label', `${quickLinkMarker}%`)
+    assert.ifError(standardQuickLinksError)
+    assert.equal(standardQuickLinks?.length, 1, 'standard debe ver sólo el acceso rápido activo')
+
+    await expectBlocked('standard no debe crear accesos rápidos', () => standard.from('home_quick_links').insert({
+      label: `${quickLinkMarker}-blocked`,
+      url: '/catalog',
+      icon_key: 'search',
+      display_order: 9982,
+      active: true,
+    }).select('id'))
+    await expectBlocked('standard no debe editar accesos rápidos', () => standard
+      .from('home_quick_links')
+      .update({ label: `${quickLinkMarker}-modified` })
+      .eq('id', quickLinkProbes[0].id)
+      .select('id'))
+    await expectBlocked('standard no debe borrar accesos rápidos', () => standard
+      .from('home_quick_links')
+      .delete()
+      .eq('id', quickLinkProbes[0].id)
+      .select('id'))
+  } finally {
+    const { error: quickLinkCleanupError } = await service
+      .from('home_quick_links')
+      .delete()
+      .like('label', `${quickLinkMarker}%`)
+    if (quickLinkCleanupError) throw new Error(`no se pudieron limpiar accesos rápidos de prueba: ${quickLinkCleanupError.message}`)
+  }
+
   const missingProductId = randomUUID()
   const productInsert = await standard.from('products').insert({
     id: missingProductId,

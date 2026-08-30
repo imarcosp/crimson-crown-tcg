@@ -43,6 +43,12 @@ const productionSourceForwardEntries = [
     file: '20260830133000_add_magic_legalities_to_external_prices.sql',
     sha256: 'e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d',
   },
+  {
+    class: 'forward_pending',
+    version: '20260830170000',
+    file: '20260830170000_create_home_quick_links.sql',
+    sha256: 'f3ee016220c8066d7201359c7c93168676aedfd9009bc262ce2900d45a619285',
+  },
 ]
 const bootstrapScript = resolve('scripts/release/bootstrap-migration-manifest.mjs')
 const windowsReparseGuardScript = resolve('scripts/release/query-windows-reparse-points.ps1')
@@ -230,15 +236,23 @@ test('every migration is classified exactly once and hashes match', async () => 
   assert.deepEqual(classified, actual)
 })
 
-test('the real manifest records the production release and the reviewed Magic legalities forward migration', async () => {
+test('the real manifest records the production release and both reviewed forward migrations', async () => {
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: true })
   const forwards = manifest.entries.filter((entry) => entry.class === 'forward_pending')
-  assert.deepEqual(forwards, [{
-    class: 'forward_pending',
-    version: '20260830133000',
-    file: '20260830133000_add_magic_legalities_to_external_prices.sql',
-    sha256: 'e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d',
-  }])
+  assert.deepEqual(forwards, [
+    {
+      class: 'forward_pending',
+      version: '20260830133000',
+      file: '20260830133000_add_magic_legalities_to_external_prices.sql',
+      sha256: 'e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d',
+    },
+    {
+      class: 'forward_pending',
+      version: '20260830170000',
+      file: '20260830170000_create_home_quick_links.sql',
+      sha256: 'f3ee016220c8066d7201359c7c93168676aedfd9009bc262ce2900d45a619285',
+    },
+  ])
   const appliedRelease = manifest.entries
     .filter((entry) => entry.class === 'remote_applied')
     .slice(-productionReleaseEntries.length)
@@ -261,7 +275,7 @@ test('the real manifest passes without a candidate bypass while retaining the ap
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: false })
   assert.deepEqual(
     manifest.entries.filter((entry) => entry.class === 'forward_pending').map((entry) => entry.version),
-    ['20260830133000'],
+    ['20260830133000', '20260830170000'],
   )
 })
 
@@ -1054,7 +1068,7 @@ test('bootstrap creates a complete manifest and refuses to replace it', async ()
     const manifest = await loadAndValidateManifest({ rootDir, allowCandidates: true })
 
     assert.equal(manifest.schemaVersion, 2)
-    assert.equal(manifest.entries.length, 33)
+    assert.equal(manifest.entries.length, 34)
     assert.deepEqual(manifest.entries.slice(0, 2), [
       {
         class: 'remote_applied',

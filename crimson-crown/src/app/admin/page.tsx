@@ -1,6 +1,6 @@
 "use client"
 import Link from 'next/link'
-import { Package, Plane, Banknote, Users, Settings, ClipboardList, TrendingUp, Calendar, DollarSign, Search, Bell, Receipt, PlusCircle } from 'lucide-react'
+import { Package, Plane, Banknote, Users, Settings, ClipboardList, TrendingUp, Calendar, DollarSign, Search, Bell, Receipt, PlusCircle, PanelsTopLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -91,6 +91,15 @@ export default function AdminPage() {
 
       <h2 className="text-xl font-bold text-slate-800 pt-4">Accesos Rápidos</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <Link href="/admin/quick-links" className="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition-shadow">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-red-50 text-[#9D1B1B]"><PanelsTopLeft size={32} /></div>
+            <div>
+              <div className="text-lg font-bold text-slate-900">Accesos de Home</div>
+              <p className="text-sm text-slate-600">Configura los enlaces destacados bajo el banner.</p>
+            </div>
+          </div>
+        </Link>
         <Link href="/admin/inventories" className="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg transition-shadow">
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-lg bg-blue-50 text-blue-600"><Package size={32} /></div>
