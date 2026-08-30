@@ -42,6 +42,10 @@ drop policy if exists "Give users access to own folder 1ifhysk_0" on storage.obj
 drop policy if exists "Give users access to own folder 1ifhysk_1" on storage.objects;
 drop policy if exists "Give users access to own folder 1ifhysk_2" on storage.objects;
 drop policy if exists "Give users access to own folder 1ifhysk_3" on storage.objects;
+drop policy if exists "Give users authenticated access to folder 1ifhysk_0" on storage.objects;
+drop policy if exists "Give users authenticated access to folder 1ifhysk_1" on storage.objects;
+drop policy if exists "Give users authenticated access to folder 1ifhysk_2" on storage.objects;
+drop policy if exists "Give users authenticated access to folder 1ifhysk_3" on storage.objects;
 drop policy if exists "Lectura pública de comprobantes" on storage.objects;
 drop policy if exists "Usuarios pueden subir comprobantes" on storage.objects;
 drop policy if exists "Admin gestiona banners" on storage.objects;

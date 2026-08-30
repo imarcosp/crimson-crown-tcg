@@ -33,7 +33,7 @@ $SourceLedger = @(
   [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235500_confirm_commission_payment_atomically.sql'); Sha256 = 'd2dc149d1b35ebf7edda299a7db59c6381c78c0876c450df8856616606aabbcc' },
   [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235700_fix_commission_payment_proof_path_regex.sql'); Sha256 = 'c0a41ec56d31e85e5f3c7017eb7a4d9e2a7a1aea8bc08e3eaa614fb66241f9f8' },
   [pscustomobject]@{ Class = 'forward'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235800_reconcile_legacy_schema_safely.sql'); Sha256 = 'feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de' },
-  [pscustomobject]@{ Class = 'storage'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235900_harden_storage_buckets_and_policies.sql'); Sha256 = '6bb0c423b230c3eb6bfb27de3d57e73a784676d76f3e070d7106d2ae0fe0189a' },
+  [pscustomobject]@{ Class = 'storage'; Path = (Join-Path $AppRoot 'supabase\migrations\20260829235900_harden_storage_buckets_and_policies.sql'); Sha256 = 'b2749b0a319f2f3ef058354d52c3961a3196837d757c6f37a6841c9da644579c' },
   [pscustomobject]@{ Class = 'staging-only'; Path = (Join-Path $AppRoot 'scripts\staging\sql\scope-staging-commission-operator.sql'); Sha256 = '28ca719e8ba88c48f399ff9f9b0534bff27928df922cd2b6e77e6fc861de73ff' }
 )
 

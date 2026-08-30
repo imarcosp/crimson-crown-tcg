@@ -302,7 +302,7 @@
       "class": "forward_pending",
       "version": "20260829235900",
       "file": "20260829235900_harden_storage_buckets_and_policies.sql",
-      "sha256": "6bb0c423b230c3eb6bfb27de3d57e73a784676d76f3e070d7106d2ae0fe0189a"
+      "sha256": "b2749b0a319f2f3ef058354d52c3961a3196837d757c6f37a6841c9da644579c"
     }
   ]
 }
