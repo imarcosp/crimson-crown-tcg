@@ -30,6 +30,11 @@ const productionReleaseEntries = [
   { version: '20260830051537', remoteName: 'reconcile_legacy_schema_safely', file: '20260829235800_reconcile_legacy_schema_safely.sql', sha256: 'feff9a68c4bd35d7eb04e30c85b980b7e7b5863e0706570651a1ca8647e511de' },
   { version: '20260830052613', remoteName: 'harden_storage_buckets_and_policies', file: '20260829235900_harden_storage_buckets_and_policies.sql', sha256: 'b2749b0a319f2f3ef058354d52c3961a3196837d757c6f37a6841c9da644579c' },
 ]
+const completedFeatureReleaseEntries = [
+  { version: '20260830133000', remoteName: 'add_magic_legalities_to_external_prices', file: '20260830133000_add_magic_legalities_to_external_prices.sql', sha256: 'e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d' },
+  { version: '20260830170000', remoteName: 'create_home_quick_links', file: '20260830170000_create_home_quick_links.sql', sha256: 'f3ee016220c8066d7201359c7c93168676aedfd9009bc262ce2900d45a619285' },
+  { version: '20260830203000', remoteName: 'create_deck_builder_foundation', file: '20260830203000_create_deck_builder_foundation.sql', sha256: '00e00d8fcd86703777166a6e6f7c6e2c65aeeb5a21ed19888f28c4a2c35f486b' },
+]
 const productionSourceForwardEntries = [
   ...productionReleaseEntries.map(({ file, sha256 }) => ({
     class: 'forward_pending',
@@ -242,34 +247,18 @@ test('every migration is classified exactly once and hashes match', async () => 
   assert.deepEqual(classified, actual)
 })
 
-test('the real manifest records the production release and three reviewed forward migrations', async () => {
+test('the real manifest records both completed production releases with no pending migrations', async () => {
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: true })
   const forwards = manifest.entries.filter((entry) => entry.class === 'forward_pending')
-  assert.deepEqual(forwards, [
-    {
-      class: 'forward_pending',
-      version: '20260830133000',
-      file: '20260830133000_add_magic_legalities_to_external_prices.sql',
-      sha256: 'e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d',
-    },
-    {
-      class: 'forward_pending',
-      version: '20260830170000',
-      file: '20260830170000_create_home_quick_links.sql',
-      sha256: 'f3ee016220c8066d7201359c7c93168676aedfd9009bc262ce2900d45a619285',
-    },
-    {
-      class: 'forward_pending',
-      version: '20260830203000',
-      file: '20260830203000_create_deck_builder_foundation.sql',
-      sha256: '00e00d8fcd86703777166a6e6f7c6e2c65aeeb5a21ed19888f28c4a2c35f486b',
-    },
-  ])
+  assert.deepEqual(forwards, [])
   const appliedRelease = manifest.entries
-    .filter((entry) => entry.class === 'remote_applied')
-    .slice(-productionReleaseEntries.length)
+    .filter((entry) => entry.class === 'remote_applied' && productionReleaseEntries.some(({ version }) => version === entry.version))
     .map(({ version, remoteName, file, sha256 }) => ({ version, remoteName, file, sha256 }))
   assert.deepEqual(appliedRelease, productionReleaseEntries)
+  const completedFeatureRelease = manifest.entries
+    .filter((entry) => entry.class === 'remote_applied' && completedFeatureReleaseEntries.some(({ version }) => version === entry.version))
+    .map(({ version, remoteName, file, sha256 }) => ({ version, remoteName, file, sha256 }))
+  assert.deepEqual(completedFeatureRelease, completedFeatureReleaseEntries)
 
   const stagingOnlyFiles = (await readdir('scripts/staging/sql')).filter((name) => name.endsWith('.sql'))
   assert.ok(stagingOnlyFiles.length > 0)
@@ -279,15 +268,15 @@ test('the real manifest records the production release and three reviewed forwar
   }
 
   const historicalEntries = manifest.entries.filter((entry) => entry.class !== 'forward_pending')
-  assert.equal(historicalEntries.length, 32)
+  assert.equal(historicalEntries.length, 35)
   assert.ok(historicalEntries.every((entry) => entry.releaseProof.status !== 'candidate'))
 })
 
-test('the real manifest passes without a candidate bypass while retaining the approved forward', async () => {
+test('the real manifest passes without a candidate bypass after the feature release', async () => {
   const manifest = await loadAndValidateManifest({ rootDir: process.cwd(), allowCandidates: false })
   assert.deepEqual(
     manifest.entries.filter((entry) => entry.class === 'forward_pending').map((entry) => entry.version),
-    ['20260830133000', '20260830170000', '20260830203000'],
+    [],
   )
 })
 

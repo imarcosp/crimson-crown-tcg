@@ -371,21 +371,39 @@
       "sha256": "b2749b0a319f2f3ef058354d52c3961a3196837d757c6f37a6841c9da644579c"
     },
     {
-      "class": "forward_pending",
+      "class": "remote_applied",
       "version": "20260830133000",
+      "remoteName": "add_magic_legalities_to_external_prices",
       "file": "20260830133000_add_magic_legalities_to_external_prices.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-feature-release-2026-08-30.md#remote-20260830133000",
+        "remediationVersions": []
+      },
       "sha256": "e964da84d7b1afa3aa0786c4bbe29e91f65fd48b2cf70100d02fc3302919e67d"
     },
     {
-      "class": "forward_pending",
+      "class": "remote_applied",
       "version": "20260830170000",
+      "remoteName": "create_home_quick_links",
       "file": "20260830170000_create_home_quick_links.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-feature-release-2026-08-30.md#remote-20260830170000",
+        "remediationVersions": []
+      },
       "sha256": "f3ee016220c8066d7201359c7c93168676aedfd9009bc262ce2900d45a619285"
     },
     {
-      "class": "forward_pending",
+      "class": "remote_applied",
       "version": "20260830203000",
+      "remoteName": "create_deck_builder_foundation",
       "file": "20260830203000_create_deck_builder_foundation.sql",
+      "releaseProof": {
+        "status": "verified_present",
+        "evidence": "docs/evidence/crimson-feature-release-2026-08-30.md#remote-20260830203000",
+        "remediationVersions": []
+      },
       "sha256": "00e00d8fcd86703777166a6e6f7c6e2c65aeeb5a21ed19888f28c4a2c35f486b"
     }
   ]
